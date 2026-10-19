@@ -1,10 +1,12 @@
 """Client minimo per il server locale di LM Studio.
 
 Chat da terminale: la domanda si scrive da tastiera, la conversazione
-resta in memoria finche' il programma e' aperto. Uscire con "esci"
-oppure con una riga vuota.
+resta in memoria finche' il programma e' aperto. Ragionamento e risposta
+del modello compaiono in streaming, mentre vengono generati.
+Uscire con "esci" oppure con una riga vuota.
 """
 
+import json
 import os
 
 import requests
@@ -36,18 +38,46 @@ while True:
         "model": model,
         "messages": messages,
         "temperature": 0.7,
-        "max_tokens": 1024,
-        "reasoning_effort": "none",
-        "stream": False,
+        "max_tokens": 2048,
+        "reasoning_effort": "medium",
+        "stream": True,
     }
 
     # --- Chiamata ---------------------------------------------------------
     response = None
     try:
-        response = requests.post(f"{base_url}/chat/completions", json=payload, timeout=120)
+        response = requests.post(
+            f"{base_url}/chat/completions", json=payload, timeout=120, stream=True
+        )
         response.raise_for_status()
-        risposta = response.json()["choices"][0]["message"]["content"]
-        print("\nGemma:", risposta)
+
+        # Lo stream arriva come righe "data: {...}" e termina con "data: [DONE]".
+        risposta = ""
+        sezione = None
+        for riga in response.iter_lines():
+            riga = riga.decode("utf-8")
+            if not riga.startswith("data: "):
+                continue
+            dati = riga[len("data: "):]
+            if dati == "[DONE]":
+                break
+            delta = json.loads(dati)["choices"][0]["delta"]
+
+            if delta.get("reasoning_content"):
+                if sezione != "ragionamento":
+                    print("\n[Ragionamento]")
+                    sezione = "ragionamento"
+                print(delta["reasoning_content"], end="", flush=True)
+
+            if delta.get("content"):
+                if sezione != "risposta":
+                    print("\n\nGemma: ", end="")
+                    sezione = "risposta"
+                print(delta["content"], end="", flush=True)
+                risposta += delta["content"]
+
+        print()
+        # Nella cronologia va solo la risposta, non il ragionamento.
         messages.append({"role": "assistant", "content": risposta})
     except requests.exceptions.Timeout:
         print("Attesa scaduta: controllare server, carico e tempi.")
