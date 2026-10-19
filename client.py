@@ -1,8 +1,8 @@
 """Client minimo per il server locale di LM Studio.
 
 Chat da terminale: la domanda si scrive da tastiera, la conversazione
-resta in memoria finche' il programma e' aperto. Ragionamento e risposta
-del modello compaiono in streaming, mentre vengono generati.
+resta in memoria finche' il programma e' aperto. La risposta del modello
+compare in streaming, mentre viene generata; il ragionamento resta nascosto.
 Uscire con "esci" oppure con una riga vuota.
 """
 
@@ -52,8 +52,10 @@ while True:
         response.raise_for_status()
 
         # Lo stream arriva come righe "data: {...}" e termina con "data: [DONE]".
+        # Il ragionamento (reasoning_content) non viene mostrato: si stampa solo
+        # la risposta (content), man mano che arriva.
         risposta = ""
-        sezione = None
+        print("\nGemma: ", end="", flush=True)
         for riga in response.iter_lines():
             riga = riga.decode("utf-8")
             if not riga.startswith("data: "):
@@ -63,16 +65,7 @@ while True:
                 break
             delta = json.loads(dati)["choices"][0]["delta"]
 
-            if delta.get("reasoning_content"):
-                if sezione != "ragionamento":
-                    print("\n[Ragionamento]")
-                    sezione = "ragionamento"
-                print(delta["reasoning_content"], end="", flush=True)
-
             if delta.get("content"):
-                if sezione != "risposta":
-                    print("\n\nGemma: ", end="")
-                    sezione = "risposta"
                 print(delta["content"], end="", flush=True)
                 risposta += delta["content"]
 
