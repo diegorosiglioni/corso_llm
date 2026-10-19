@@ -1,8 +1,8 @@
 """Client minimo per il server locale di LM Studio.
 
-Scheletro da completare con Claude Code (slide 19-22):
-configurazione, messaggi, payload e chiamata HTTP.
-Import e gestione degli errori sono gia' presenti: conservarli.
+Chat da terminale: la domanda si scrive da tastiera, la conversazione
+resta in memoria finche' il programma e' aperto. Uscire con "esci"
+oppure con una riga vuota.
 """
 
 import os
@@ -11,24 +11,50 @@ import requests
 from dotenv import load_dotenv
 
 # --- Configurazione -------------------------------------------------------
-# DA COMPLETARE: caricare .env e leggere LM_BASE_URL e LM_MODEL,
-# senza scrivere URL o nome del modello nel codice.
+load_dotenv()
+base_url = os.environ["LM_BASE_URL"]
+model = os.environ["LM_MODEL"]
 
 # --- Messaggi -------------------------------------------------------------
-# DA COMPLETARE: un'istruzione "system" in italiano e una domanda "user" fissa.
+messages = [
+    {
+        "role": "system",
+        "content": "Sei un assistente utile. Rispondi in italiano, in modo chiaro e conciso.",
+    }
+]
 
-# --- Payload --------------------------------------------------------------
-# DA COMPLETARE: dizionario con model, messages, temperature, max_tokens,
-# reasoning_effort ("none", senza ragionamento) e stream.
+print(f"Chat con {model}. Scrivi 'esci' o premi Invio su una riga vuota per uscire.")
 
-# --- Chiamata -------------------------------------------------------------
-try:
-    # DA COMPLETARE: inviare il payload a {base_url}/chat/completions,
-    # controllare lo stato HTTP e stampare choices[0].message.content.
-    print("client.py non ancora completato: vedere il piano concordato.")
-except requests.exceptions.Timeout:
-    print("Attesa scaduta: controllare server, carico e tempi.")
-except requests.exceptions.ConnectionError:
-    print("Connessione fallita: controllare server, URL e porta.")
-except requests.exceptions.HTTPError:
-    print("Errore HTTP:", response.status_code, response.text)
+while True:
+    domanda = input("\nTu: ").strip()
+    if domanda == "" or domanda.lower() == "esci":
+        break
+    messages.append({"role": "user", "content": domanda})
+
+    # --- Payload ----------------------------------------------------------
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.7,
+        "max_tokens": 1024,
+        "reasoning_effort": "none",
+        "stream": False,
+    }
+
+    # --- Chiamata ---------------------------------------------------------
+    response = None
+    try:
+        response = requests.post(f"{base_url}/chat/completions", json=payload, timeout=120)
+        response.raise_for_status()
+        risposta = response.json()["choices"][0]["message"]["content"]
+        print("\nGemma:", risposta)
+        messages.append({"role": "assistant", "content": risposta})
+    except requests.exceptions.Timeout:
+        print("Attesa scaduta: controllare server, carico e tempi.")
+        messages.pop()
+    except requests.exceptions.ConnectionError:
+        print("Connessione fallita: controllare server, URL e porta.")
+        messages.pop()
+    except requests.exceptions.HTTPError:
+        print("Errore HTTP:", response.status_code, response.text)
+        messages.pop()
