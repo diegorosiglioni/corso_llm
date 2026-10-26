@@ -162,6 +162,14 @@ attiva: la domanda fallita non entra nella cronologia, quindi si può riprovare 
 il server. Controllare che il server di LM Studio sia avviato e che `LMSTUDIO_BASE_URL` termini
 con `/v1`.
 
+**Contesto del modello superato.** Se la richiesta supera il contesto caricato in LM Studio
+(8192 token per `google/gemma-4-e2b` nella configurazione provata), l'assistente mostra
+`Errore: LM Studio non ha risposto correttamente (Error code: 400 - ... exceeds the available context size ...). Riprova.`
+Se la causa è una sola domanda troppo lunga, basta riformularla: la domanda rifiutata non entra
+nella cronologia. Se invece è la cronologia della sessione a essere diventata troppo lunga, ogni
+domanda successiva fallirà allo stesso modo: chiudere con `esci` e riavviare l'assistente (la
+cronologia riparte da zero), oppure aumentare in LM Studio la lunghezza del contesto del modello.
+
 **Più dettagli.** Con `$env:LOG_LEVEL = "DEBUG"` i log mostrano la traccia completa degli errori
 e le richieste HTTP verso LM Studio.
 
