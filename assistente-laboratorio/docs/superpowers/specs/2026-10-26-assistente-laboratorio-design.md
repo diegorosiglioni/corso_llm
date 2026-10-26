@@ -1,7 +1,7 @@
 # Specifica — Assistente del laboratorio
 
 Data: 2026-10-26
-Stato: bozza da approvare
+Stato: approvata
 Requisiti di riferimento: [`../requisiti.md`](../requisiti.md) (RF, RNF, RT, CA)
 
 Questa specifica descrive **come** soddisfare i requisiti. Non li ripete: li cita per codice.
