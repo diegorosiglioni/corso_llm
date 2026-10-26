@@ -46,7 +46,8 @@ def test_instrada_casi():
         (chiamata(), 1, "strumenti"),
         (chiamata(), 4, "strumenti"),
         (chiamata(), 5, "limite"),
-        (invalida, 1, "fine"),
+        (invalida, 1, "strumenti"),
+        (invalida, 5, "limite"),
     ]
     for ultimo, passi, atteso in casi:
         assert instrada({"messaggi": [ultimo], "passi": passi}, 5) == atteso, (ultimo, passi)
@@ -130,8 +131,34 @@ def test_log_limite_e_argomenti_non_interpretabili(caplog):
     invalida = AIMessage("", invalid_tool_calls=[{
         "name": "ora_corrente", "args": "{fuso", "id": "x", "error": "json", "type": "invalid_tool_call",
     }])
-    avvia_turno(ModelloFinto([invalida]))
+    avvia_turno(ModelloFinto([invalida, AIMessage("ok")]))
     avvia_turno(ModelloFinto([chiamata()]), max_passi=1)
     avvisi = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
     assert any(a.startswith("passaggio 1/5 argomenti non interpretabili:") for a in avvisi)
     assert "limite di 1 passaggi raggiunto, chiamate non eseguite: ['ora_corrente']" in avvisi
+
+
+def invalida(id="x"):
+    return AIMessage("", invalid_tool_calls=[{
+        "name": "ora_corrente", "args": "{fuso", "id": id, "error": "json", "type": "invalid_tool_call",
+    }])
+
+
+def test_argomenti_non_interpretabili_ricevono_risposta_e_il_modello_si_corregge():
+    modello = ModelloFinto([invalida(), chiamata(id="c2"), AIMessage("Sono le 00:47.")])
+    r = avvia_turno(modello)
+    tm = tool_messages(r["messaggi"])
+    assert tm[0].tool_call_id == "x" and tm[0].name == "ora_corrente"
+    errore = json.loads(tm[0].content)["errore"]
+    assert errore.startswith("Argomenti non interpretabili per 'ora_corrente': '{fuso'.")
+    assert "Europe/Rome" in errore
+    assert modello.chiamate[1][-1] == tm[0]
+    assert r["messaggi"][-1].content == "Sono le 00:47."
+
+
+def test_limite_risponde_anche_agli_argomenti_non_interpretabili():
+    modello = ModelloFinto([invalida(id=f"x{i}") for i in range(5)])
+    r = avvia_turno(modello)
+    richieste = [c["id"] for m in r["messaggi"] if isinstance(m, AIMessage) for c in m.invalid_tool_calls]
+    assert [t.tool_call_id for t in tool_messages(r["messaggi"])] == richieste
+    assert r["messaggi"][-1].content == "Ho raggiunto il limite di 5 passaggi senza una risposta finale."

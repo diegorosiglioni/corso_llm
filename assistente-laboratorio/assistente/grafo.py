@@ -30,10 +30,22 @@ class Stato(TypedDict):
     passi: int  # chiamate al modello nel turno
 
 
+def _chiamate(messaggio) -> tuple[list[dict], list[dict]]:
+    """Chiamate valide e chiamate con argomenti non interpretabili dell'ultimo messaggio.
+
+    Anche queste ultime ricevono una risposta: langchain-openai le rimanda al server come
+    tool_calls, e una chiamata senza risposta renderebbe la cronologia non valida per l'API.
+    """
+    return (
+        list(getattr(messaggio, "tool_calls", None) or []),
+        list(getattr(messaggio, "invalid_tool_calls", None) or []),
+    )
+
+
 def instrada(stato: Stato, max_passi: int) -> Literal["strumenti", "limite", "fine"]:
     """Decide il passo successivo in base all'ultimo messaggio del modello."""
-    ultimo = stato["messaggi"][-1]
-    if not getattr(ultimo, "tool_calls", None):
+    validi, non_interpretabili = _chiamate(stato["messaggi"][-1])
+    if not validi and not non_interpretabili:
         return "fine"
     if stato["passi"] < max_passi:
         return "strumenti"
@@ -66,12 +78,18 @@ def costruisci_grafo(modello: Runnable, strumenti: list[BaseTool], max_passi: in
     def nodo_strumenti(stato: Stato) -> dict:
         passi = stato["passi"]
         risposte = []
-        for chiamata in stato["messaggi"][-1].tool_calls:
+        validi, non_interpretabili = _chiamate(stato["messaggi"][-1])
+        for chiamata in validi + non_interpretabili:
             nome, argomenti = chiamata["name"], chiamata["args"]
             log.info("passaggio %d/%d chiamata %s %s", passi, max_passi, nome, argomenti)
             strumento = per_nome.get(nome)
             if strumento is None:
                 risultato = {"errore": f"Strumento sconosciuto: '{nome}'."}
+            elif chiamata in non_interpretabili:
+                risultato = {
+                    "errore": f"Argomenti non interpretabili per '{nome}': '{argomenti}'. "
+                    f"Uso: {strumento.description}"
+                }
             else:
                 try:
                     risultato = strumento.invoke(argomenti)
@@ -86,7 +104,8 @@ def costruisci_grafo(modello: Runnable, strumenti: list[BaseTool], max_passi: in
         return {"messaggi": risposte}
 
     def nodo_limite(stato: Stato) -> dict:
-        pendenti = stato["messaggi"][-1].tool_calls
+        validi, non_interpretabili = _chiamate(stato["messaggi"][-1])
+        pendenti = validi + non_interpretabili
         log.warning(
             "limite di %d passaggi raggiunto, chiamate non eseguite: %s",
             max_passi, [chiamata["name"] for chiamata in pendenti],

@@ -204,9 +204,17 @@ Il nodo non incrementa `passi`: il limite conta le chiamate al modello (RF-9).
 
 **`instrada`**
 Funzione pura sull'ultimo messaggio:
+(qui «`tool_call`» comprende anche le `invalid_tool_calls`, vedi la nota sotto)
 - nessuna `tool_call` → `"fine"` (→ `END`);
 - `tool_call` presenti e `passi < max_passi` → `"strumenti"`;
 - `tool_call` presenti e `passi ≥ max_passi` → `"limite"`.
+
+Nota (revisione finale, 2026-10-26): le `invalid_tool_calls` (argomenti non interpretabili)
+sono trattate come chiamate. Il nodo `strumenti` risponde a ciascuna con
+`{"errore": "Argomenti non interpretabili per '{nome}': '{argomenti}'. Uso: {descrizione}"}` e il
+modello può correggersi (RF-7). Anche il nodo `limite` risponde a quelle pendenti. Senza questa
+risposta langchain-openai rimanderebbe al server una chiamata senza risposta, e la cronologia
+non sarebbe più valida nei turni successivi.
 
 Con `max_passi = 5` il modello viene chiamato al più 5 volte per turno; se alla quinta
 chiede ancora uno strumento, il turno termina nel nodo `limite`.
