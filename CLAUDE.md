@@ -1,7 +1,7 @@
 # Assistente del laboratorio
 
 Progetto del corso «Deep Learning e LLM: costruire chatbot e agenti».
-La cartella del progetto è `assistente-laboratorio/`; all'inizio contiene soltanto questo file.
+La cartella del progetto è `"C:\Users\diegorosiglioni\Desktop\paolo\test_paolo"`; all'inizio contiene soltanto questo file.
 Struttura, dipendenze e comandi verranno definiti con la specifica e il piano.
 
 ## Obiettivo
