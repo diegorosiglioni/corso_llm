@@ -124,6 +124,29 @@ Le prove reali (`pytest -m reale`) verificano con il modello locale che la doman
 una chiamata con `Asia/Tokyo` e una risposta con l'orario restituito, che «E a Roma?» produca una
 chiamata con `Europe/Rome` e che un nome detto in precedenza venga ricordato senza strumenti.
 
+## Docker
+
+LM Studio resta sull'host; nel container gira solo l'applicazione. Compose legge `.env` (vedi
+«Configurazione») e sostituisce `LMSTUDIO_BASE_URL` con `http://host.docker.internal:1234/v1`, così
+lo stesso `.env` vale in locale e in Docker.
+
+```powershell
+Copy-Item .env.example .env      # solo la prima volta
+docker compose build
+docker compose run --rm assistente
+```
+
+L'avvio interattivo si fa con `docker compose run --rm`: `docker compose up` non collega
+correttamente l'input del terminale. Per una prova non interattiva serve `-T`:
+
+```powershell
+"Che ore sono a Tokyo?", "esci" | docker compose run --rm -T assistente
+```
+
+L'immagine (`python:3.13-slim`) contiene solo il pacchetto `assistente` e le dipendenze
+dell'applicazione, ed esegue come utente non root. Nel container l'orario dei log è in UTC;
+l'orario restituito dallo strumento dipende solo dal fuso richiesto.
+
 ## Diagnosi
 
 **Quali modelli serve LM Studio?** L'identificativo da usare in `LMSTUDIO_MODELLO` è quello
@@ -147,3 +170,19 @@ inventato, oppure il risultato contiene `errore` per un fuso non IANA. È un lim
 del programma: con `google/gemma-4-e2b` le prove reali del 2026-10-26 sono passate (chiamate con
 `Asia/Tokyo` ed `Europe/Rome`, orario riportato correttamente). Un altro modello si prova cambiando
 solo `LMSTUDIO_MODELLO` e ripetendo `pytest -m reale`.
+
+**LM Studio non raggiungibile dal container.** Si verifica così:
+
+```powershell
+docker compose run --rm -T assistente python -c "import urllib.request; print(urllib.request.urlopen('http://host.docker.internal:1234/v1/models').read()[:200])"
+```
+
+Deve stampare l'elenco dei modelli. Con Docker Desktop su Windows ha funzionato senza modificare
+LM Studio; se fallisce, attivare in LM Studio l'opzione per servire anche sulla rete locale.
+
+**Configurazione nel container.** Una variabile si può sovrascrivere per una sola esecuzione, per
+esempio per verificare il messaggio di configurazione mancante:
+
+```powershell
+docker compose run --rm -T -e LMSTUDIO_MODELLO= assistente
+```
