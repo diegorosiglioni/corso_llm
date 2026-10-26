@@ -1,0 +1,10 @@
+# Grafo esplicito: StateGraph e add_messages
+langgraph==1.2.17
+# Messaggi, strumenti (@tool) e Runnable, importati direttamente
+langchain-core==1.7.0
+# ChatOpenAI verso l'API compatibile OpenAI di LM Studio
+langchain-openai==1.7.2
+# openai.APIError intercettato nel terminale
+openai==3.37.0
+# Database dei fusi orari (necessario su Windows e nell'immagine slim)
+tzdata==2026.5
