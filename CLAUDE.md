@@ -2,7 +2,20 @@
 
 Progetto del corso «Deep Learning e LLM: costruire chatbot e agenti».
 La cartella del progetto è `"C:\Users\diegorosiglioni\Desktop\paolo\test_paolo"`; all'inizio contiene soltanto questo file.
-Struttura, dipendenze e comandi verranno definiti con la specifica e il piano.
+Requisiti, specifica e piano: `assistente-laboratorio/docs/superpowers/`.
+
+## Struttura e comandi
+- Codice in `assistente-laboratorio/assistente/`: `config.py`, `modello.py`, `strumenti.py`,
+  `grafo.py`, `sessione.py`, `terminale.py`; solo `__main__.py` collega i moduli.
+- Test in `assistente-laboratorio/tests/`; il modello finto (`ModelloFinto`) e gli aiuti comuni
+  sono in `conftest.py`. Le prove con LM Studio stanno in `test_reale.py` (marcatore `reale`).
+- Dipendenze fissate in `requirements.txt` (app) e `requirements-dev.txt` (test).
+- Comandi da PowerShell in `assistente-laboratorio/`, senza attivare l'ambiente:
+  - ambiente: `py -3.13 -m venv .venv` e `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`
+  - test senza modello: `.\.venv\Scripts\python.exe -m pytest`
+  - prove reali (LM Studio attivo, variabili impostate): `.\.venv\Scripts\python.exe -m pytest -m reale -v`
+  - avvio locale: `.\.venv\Scripts\python.exe -m assistente`
+  - Docker: `docker compose build` e `docker compose run --rm assistente` (non `up`)
 
 ## Obiettivo
 Un'applicazione da terminale in Python che conversa con un modello locale e:
@@ -20,6 +33,7 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
 - Lavorare solo dentro `assistente-laboratorio/`. La repository contiene altre lezioni:
   non leggerle per copiarne il codice e non modificarle.
 - Lavorare nel branch corrente; nessun branch o worktree nuovo se non richiesto.
+- Non modificare la cartella lezione3 che è solo una parte passata
 
 ## Scelte tecniche
 - Python, codice sincrono e moduli piccoli, con una separazione semplice tra
@@ -57,3 +71,4 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
   comandi verificati.
 - Aggiornare questo file quando cambiano convenzioni stabili (struttura, comandi di test,
   regole di lavoro), non per annotare l'avanzamento.
+- Non tenere conto della la cartella lezione3 
