@@ -33,3 +33,85 @@ dell'applicazione, `requirements-dev.txt` aggiunge quelle dei test.
 
 Non richiedono LM Studio né la rete: il modello è sostituito da un modello finto con risposte
 programmate.
+
+## Configurazione
+
+L'applicazione legge solo variabili d'ambiente:
+
+| Variabile | Obbligatoria | Default | Significato |
+|-----------|--------------|---------|-------------|
+| `LMSTUDIO_BASE_URL` | sì | — | indirizzo dell'API di LM Studio, es. `http://localhost:1234/v1` |
+| `LMSTUDIO_MODELLO` | sì | — | identificativo del modello restituito da `GET /v1/models` |
+| `MAX_PASSI` | no | `5` | chiamate massime al modello in un turno (intero ≥ 1) |
+| `LOG_LEVEL` | no | `INFO` | `DEBUG`, `INFO`, `WARNING` o `ERROR` |
+
+`.env.example` è il modello versionato; la copia reale `.env` resta fuori da Git ed è letta da
+Docker Compose:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+In locale Python non legge `.env`: le variabili si impostano nella sessione di PowerShell.
+
+```powershell
+$env:LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
+$env:LMSTUDIO_MODELLO = "google/gemma-4-e2b"
+```
+
+Se manca una variabile obbligatoria o un valore non è valido, l'applicazione non parte, elenca i
+problemi su stderr ed esce con codice 1:
+
+```powershell
+Remove-Item Env:LMSTUDIO_MODELLO
+.\.venv\Scripts\python.exe -m assistente
+$LASTEXITCODE    # 1
+```
+
+## Avvio locale
+
+Con LM Studio avviato, il modello caricato e le variabili impostate:
+
+```powershell
+.\.venv\Scripts\python.exe -m assistente
+```
+
+Si conversa al prompt `Tu>`. La sessione termina con `esci`, con Ctrl+Z seguito da Invio
+(fine input su Windows) o con Ctrl+C. La cronologia vale solo per la sessione in corso.
+La conversazione va su stdout, i log su stderr.
+
+Per una prova non interattiva si possono passare le domande in ingresso:
+
+```powershell
+"Mi chiamo Paolo", "Come mi chiamo?", "esci" | .\.venv\Scripts\python.exe -m assistente
+```
+
+## Prove reali con LM Studio
+
+Sono separate dai test automatici e partono solo su richiesta, con le variabili impostate:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -m reale -v
+```
+
+Senza variabili le prove falliscono con un messaggio esplicito invece di essere saltate.
+Una risposta simulata non dimostra che il modello locale sappia usare lo strumento: lo dimostra
+solo questa prova.
+
+## Diagnosi
+
+**Quali modelli serve LM Studio?** L'identificativo da usare in `LMSTUDIO_MODELLO` è quello
+restituito dal server:
+
+```powershell
+(Invoke-RestMethod http://localhost:1234/v1/models).data.id
+```
+
+**LM Studio non raggiungibile.** L'assistente risponde
+`Errore: LM Studio non ha risposto correttamente (Connection error.). Riprova.` e la sessione resta
+attiva: la domanda fallita non entra nella cronologia, quindi si può riprovare dopo aver avviato
+il server. Controllare che il server di LM Studio sia avviato e che `LMSTUDIO_BASE_URL` termini
+con `/v1`.
+
+**Più dettagli.** Con `$env:LOG_LEVEL = "DEBUG"` i log mostrano la traccia completa degli errori
+e le richieste HTTP verso LM Studio.
