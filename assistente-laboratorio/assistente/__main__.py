@@ -9,6 +9,7 @@ from assistente.config import ErroreConfigurazione, carica_configurazione
 from assistente.grafo import costruisci_grafo
 from assistente.modello import crea_modello
 from assistente.sessione import Sessione
+from assistente.strumenti import crea_ora_corrente
 from assistente.terminale import avvia
 
 
@@ -28,8 +29,9 @@ def main(env: Mapping[str, str] = os.environ) -> int:
         for libreria in ("httpx", "httpx2", "openai"):  # openai 3.x usa httpx2
             logging.getLogger(libreria).setLevel(logging.WARNING)
 
-    modello = crea_modello(config)
-    sessione = Sessione(costruisci_grafo(modello, [], config.max_passi))
+    strumenti = [crea_ora_corrente()]
+    modello = crea_modello(config, strumenti)
+    sessione = Sessione(costruisci_grafo(modello, strumenti, config.max_passi))
     print(
         f"Assistente del laboratorio — modello {config.modello} su {config.base_url}. "
         "Scrivi 'esci' per uscire."

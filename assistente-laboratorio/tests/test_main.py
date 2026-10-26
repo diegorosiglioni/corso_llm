@@ -35,3 +35,11 @@ def test_log_http_delle_librerie_nascosti_a_info(monkeypatch, caplog):
     main(VALIDO)
     for libreria in ("httpx", "httpx2", "openai"):
         assert logging.getLogger(libreria).getEffectiveLevel() == logging.WARNING, libreria
+
+
+def test_lo_strumento_orologio_arriva_al_modello(monkeypatch):
+    ricevuti = []
+    monkeypatch.setattr(avvio, "crea_modello", lambda config, strumenti: ricevuti.append(strumenti))
+    monkeypatch.setattr(avvio, "avvia", lambda sessione: None)
+    assert main(VALIDO) == 0
+    assert [s.name for s in ricevuti[0]] == ["ora_corrente"]
