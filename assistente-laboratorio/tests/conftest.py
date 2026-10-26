@@ -1,8 +1,12 @@
+from datetime import datetime, timezone
+
 import httpx
 import openai
 from langchain_core.messages import AIMessage, BaseMessage
 
 from assistente.grafo import costruisci_grafo
+
+ORA_FISSA = datetime(2026, 10, 26, 15, 47, 12, 345678, tzinfo=timezone.utc)
 
 
 class ModelloFinto:
