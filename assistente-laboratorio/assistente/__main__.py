@@ -29,7 +29,7 @@ def main(env: Mapping[str, str] = os.environ) -> int:
             logging.getLogger(libreria).setLevel(logging.WARNING)
 
     modello = crea_modello(config)
-    sessione = Sessione(costruisci_grafo(modello, config.max_passi))
+    sessione = Sessione(costruisci_grafo(modello, [], config.max_passi))
     print(
         f"Assistente del laboratorio — modello {config.modello} su {config.base_url}. "
         "Scrivi 'esci' per uscire."

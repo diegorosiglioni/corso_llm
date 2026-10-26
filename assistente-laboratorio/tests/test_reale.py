@@ -18,7 +18,7 @@ def sessione_reale():
         config = carica_configurazione(os.environ)
     except ErroreConfigurazione as errore:
         pytest.fail(f"Prova reale: imposta LMSTUDIO_BASE_URL e LMSTUDIO_MODELLO ({errore})")
-    return Sessione(costruisci_grafo(crea_modello(config), config.max_passi))
+    return Sessione(costruisci_grafo(crea_modello(config), [], config.max_passi))
 
 
 def test_ricorda_il_nome(sessione_reale):

@@ -3,7 +3,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from assistente.sessione import Sessione
-from conftest import ModelloFinto, errore_lm_studio, grafo_finto
+from conftest import ModelloFinto, chiamata, errore_lm_studio, grafo_finto
 
 
 def contenuti(messaggi):
@@ -60,3 +60,21 @@ def test_messaggi_e_una_copia():
     s.invia("ciao")
     s.messaggi.append(HumanMessage("intruso"))
     assert contenuti(s.messaggi) == ["ciao", "ok"]
+
+
+def test_dopo_il_limite_la_sessione_continua():
+    modello = ModelloFinto([chiamata(id=f"c{i}") for i in range(5)] + [AIMessage("ok")])
+    s = Sessione(grafo_finto(modello))
+    assert s.invia("ore?") == "Ho raggiunto il limite di 5 passaggi senza una risposta finale."
+    precedenti = s.messaggi
+    assert s.invia("e adesso?") == "ok"
+    assert modello.chiamate[-1][1:] == precedenti + [s.messaggi[-2]]
+
+
+def test_errore_dopo_lo_strumento_non_lascia_orfani():
+    modello = ModelloFinto([AIMessage("Ciao."), chiamata(), errore_lm_studio()])
+    s = Sessione(grafo_finto(modello))
+    s.invia("salve")
+    with pytest.raises(openai.APIConnectionError):
+        s.invia("che ore sono a Tokyo?")
+    assert contenuti(s.messaggi) == ["salve", "Ciao."]
