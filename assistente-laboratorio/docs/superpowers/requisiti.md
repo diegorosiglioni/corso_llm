@@ -1,7 +1,7 @@
 # Requisiti — Assistente del laboratorio
 
 Data: 2026-10-26
-Stato: bozza da approvare
+Stato: approvati
 
 Questo documento fissa **che cosa** deve fare l'applicazione. Il **come** (architettura,
 moduli, dettagli del grafo) sarà descritto nella specifica, che rimanda a questi requisiti.
