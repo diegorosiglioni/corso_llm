@@ -85,7 +85,7 @@ Un limite sul numero di chiamate agli strumenti sarebbe un requisito nuovo.
 - **Minori rimandati dalla revisione finale:**
   - con `MAX_PASSI` oltre ~5000 o `LANGGRAPH_DEFAULT_RECURSION_LIMIT` basso si avrebbe un errore di
     LangGraph invece del messaggio di RF-10;
-  - `compose.yaml` fissa la porta 1234 in `LMSTUDIO_BASE_URL`, sovrascrivendo `.env`;
+  - `compose.yaml` fissa la porta 1234 in `LMSTUDIO_BASE_URL`, sovrascrivendo `.env`; *(risolto il 2026-11-03 con `LMSTUDIO_BASE_URL_DOCKER`, vedi `specs/2026-11-03-correzioni-audit-design.md`)*
   - container senza init (`docker stop` attende 10 s); possibile `init: true`;
   - su Windows con stdout rediretto, caratteri fuori da cp1252 nella risposta possono causare
     `UnicodeEncodeError`.

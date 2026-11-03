@@ -138,8 +138,9 @@ chiamata con `Europe/Rome` e che un nome detto in precedenza venga ricordato sen
 ## Docker
 
 LM Studio resta sull'host; nel container gira solo l'applicazione. Compose legge `.env` (vedi
-«Configurazione») e sostituisce `LMSTUDIO_BASE_URL` con `http://host.docker.internal:1234/v1`, così
-lo stesso `.env` vale in locale e in Docker.
+«Configurazione») e nel container imposta `LMSTUDIO_BASE_URL` a
+`http://host.docker.internal:1234/v1`. Se LM Studio usa un'altra porta o un altro host, si imposta
+`LMSTUDIO_BASE_URL_DOCKER` nel `.env` (vedi `.env.example`).
 
 ```powershell
 Copy-Item .env.example .env      # solo la prima volta

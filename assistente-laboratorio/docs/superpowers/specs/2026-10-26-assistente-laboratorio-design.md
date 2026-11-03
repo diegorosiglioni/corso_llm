@@ -90,6 +90,8 @@ MAX_PASSI=5
 LOG_LEVEL=INFO
 ```
 
+*Rivisto il 2026-11-03: vedi [`2026-11-03-correzioni-audit-design.md`](2026-11-03-correzioni-audit-design.md) §2.3.*
+
 ## 4. Collegamento al modello (`modello.py`)
 
 ```python
@@ -301,6 +303,7 @@ services:
     tty: true
 ```
 - `environment` prevale su `.env`: lo stesso `.env` serve sia in locale sia in Docker.
+  *Rivisto il 2026-11-03: vedi [`2026-11-03-correzioni-audit-design.md`](2026-11-03-correzioni-audit-design.md) §2.3.*
 - `extra_hosts` rende `host.docker.internal` disponibile anche su Linux; su Docker Desktop
   è già presente.
 - L'avvio interattivo è `docker compose run --rm assistente`: `docker compose up` non

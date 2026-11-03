@@ -3,8 +3,8 @@ services:
     build: .
     env_file: .env
     environment:
-      # Dal container LM Studio sull'host si raggiunge tramite host.docker.internal.
-      LMSTUDIO_BASE_URL: http://host.docker.internal:1234/v1
+      # LM Studio sull'host; per un'altra porta o un altro host impostare LMSTUDIO_BASE_URL_DOCKER nel .env.
+      LMSTUDIO_BASE_URL: ${LMSTUDIO_BASE_URL_DOCKER:-http://host.docker.internal:1234/v1}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     stdin_open: true
