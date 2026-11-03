@@ -25,6 +25,17 @@ Si usa direttamente `.\.venv\Scripts\python.exe`, senza attivare l'ambiente: cos
 policy di PowerShell non interferisce. `requirements.txt` contiene le dipendenze
 dell'applicazione, `requirements-dev.txt` aggiunge quelle dei test.
 
+`requirements.txt` richiama `constraints.txt`, che fissa tutte le versioni verificate, anche le
+indirette: così venv e immagine Docker installano gli stessi pacchetti. Il file si rigenera dal
+venv in cui passano test e prove reali:
+
+```powershell
+@("# Versioni verificate: rigenerare con il comando del README, sezione Installazione.") + (.\.venv\Scripts\python.exe -m pip freeze) | Out-File -Encoding ascii constraints.txt
+```
+
+Per cambiare una versione: aggiornare i requirements, svuotare `constraints.txt`, reinstallare,
+ripetere le verifiche e rigenerarlo.
+
 ## Test automatici
 
 ```powershell

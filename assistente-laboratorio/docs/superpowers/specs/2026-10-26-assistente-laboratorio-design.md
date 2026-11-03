@@ -279,6 +279,7 @@ Assistente> A Tokyo sono le 00:52 del 27 ottobre.
 
 **`Dockerfile`**
 - Base `python:3.13-slim` (stessa versione minore usata in locale).
+  *Rivisto il 2026-11-03: vedi [`2026-11-03-correzioni-audit-design.md`](2026-11-03-correzioni-audit-design.md) §2.1.*
 - `PYTHONUNBUFFERED=1`, `PYTHONDONTWRITEBYTECODE=1`.
 - Copia e installa prima `requirements.txt` (cache dei livelli), poi il pacchetto
   `assistente/`.
@@ -373,3 +374,4 @@ sessione), CA-7 dal terminale, CA-8 (Docker), CA-9 con tasti reali, CA-10 (`git 
 - **Versioni delle dipendenze**: le versioni esatte vengono scelte e verificate nel piano;
   le API di LangGraph e langchain-openai usate sono quelle di base (`StateGraph`,
   `add_messages`, `ChatOpenAI.bind_tools`, `@tool`).
+  *Rivisto il 2026-11-03: vedi [`2026-11-03-correzioni-audit-design.md`](2026-11-03-correzioni-audit-design.md) §2.1.*

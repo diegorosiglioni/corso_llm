@@ -9,7 +9,8 @@ Requisiti, specifica e piano: `assistente-laboratorio/docs/superpowers/`.
   `grafo.py`, `sessione.py`, `terminale.py`; solo `__main__.py` collega i moduli.
 - Test in `assistente-laboratorio/tests/`; il modello finto (`ModelloFinto`) e gli aiuti comuni
   sono in `conftest.py`. Le prove con LM Studio stanno in `test_reale.py` (marcatore `reale`).
-- Dipendenze fissate in `requirements.txt` (app) e `requirements-dev.txt` (test).
+- Dipendenze dirette in `requirements.txt` (app) e `requirements-dev.txt` (test); tutte le
+  versioni verificate in `constraints.txt`, richiamato da `requirements.txt`.
 - Comandi da PowerShell in `assistente-laboratorio/`, senza attivare l'ambiente:
   - ambiente: `py -3.13 -m venv .venv` e `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`
   - test senza modello: `.\.venv\Scripts\python.exe -m pytest`
