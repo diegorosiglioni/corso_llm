@@ -311,6 +311,7 @@ services:
 
 **`.dockerignore`**: `.env`, `.venv/`, `__pycache__/`, `.pytest_cache/`, `tests/`, `docs/`,
 `.git`.
+*Rivisto il 2026-11-03: pattern ricorsivi, vedi [`2026-11-03-correzioni-audit-design.md`](2026-11-03-correzioni-audit-design.md) §2.4.*
 
 Da verificare nella prova reale: se dal container LM Studio non risponde, potrebbe servire
 attivare in LM Studio l'opzione per servire anche sulla rete locale. L'esito verrà riportato
