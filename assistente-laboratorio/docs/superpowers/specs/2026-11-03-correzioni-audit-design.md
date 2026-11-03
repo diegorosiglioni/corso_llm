@@ -1,7 +1,7 @@
 # Specifica — Correzioni dell'audit (I1, M1, M2, M3)
 
 Data: 2026-11-03
-Stato: bozza da approvare
+Stato: approvata
 Specifica di base: [`2026-10-26-assistente-laboratorio-design.md`](2026-10-26-assistente-laboratorio-design.md)
 (§3, §9, §12). Requisiti: [`../requisiti.md`](../requisiti.md) (RNF-5, RNF-6, RNF-7).
 
