@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-import httpx
+import httpx2
 import openai
 from langchain_core.messages import AIMessage, BaseMessage
 
@@ -39,5 +39,5 @@ def chiamata(fuso: str | None = "Asia/Tokyo", id: str = "c1", nome: str = "ora_c
 
 def errore_lm_studio() -> openai.APIConnectionError:
     return openai.APIConnectionError(
-        request=httpx.Request("POST", "http://localhost:1234/v1/chat/completions")
+        request=httpx2.Request("POST", "http://localhost:1234/v1/chat/completions")
     )

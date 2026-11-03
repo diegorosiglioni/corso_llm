@@ -1,3 +1,5 @@
 -r requirements.txt
 # Test automatici
 pytest==9.1.1
+# Richiesta finta per costruire openai.APIConnectionError nei test (openai 3.x usa httpx2)
+httpx2==2.16.0
