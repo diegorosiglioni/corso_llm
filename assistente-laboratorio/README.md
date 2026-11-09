@@ -155,7 +155,7 @@ correttamente l'input del terminale. Per una prova non interattiva serve `-T`:
 "Che ore sono a Tokyo?", "esci" | docker compose run --rm -T assistente
 ```
 
-L'immagine (`python:3.13-slim`) contiene solo il pacchetto `assistente` e le dipendenze
+L'immagine (`python:3.13.18-slim-trixie`, fissata per digest nel `Dockerfile`) contiene solo il pacchetto `assistente` e le dipendenze
 dell'applicazione, ed esegue come utente non root. Nel container l'orario dei log è in UTC;
 l'orario restituito dallo strumento dipende solo dal fuso richiesto.
 
