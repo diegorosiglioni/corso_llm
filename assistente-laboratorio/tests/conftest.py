@@ -5,6 +5,7 @@ import openai
 from langchain_core.messages import AIMessage, BaseMessage
 
 from assistant.graph import build_graph
+from assistant.mcp_client import McpStartupError, ToolSpec
 from assistant.tools import create_current_time_tool
 
 FIXED_NOW = datetime(2026, 10, 26, 15, 47, 12, 345678, tzinfo=timezone.utc)
@@ -37,6 +38,39 @@ def tool_call(
     """Model reply that requests a tool; timezone=None → empty arguments."""
     args = {} if timezone is None else {"timezone": timezone}
     return AIMessage("", tool_calls=[{"name": name, "args": args, "id": id}])
+
+
+MCP_SPECS = [
+    ToolSpec(name, f"Descrizione di {name}", {"type": "object", "properties": {}})
+    for name in (
+        "convert_units", "calculate", "search_catalog", "get_item",
+        "add_note", "list_notes", "delete_note",
+    )
+]
+
+
+class FakeMcpClient:
+    """Stands in for McpClient: publishes `specs`, records calls and answers {"ok": True}."""
+
+    def __init__(self, specs: list[ToolSpec], fail_on_enter: bool = False):
+        self._specs = list(specs)
+        self._fail_on_enter = fail_on_enter
+        self.calls: list[tuple[str, dict]] = []
+
+    def __enter__(self):
+        if self._fail_on_enter:
+            raise McpStartupError("comando non trovato")
+        return self
+
+    def __exit__(self, *exc) -> None:
+        pass
+
+    def list_tools(self) -> list[ToolSpec]:
+        return list(self._specs)
+
+    def call_tool(self, name: str, arguments: dict) -> dict:
+        self.calls.append((name, arguments))
+        return {"ok": True}
 
 
 def lm_studio_error() -> openai.APIConnectionError:

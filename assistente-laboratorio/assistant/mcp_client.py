@@ -5,6 +5,7 @@ The asynchrony stays inside this module: the rest of the application calls block
 
 import asyncio
 import concurrent.futures
+import logging
 import sys
 import threading
 from dataclasses import dataclass
@@ -12,8 +13,11 @@ from pathlib import Path
 
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
+from langchain_core.tools import BaseTool, StructuredTool
 
 from assistant.tools import ToolUnavailableError
+
+log = logging.getLogger(__name__)
 
 CLOSE_TIMEOUT = 10.0
 
@@ -145,3 +149,40 @@ class McpClient:
             ) from None
         except Exception as error:
             raise ToolUnavailableError(_reason(error)) from error
+
+
+# --- adapter: tools/list catalog → LangChain tools ---
+
+ALLOWED_MCP_TOOLS = (
+    "convert_units", "calculate", "search_catalog", "get_item",
+    "add_note", "list_notes", "delete_note",
+)
+
+
+def _caller(client, name: str):
+    """Function that forwards a call to `name`; a factory avoids late binding in the loop."""
+    def call(**arguments) -> dict:
+        return client.call_tool(name, arguments)
+    return call
+
+
+def create_mcp_tools(client, allowed=ALLOWED_MCP_TOOLS) -> list[BaseTool]:
+    """One StructuredTool per allowed tool, with name, description and schema from the server."""
+    specs = client.list_tools()
+    published = {spec.name for spec in specs}
+    tools = []
+    for spec in specs:
+        if spec.name not in allowed:
+            log.info("strumento MCP non consentito, ignorato: %s", spec.name)
+            continue
+        tools.append(StructuredTool(
+            name=spec.name,
+            description=spec.description,
+            args_schema=spec.input_schema,  # the server's JSON Schema, passed on unchanged
+            func=_caller(client, spec.name),
+            metadata={"variant": "mcp"},
+        ))
+    for name in allowed:
+        if name not in published:
+            log.warning("strumento MCP consentito ma assente dal catalogo: %s", name)
+    return tools

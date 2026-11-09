@@ -5,6 +5,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_core.tools import StructuredTool
 
 from assistant.graph import SYSTEM_PROMPT, route
+from assistant.mcp_client import ALLOWED_MCP_TOOLS
 from assistant.tools import ToolUnavailableError
 from conftest import FakeModel, fake_graph, tool_call
 
@@ -29,6 +30,11 @@ def test_system_prompt_sent_but_not_stored():
     assert received[0].content == SYSTEM_PROMPT
     assert received[1].content == "salve"
     assert not any(isinstance(m, SystemMessage) for m in result["messages"])
+
+
+def test_system_prompt_mentions_every_tool():
+    for name in ["get_current_time", *ALLOWED_MCP_TOOLS]:
+        assert name in SYSTEM_PROMPT
 
 
 def test_llm_step_log(caplog):

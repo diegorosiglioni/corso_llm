@@ -23,7 +23,11 @@ from assistant.notes import (
 )
 from assistant.units import UNITS_DESCRIPTION, convert_units
 
-log = logging.getLogger(__name__)
+# Explicit name: run with "python -m", __name__ would be "__main__".
+log = logging.getLogger("assistant.mcp_server")
+
+# Library loggers kept at WARNING unless --log-level DEBUG, as in the application.
+QUIET_LIBRARIES = ("mcp", "fastmcp")
 
 SERVER_NAME = "Strumenti del laboratorio"
 
@@ -86,6 +90,9 @@ def main(argv: list[str] | None = None) -> int:
         level=args.log_level,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    if args.log_level != "DEBUG":
+        for library in QUIET_LIBRARIES:
+            logging.getLogger(library).setLevel(logging.WARNING)
     build_server(NotesStore(args.notes_db), Catalog.load()).run(
         transport="stdio", show_banner=False
     )

@@ -791,7 +791,7 @@ async def _serve(self, ready: concurrent.futures.Future) -> None:
     che registra le chiamate in `.calls` e restituisce `{"ok": True}`; `MCP_SPECS`, i 7
     `ToolSpec` d'esempio con schema `{"type": "object", "properties": {}}`.
 
-- [ ] **Step 1: Scrivere i test.**
+- [x] **Step 1: Scrivere i test.**
 
 ```python
 # test_mcp_client.py
@@ -842,9 +842,9 @@ def test_system_prompt_mentions_every_tool():
   - fa partire ogni `main(...)` con `NOTES_DB` in `tmp_path`, così nessun test crea `data/` nel
     repository.
 
-- [ ] **Step 2: Eseguire i test.** `pytest tests/test_mcp_client.py tests/test_main.py tests/test_graph.py -v` → FAIL.
+- [x] **Step 2: Eseguire i test.** `pytest tests/test_mcp_client.py tests/test_main.py tests/test_graph.py -v` → FAIL.
 
-- [ ] **Step 3: Implementare.**
+- [x] **Step 3: Implementare.**
   - `create_mcp_tools`, come nella spec §7:
     - `StructuredTool(name=…, description=…, args_schema=spec.input_schema, func=…, metadata={"variant": "mcp"})`;
     - `func` creata da una funzione fabbrica (`_caller(client, name)`), per evitare la chiusura
@@ -863,9 +863,9 @@ def test_system_prompt_mentions_every_tool():
   - Logger `mcp` e `fastmcp` a WARNING insieme a `httpx`, `httpx2`, `openai`.
   - `SYSTEM_PROMPT` con il testo esatto della spec §8.
 
-- [ ] **Step 4: Eseguire la suite.** `pytest -v` → verde.
+- [x] **Step 4: Eseguire la suite.** `pytest -v` → verde.
 
-- [ ] **Step 5: Prova manuale locale con LM Studio.** Eseguire
+- [x] **Step 5: Prova manuale locale con LM Studio.** Eseguire
   `"Quanto fa 17 * 23?", "Ricordami di consegnare il report venerdì", "Quali note ho?", "esci" | .\.venv\Scripts\python.exe -m assistant`.
   Expected:
   - nel log si vedono `variant=mcp tool=calculate`, `tool=add_note`, `tool=list_notes`, con
@@ -874,7 +874,7 @@ def test_system_prompt_mentions_every_tool():
   - dopo l'uscita `Get-Process python` non mostra processi del server rimasti attivi.
   - Riportare l'esito così com'è (RT-4).
 
-- [ ] **Step 6: Commit** — `feat(mcp): collega gli strumenti scoperti dal server al grafo`.
+- [x] **Step 6: Commit** — `feat(mcp): collega gli strumenti scoperti dal server al grafo`.
 
 ---
 
