@@ -22,14 +22,17 @@ Requisiti, specifica e piano: `assistente-laboratorio/docs/superpowers/`.
 Un'applicazione da terminale in Python che conversa con un modello locale e:
 - organizza il flusso in un grafo LangGraph esplicito (stato, nodi, instradamento riconoscibili);
 - usa un modello servito da LM Studio, che resta sul computer host;
-- conserva la cronologia della conversazione per la durata della sessione (nessuna persistenza);
+- conserva la cronologia della conversazione per la durata della sessione (la cronologia non è persistente);
 - offre uno strumento orologio con fuso orario esplicito, richiesto dal modello tramite tool calling
   ed eseguito davvero dal programma;
+- (lezione 5) collega un server MCP locale (FastMCP, stdio) che espone convertitore di unità,
+  calcolatrice sicura, catalogo locale e note persistenti su SQLite, scoperti con `tools/list`;
 - si avvia anche con Docker Compose.
 
 ## Confini
-- Implementare solo i requisiti concordati. Altri strumenti, MCP, workflow e RAG arriveranno
-  nelle lezioni successive: non anticiparli.
+- Implementare solo i requisiti concordati. MCP e i quattro strumenti della lezione 5 sono
+  concordati; altri strumenti, altri server MCP, workflow e RAG arriveranno nelle lezioni
+  successive: non anticiparli.
 - Niente interfacce grafiche, servizi cloud o framework non concordati.
 - Lavorare solo dentro `assistente-laboratorio/`. La repository contiene altre lezioni:
   non leggerle per copiarne il codice e non modificarle.
@@ -38,7 +41,11 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
 
 ## Scelte tecniche
 - Python, codice sincrono e moduli piccoli, con una separazione semplice tra
-  grafo, collegamento al modello, strumenti e interfaccia da terminale.
+  grafo, collegamento al modello, strumenti e interfaccia da terminale. L'asincronia del client
+  MCP resta confinata nel suo modulo, che offre metodi sincroni.
+- Lingua: codice in inglese (identificatori, moduli, variabili d'ambiente, nomi e argomenti degli
+  strumenti, chiavi JSON, commenti); in italiano prompt di sistema, testi del terminale,
+  descrizioni degli strumenti e messaggi d'errore; documentazione e commit in italiano.
 - LM Studio sull'host, raggiunto tramite la sua API compatibile con OpenAI.
 - Indirizzo del server e identificativo del modello solo da variabili d'ambiente.
   L'identificativo è quello restituito dal server (`GET /v1/models`), mai inventato.
