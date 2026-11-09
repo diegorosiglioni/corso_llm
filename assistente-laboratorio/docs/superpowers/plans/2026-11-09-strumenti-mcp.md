@@ -887,12 +887,12 @@ def test_system_prompt_mentions_every_tool():
 - Consumes: `load_config`, `create_model`, `build_graph`, `Session`, `McpClient`, `server_command`,
   `create_mcp_tools`, `create_current_time_tool`.
 
-- [ ] **Step 1: Riscrivere la fixture `real_session`.**
+- [x] **Step 1: Riscrivere la fixture `real_session`.**
   - Usa un `McpClient` con l'archivio in `tmp_path` e restituisce la sessione con gli 8 strumenti.
   - Aggiungere la fabbrica `open_session(db)`, per la prova del riavvio.
   - Restano invariati il messaggio di fallimento senza variabili e i test CA-2…CA-4.
 
-- [ ] **Step 2: Aggiungere i test** (helper `calls(messages, name)` = argomenti delle chiamate a quello
+- [x] **Step 2: Aggiungere i test** (helper `calls(messages, name)` = argomenti delle chiamate a quello
   strumento).
   - `test_calculate_and_convert` (CA-16):
     - «Quanto fa 17 * 23?» → almeno una `calculate` e `"391"` nella risposta;
@@ -913,15 +913,15 @@ def test_system_prompt_mentions_every_tool():
   - `test_logs_correlate_call_ids` (CA-21, `caplog`): per una `call_id` di `add_note` ci sono le
     righe `variant=mcp`, `execution=ok` e `tool_message.call_id=<id>`.
 
-- [ ] **Step 3: Eseguire le prove reali.** Con LM Studio attivo:
+- [x] **Step 3: Eseguire le prove reali.** Con LM Studio attivo:
   `.\.venv\Scripts\python.exe -m pytest -m real -v`.
   Expected: tutti PASS. Un fallimento dovuto al modello (strumento non scelto, doppia `add_note`,
   argomenti diversi) **non** si nasconde e il test non si allenta: si annotano la risposta e i
   messaggi per l'handoff.
 
-- [ ] **Step 4: Verificare la suite predefinita.** `pytest` → verde, con i test `real` deselezionati.
+- [x] **Step 4: Verificare la suite predefinita.** `pytest` → verde, con i test `real` deselezionati.
 
-- [ ] **Step 5: Commit** — `test(reale): aggiunge le prove con LM Studio degli strumenti MCP`.
+- [x] **Step 5: Commit** — `test(reale): aggiunge le prove con LM Studio degli strumenti MCP`.
 
 ---
 
