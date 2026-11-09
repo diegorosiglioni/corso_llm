@@ -584,7 +584,7 @@ def test_inaccessible_store(tmp_path):
   - `main(argv: list[str] | None = None) -> int`, avviabile con
     `python -m assistant.mcp_server --notes-db PATH [--log-level INFO]`.
 
-- [ ] **Step 1: Installare e fissare la dipendenza.**
+- [x] **Step 1: Installare e fissare la dipendenza.**
   - Aggiungere a `requirements.txt`:
     ```
     # Server FastMCP e client stdio (lezione 5)
@@ -596,7 +596,7 @@ def test_inaccessible_store(tmp_path):
   - Eseguire `.\.venv\Scripts\python.exe -m pip check` → «No broken requirements found.».
   - Eseguire `.\.venv\Scripts\python.exe -c "from fastmcp import FastMCP, Client; from fastmcp.client.transports import StdioTransport; from fastmcp.exceptions import ToolError"` → nessun errore.
 
-- [ ] **Step 2: Scrivere i test.** Si usa il client in memoria di fastmcp; la prova su stdio è nel
+- [x] **Step 2: Scrivere i test.** Si usa il client in memoria di fastmcp; la prova su stdio è nel
   Task 8.
 
 ```python
@@ -633,9 +633,9 @@ def test_note_round_trip_and_log(server, caplog):
     assert "event=note_added id=1" in caplog.text and "event=note_deleted id=1" in caplog.text
 ```
 
-- [ ] **Step 3: Eseguire i test.** `pytest tests/test_mcp_server.py -v` → FAIL (modulo inesistente).
+- [x] **Step 3: Eseguire i test.** `pytest tests/test_mcp_server.py -v` → FAIL (modulo inesistente).
 
-- [ ] **Step 4: Implementare `mcp_server.py`.**
+- [x] **Step 4: Implementare `mcp_server.py`.**
   - Ogni strumento è registrato con `@server.tool(name=…, description=…)` e chiama la logica
     corrispondente; un `ValueError` diventa `ToolError(str(e))`.
   - `add_note` e `delete_note` scrivono `log.info("event=note_added id=%d", …)` /
@@ -648,17 +648,17 @@ def test_note_round_trip_and_log(server, caplog):
       verificarla nel codice installato.
   - Blocco `if __name__ == "__main__": sys.exit(main())`.
 
-- [ ] **Step 5: Eseguire i test.** `pytest tests/test_mcp_server.py -v` → PASS.
+- [x] **Step 5: Eseguire i test.** `pytest tests/test_mcp_server.py -v` → PASS.
   - Se `structured_content` è annidato (es. `{"result": {...}}`), correggere l'annotazione di
     ritorno in modo che il dizionario arrivi così com'è, come nel test.
 
-- [ ] **Step 6: Fissare le versioni.**
+- [x] **Step 6: Fissare le versioni.**
   - Eseguire `pytest` → verde.
   - Rigenerare `constraints.txt` con il comando del README («Installazione»):
     `@("# Versioni verificate: rigenerare con il comando del README, sezione Installazione.") + (.\.venv\Scripts\python.exe -m pip freeze) | Out-File -Encoding ascii constraints.txt`.
   - `git diff constraints.txt`: solo righe aggiunte, nessuna versione già presente cambiata.
 
-- [ ] **Step 7: Commit** — `feat(mcp): aggiunge il server FastMCP con i quattro strumenti della lezione 5`.
+- [x] **Step 7: Commit** — `feat(mcp): aggiunge il server FastMCP con i quattro strumenti della lezione 5`.
 
 ---
 

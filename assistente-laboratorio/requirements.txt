@@ -10,3 +10,5 @@ langchain-openai==1.7.2
 openai==3.37.0
 # Database dei fusi orari (necessario su Windows e nell'immagine slim)
 tzdata==2026.5
+# Server FastMCP e client stdio (lezione 5)
+fastmcp==4.1.6
