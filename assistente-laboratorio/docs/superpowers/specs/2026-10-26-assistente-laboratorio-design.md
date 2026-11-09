@@ -21,6 +21,7 @@ Alternative scartate:
 - *`create_react_agent`*: nasconde stato, nodi e instradamento, in contrasto con RNF-2.
 
 ## 2. Struttura
+*Rivisto il 2026-11-09: vedi [`2026-11-09-strumenti-mcp-design.md`](2026-11-09-strumenti-mcp-design.md).*
 
 ```
 assistente-laboratorio/
@@ -60,6 +61,7 @@ parametri (modello e strumenti, grafo, sessione), quindi i test possono passare 
 finti. `modello.py` dipende solo da `config.py`.
 
 ## 3. Configurazione (`config.py`)
+*Rivisto il 2026-11-09: vedi [`2026-11-09-strumenti-mcp-design.md`](2026-11-09-strumenti-mcp-design.md).*
 
 ```python
 @dataclass(frozen=True)
@@ -113,6 +115,7 @@ def crea_modello(config: Configurazione, strumenti: list[BaseTool]) -> Runnable:
 - Il modulo non contiene logica: si verifica solo con le prove reali.
 
 ## 5. Strumento orologio (`strumenti.py`)
+*Rivisto il 2026-11-09: vedi [`2026-11-09-strumenti-mcp-design.md`](2026-11-09-strumenti-mcp-design.md).*
 
 ```python
 def crea_ora_corrente(
@@ -139,6 +142,7 @@ Comportamento:
   `slim`.
 
 ## 6. Grafo (`grafo.py`)
+*Rivisto il 2026-11-09: vedi [`2026-11-09-strumenti-mcp-design.md`](2026-11-09-strumenti-mcp-design.md).*
 
 ### Stato
 
@@ -241,6 +245,7 @@ class Sessione:
    «(Il modello non ha fornito una risposta.)».
 
 ## 8. Terminale (`terminale.py`) e avvio (`__main__.py`)
+*Rivisto il 2026-11-09: vedi [`2026-11-09-strumenti-mcp-design.md`](2026-11-09-strumenti-mcp-design.md).*
 
 ```python
 def avvia(sessione: Sessione, leggi=input, scrivi=print) -> None: ...
@@ -278,6 +283,7 @@ Assistente> A Tokyo sono le 00:52 del 27 ottobre.
 ```
 
 ## 9. Docker
+*Rivisto il 2026-11-09: vedi [`2026-11-09-strumenti-mcp-design.md`](2026-11-09-strumenti-mcp-design.md).*
 
 **`Dockerfile`**
 - Base `python:3.13-slim` (stessa versione minore usata in locale).
@@ -318,6 +324,7 @@ attivare in LM Studio l'opzione per servire anche sulla rete locale. L'esito ver
 nel README, nella sezione di diagnosi.
 
 ## 10. Test
+*Rivisto il 2026-11-09: vedi [`2026-11-09-strumenti-mcp-design.md`](2026-11-09-strumenti-mcp-design.md).*
 
 **`pytest.ini`**
 ```ini

@@ -7,9 +7,15 @@ Stato corrente e prossimo passo: `assistente-laboratorio/docs/superpowers/handof
 
 ## Struttura e comandi
 - Codice in `assistente-laboratorio/assistant/`: `config.py`, `model.py`, `tools.py`,
-  `graph.py`, `session.py`, `terminal.py`; solo `__main__.py` collega i moduli.
-- Test in `assistente-laboratorio/tests/`; il modello finto (`FakeModel`) e gli aiuti comuni
-  sono in `conftest.py`. Le prove con LM Studio stanno in `test_real.py` (marcatore `real`).
+  `graph.py`, `session.py`, `terminal.py`; logica pura degli strumenti MCP in `units.py`,
+  `calculator.py`, `catalog.py` (dati in `assistant/data/catalog.json`), `notes.py`; server
+  FastMCP in `mcp_server.py`, client sincrono e adattatore in `mcp_client.py`. Solo
+  `__main__.py` collega i moduli.
+- Test in `assistente-laboratorio/tests/`; il modello finto (`FakeModel`), il client MCP finto
+  (`FakeMcpClient`) e gli aiuti comuni sono in `conftest.py`. I test MCP avviano il server
+  reale via stdio. Le prove con LM Studio stanno in `test_real.py` (marcatore `real`).
+- Note in SQLite: in locale `NOTES_DB` (default `data/notes.sqlite3`, ignorato da Git), in
+  Docker il volume `notes-data`.
 - Dipendenze dirette in `requirements.txt` (app) e `requirements-dev.txt` (test); tutte le
   versioni verificate in `constraints.txt`, richiamato da `requirements.txt`.
 - Comandi da PowerShell in `assistente-laboratorio/`, senza attivare l'ambiente:

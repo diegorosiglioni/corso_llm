@@ -1,159 +1,176 @@
 # Handoff — Assistente del laboratorio
 
 Data: 2026-11-09
-Stato: **lezione 5 progettata, implementazione da iniziare.** Requisiti §8 e specifica approvati il
-2026-11-09; piano scritto e committato, nessun task eseguito. Il codice è ancora quello della
-lezione 4 (pacchetto `assistente`, strumento `ora_corrente`).
+Stato: **lezione 5 implementata.** Sono stati eseguiti i 12 task del piano
+[`plans/2026-11-09-strumenti-mcp.md`](plans/2026-11-09-strumenti-mcp.md), tutti con commit
+locali; nessun push. Restano alcune prove manuali e la revisione indipendente finale (vedi
+«Punti aperti»).
 
 ## Riprendere da qui
 
-**Prossimo passo:** eseguire il piano
-[`plans/2026-11-09-strumenti-mcp.md`](plans/2026-11-09-strumenti-mcp.md) dal Task 1, con
-`superpowers:executing-plans` (esecuzione nella sessione, consigliata) oppure
-`superpowers:subagent-driven-development`. La modalità va confermata dall'utente.
+**Prima di tutto, il `.env` va aggiornato a mano:** `LMSTUDIO_MODELLO` → `LMSTUDIO_MODEL`,
+`MAX_PASSI` → `MAX_STEPS`. Il 2026-11-09 il `.env` dell'utente aveva ancora i nomi vecchi.
+L'agente non lo modifica. Senza l'aggiornamento `docker compose run` esce con
+«Configurazione non valida: Manca LMSTUDIO_MODEL.». Le prove Docker di questa sessione hanno
+aggirato il problema passando `-e LMSTUDIO_MODEL=google/gemma-4-e2b`.
 
 Leggere prima, in quest'ordine:
-1. `../../../CLAUDE.md`: regole del progetto (convenzione di lingua aggiornata il 2026-11-09).
+1. `../../../CLAUDE.md`: regole del progetto, struttura e comandi aggiornati.
 2. [`specs/2026-11-09-strumenti-mcp-design.md`](specs/2026-11-09-strumenti-mcp-design.md): il
-   **come**.
-3. [`plans/2026-11-09-strumenti-mcp.md`](plans/2026-11-09-strumenti-mcp.md): 12 task, con i vincoli
-   globali, la «Review Focus» e gli scostamenti dalla specifica.
-4. [`requisiti.md`](requisiti.md) §8 (RF-15…RF-22, RNF-10, CA-11…CA-22) e le note «Rivisto il
-   2026-11-09».
+   **come** della lezione 5.
+3. Questo file, sezioni «Decisioni prese durante l'esecuzione» e «Punti aperti».
 
-Da sapere prima di cominciare:
-- **Il `.env` dell'utente va aggiornato a mano dopo il Task 1:** `LMSTUDIO_MODELLO` →
-  `LMSTUDIO_MODEL`, `MAX_PASSI` → `MAX_STEPS`. Non modificarlo: chiederlo all'utente. Senza
-  l'aggiornamento la prova Docker esce con «Manca LMSTUDIO_MODEL.».
-- **LM Studio attivo** (modello `google/gemma-4-e2b`) serve nei Task 1, 9, 10 e 11.
-- **`LLM_Lez_5.pdf`** è nella cartella, non tracciato: non aggiungerlo a Git senza chiedere.
-  Lettura: il rendering delle pagine non è disponibile (manca `pdftoppm`); usare
-  `pdftotext -layout LLM_Lez_5.pdf <scratchpad>/lez5.txt` (Git Bash). Il file prodotto è in
-  cp1252.
+Da sapere:
 - **In Git Bash `python` apre il REPL di Windows** e blocca il comando. Usare sempre
   `.venv/Scripts/python.exe` (o `py -3.13`).
-- Valore di partenza della suite: `pytest` → `60 passed, 2 deselected`.
+- **`LLM_Lez_5.pdf`** è nella cartella, non tracciato: non aggiungerlo a Git senza chiedere.
+- Suite predefinita: `pytest` → `159 passed, 9 deselected`, in circa 15 s. I test MCP avviano il
+  server come sottoprocesso, circa 1 s ciascuno.
 
-## Lezione 5: decisioni prese con l'utente (2026-11-09)
+## Che cosa c'è oggi (lezione 5)
 
-Fonte: `LLM_Lez_5.pdf`, «MCP: dalle funzioni agli strumenti condivisi». Il laboratorio chiede uno
-strumento esposto via MCP, con discovery, invocazione, log correlati ed evidenze (slide 29–30).
-L'utente ha chiesto i quattro strumenti del blocco 5: convertitore di unità, calcolatrice sicura,
-catalogo locale, note persistenti.
+È un'applicazione Python da terminale. Conversa con `google/gemma-4-e2b`, servito da LM Studio
+sull'host, attraverso un grafo LangGraph esplicito: nodi `llm`, `tools`, `limit` e funzione
+`route`.
 
-| Tema | Decisione |
-|------|-----------|
-| Esposizione | Un solo server FastMCP (stdio) con 7 strumenti: `convert_units`, `calculate`, `search_catalog`, `get_item`, `add_note`, `list_notes`, `delete_note`. L'orologio resta locale. |
-| Asincronia | Sessione MCP unica in un thread con il suo event loop; il resto dell'app resta sincrono. |
-| Libreria | `fastmcp==4.1.6` per server e client, con un adattatore scritto nel progetto. |
-| Conferme | Nel risultato dello strumento; eliminazione solo per id esatto; log di ogni modifica. Nessuna conferma dell'utente nel terminale. |
-| Lingua | Codice in inglese, compreso l'esistente (pacchetto `assistant`, `get_current_time(timezone)`, variabili `LMSTUDIO_MODEL`/`MAX_STEPS`/`NOTES_DB`). In italiano prompt di sistema, testi del terminale, descrizioni degli strumenti, messaggi d'errore, documentazione e commit. |
-| Fuori ambito | RAG, workflow, «Giorni e scadenze», «Meteo», variante FastAPI, resources/prompts MCP, Streamable HTTP, più server, riconnessione automatica. |
+Strumenti a disposizione del modello:
+- **locale:** `get_current_time(timezone)`;
+- **MCP:** sette strumenti offerti da un server FastMCP locale (stdio), che l'applicazione avvia
+  come sottoprocesso e scopre con `tools/list`: `convert_units`, `calculate`, `search_catalog`,
+  `get_item`, `add_note`, `list_notes`, `delete_note`.
 
-L'utente ha prima chiesto i prompt in inglese, poi ha precisato: **prompt di sistema e messaggi in
-italiano, nomi nel codice in inglese**. Vale la seconda indicazione.
+Il codice è in inglese; prompt, testi del terminale, descrizioni degli strumenti e messaggi d'errore
+sono in italiano.
 
-### Fatti verificati durante la progettazione
+- Moduli in `assistant/`:
+  - `config.py`, `model.py`, `tools.py`, `graph.py`, `session.py`, `terminal.py`;
+  - logica pura: `units.py`, `calculator.py`, `catalog.py`, `notes.py`;
+  - MCP: `mcp_server.py` e `mcp_client.py` (`McpClient` sincrono e adattatore
+    `create_mcp_tools`);
+  - dati: `data/catalog.json`.
+  Solo `__main__.py` collega i moduli.
+- Le note sono in SQLite: in locale in `NOTES_DB` (default `data/notes.sqlite3`, ignorato da Git),
+  in Docker nel volume `notes-data`.
+- Log nel formato della slide 26:
+  `step=…`, `variant=…`, `call_id=…`, `execution=ok|tool_error|transport_error`,
+  `tool_message.call_id=…`; il server scrive `event=note_added|note_deleted`.
+- Dipendenza nuova `fastmcp==4.1.6`. `constraints.txt` ha 47 righe aggiunte e nessuna versione
+  esistente cambiata. `pywin32` vi compare perché il venv è su Windows, ma non viene installato
+  nell'immagine.
 
-Verificati sui wheel scaricati da PyPI e nel venv attuale, senza installare nulla:
-- Ultime versioni al 2026-11-09: `mcp` 2.3.0, `fastmcp` 4.1.6, `langchain-mcp-adapters` 0.3.2.
-- In `mcp` 2.x `FastMCP` è stato rinominato `MCPServer`; `mcp.server.fastmcp` solleva un errore.
-- `langchain-mcp-adapters` 0.3.2 richiede `mcp<2`, quindi non si combina con `fastmcp` 4, che
-  richiede `mcp>=2.3`. Da qui la scelta dell'adattatore scritto nel progetto.
-- API di `fastmcp` 4.1.6:
-  - `fastmcp.client.transports.StdioTransport(command, args, env=None, cwd=None, keep_alive=None, log_file=None)`;
-  - `Client.list_tools()`;
-  - `Client.call_tool(name, arguments, *, timeout=None, raise_on_error=True)`, che restituisce
-    `CallToolResult(content, structured_content, meta, data, is_error)`;
-  - `fastmcp.exceptions.ToolError`.
-- In `mcp-types` 2.3.0, `Tool` ha `input_schema` (snake_case), non `inputSchema`.
-- Con langchain-core 1.7.0, `StructuredTool(args_schema=<dict JSON Schema>, metadata=…)`:
-  - lo schema arriva così com'è in `convert_to_openai_tool`;
-  - `invoke` non valida gli argomenti;
-  - `metadata` viene conservato.
-- `fastmcp` 4.1.6 porta molte dipendenze indirette (starlette, uvicorn, rich, authlib,
-  pydantic-settings, …). Il Task 7 verifica che nessuna versione già fissata cambi.
-
-## Commit del 2026-11-09 (solo locali, nessun push)
+## Commit della lezione 5 (solo locali)
 
 | Commit | Contenuto |
 |--------|-----------|
-| `6af978c` | handoff: correzioni dell'audit (modifica rimasta in sospeso dalla sessione precedente) |
-| `be631ef` | README: immagine base citata corretta (`python:3.13.18-slim-trixie`) |
-| `1d6ddd4` | requisiti della lezione 5 |
-| `f069d6e` | specifica della lezione 5 |
-| `518f279` | `CLAUDE.md`: obiettivo, confini, asincronia confinata, convenzione di lingua |
-| `6027bcc` | piano di implementazione |
-| (successivo) | stati di requisiti, specifica e piano; questo handoff |
+| `8ed2849` | Task 1: traduzione in inglese (pacchetto `assistant`, `LMSTUDIO_MODEL`, `MAX_STEPS`, marcatore `real`, servizio `assistant`) |
+| `8f5da86` | Task 2: log della slide 26 e `ToolUnavailableError` → `transport_error` |
+| `71d38ed` | Task 3: `units.py` |
+| `49460db` | Task 4: `calculator.py` |
+| `989dd69` | Task 5: `catalog.py` e `catalog.json` |
+| `9e49e92` | Task 6: `notes.py` e `NOTES_DB` |
+| `f969775` | Task 7: `fastmcp`, `mcp_server.py`, `constraints.txt` |
+| `05a246a` | Task 8: `McpClient` |
+| `41907eb` | Task 9: adattatore, avvio, prompt di sistema, log del server |
+| `07290b9` | Task 10: prove reali |
+| `4cb78f6` | Task 11: Docker con il volume delle note |
+| (successivo) | Task 12: README, handoff, `CLAUDE.md`, note nella specifica di base |
 
 `origin/main` è fermo a `5854213`.
 
-## Che cosa c'è oggi (lezione 4, più le correzioni dell'audit)
+## Verifiche (2026-11-09)
 
-Applicazione Python da terminale che conversa con `google/gemma-4-e2b` servito da LM Studio
-sull'host, attraverso un grafo LangGraph esplicito: nodi `modello`, `strumenti`, `limite` e
-funzione `instrada`. La cronologia la tiene `Sessione` per la sola sessione. C'è lo strumento
-`ora_corrente` con fuso IANA; l'app si avvia in locale e con Docker Compose.
+Comandi da PowerShell in `assistente-laboratorio/`. Per le prove reali: LM Studio con
+`google/gemma-4-e2b` (contesto 8192) e
+`$env:LMSTUDIO_BASE_URL="http://localhost:1234/v1"; $env:LMSTUDIO_MODEL="google/gemma-4-e2b"`.
 
-- Moduli in `assistente/`: `config.py`, `modello.py`, `strumenti.py`, `grafo.py`, `sessione.py`,
-  `terminale.py`; li collega `__main__.py`. Test in `tests/`, con `test_reale.py` marcato `reale`.
-- Dipendenze dirette in `requirements.txt` e `requirements-dev.txt`; tutte le versioni verificate
-  in `constraints.txt` (49 pacchetti), richiamato con `-c`. Immagine
-  `python:3.13.18-slim-trixie`, fissata per digest.
-- `MAX_PASSI` limita le **chiamate al modello per turno**, non le chiamate agli strumenti. Un
-  turno con uno strumento usa 2 passaggi.
+| CA | Comando | Esito |
+|----|---------|-------|
+| CA-1 | `.\.venv\Scripts\python.exe -m pytest` | ✅ 159 passed, 9 deselected (LM Studio non usato) |
+| CA-2, CA-3, CA-4 | `pytest -m real -v` | ✅ passate, insieme alle altre prove reali (9 passed in 226 s) |
+| CA-5 | LM Studio fermato e riavviato durante una sessione | ⏳ non ripetuta dopo la lezione 5 (✅ il 26–28/10); il comportamento del terminale è invariato e coperto dai test |
+| CA-6 | `pytest` (`test_limit`, `test_session_continues_after_the_limit`) | ✅ |
+| CA-7 | `python -m assistant` senza `LMSTUDIO_MODEL`; `docker compose run --rm -T -e LMSTUDIO_MODEL= assistant` | ✅ «Configurazione non valida: Manca LMSTUDIO_MODEL.», exit 1, in locale e nel container |
+| CA-8 | `docker compose build`; `"Che ore sono a Tokyo?", "esci" \| docker compose run --rm -T -e LMSTUDIO_MODEL=google/gemma-4-e2b assistant` | ✅ `get_current_time` con `Asia/Tokyo`, risposta «Attualmente a Tokyo sono le 23:27 (9 novembre 2026).» |
+| CA-9 | `pytest` (test del terminale); prova a mano con i tasti reali | ✅ automatica; ⏳ manuale non ripetuta: `esci`, Ctrl+Z e Ctrl+C, in locale e con `docker compose run --rm assistant` |
+| CA-10 | `git status --ignored` | ✅ vedi Task 12 |
+| CA-11 | `pytest tests/test_mcp_server.py tests/test_mcp_client.py tests/test_main.py` | ✅ sette nomi, descrizioni e schemi dal server; `shell` scartato; collisione → exit 1 |
+| CA-12 | `pytest tests/test_mcp_server.py tests/test_mcp_client.py` | ✅ ogni strumento via stdio; errori → `{"error": …}` senza `structured_content` |
+| CA-13 | `pytest` (`test_startup_failure_raises`, `test_call_after_close_is_unavailable`, `test_mcp_startup_failure_exits_1`, `test_unavailable_tool_is_transport_error`) | ✅ |
+| CA-14 | `pytest tests/test_calculator.py` | ✅ `__import__('os')`, `2 ^ 3` con il suggerimento `**`, `9 ** 9 ** 9` rifiutati |
+| CA-15 | `pytest tests/test_notes.py` | ✅ persistenza dopo la riapertura, id non riusati |
+| CA-16 | `pytest -m real` (`test_calculate_and_convert`) | ✅ 391; `convert_units` km→mi, 6,21 |
+| CA-17 | `pytest -m real` (`test_remember_creates_one_note`) | ✅ una sola `add_note` |
+| CA-18 | `pytest -m real` (`test_delete_unknown_note`) | ✅ `delete_note` 99 → errore; note invariate |
+| CA-19 | `pytest -m real` (`test_notes_survive_restart`) | ✅ nota ritrovata da `list_notes` dopo il riavvio del server |
+| CA-20 | `pytest -m real` (`test_catalog_search_then_detail`, `test_catalog_no_results`) | ✅ `search_catalog` → `get_item DL-201`, «32»; astrologia → `total 0`, nessun codice inventato |
+| CA-21 | `pytest -m real` (`test_logs_correlate_call_ids`) | ✅ |
+| CA-22 | `docker compose run --rm -T -e LMSTUDIO_MODEL=google/gemma-4-e2b assistant`, tre esecuzioni via pipe | ✅ `calculate` → 391; «Ricordami di comprare il latte» in un `run`, `list_notes` la ritrova nel successivo |
 
-Documenti precedenti:
-- base: [`specs/2026-10-26-assistente-laboratorio-design.md`](specs/2026-10-26-assistente-laboratorio-design.md),
-  [`plans/2026-10-26-assistente-laboratorio.md`](plans/2026-10-26-assistente-laboratorio.md);
-- audit: [`specs/2026-11-03-correzioni-audit-design.md`](specs/2026-11-03-correzioni-audit-design.md),
-  [`plans/2026-11-03-correzioni-audit.md`](plans/2026-11-03-correzioni-audit.md).
+Altre verifiche:
+- **Prova locale via pipe** con `NOTES_DB` in una cartella temporanea: `calculate`, `add_note` e
+  `list_notes`; «venerdì» arriva integro; i `call_id` coincidono con `tool_message.call_id`.
+- **Processi:** dopo l'uscita dell'app locale (input da pipe) non restano processi `python`
+  (`Get-Process python`: 0 prima e dopo).
+- **Immagine:** contiene `/app/assistant/data/catalog.json`; `/app/data` appartiene all'utente
+  `assistant`; la cartella `data/` dell'host non viene copiata.
+- **Pulizia:** il volume `notes-data`, creato nelle prove con la nota «comprare il latte», è stato
+  eliminato con `docker volume rm assistente-laboratorio_notes-data` (comando verificato per il
+  README).
 
-### Verifiche già fatte
+Limite delle prove reali: una sola esecuzione. Dimostra che `gemma-4-e2b` usa gli strumenti con
+quelle domande, non che lo faccia sempre.
 
-| Ambito | Esito |
-|--------|-------|
-| CA-1…CA-10 (26–28/10) | tutte ✅: suite con LM Studio spento; prove reali `pytest -m reale` 2 passed; LM Studio fermato e riavviato; Docker; `esci`/Ctrl+Z/Ctrl+C; `git status --ignored` |
-| Prove extra con il modello reale (28/10) | `MAX_PASSI=1` → limite al primo passaggio; sei città in una domanda → sei chiamate in un messaggio; «una alla volta» con limite 5 → quattro chiamate e poi il limite |
-| Audit I1, M1, M2, M3 (03/11) | ✅: `constraints.txt` e immagine fissata (`04eaef9`); `httpx2` nei test (`444ce5e`); `LMSTUDIO_BASE_URL_DOCKER` in Compose (`ce2db84`); niente `.pyc` nell'immagine (`5854213`) |
+## Decisioni prese durante l'esecuzione
 
-Limite delle prove reali: dimostrano che `gemma-4-e2b` usa lo strumento con quelle domande, non che
-lo faccia sempre. Il modello arrotonda l'orario al minuto in modo non uniforme.
+Si aggiungono a quelle del piano («Scostamenti dalla specifica»).
 
-### Decisioni di esecuzione ancora valide
-
-- Lavoro su `main` senza worktree; push solo su richiesta.
-- Logger `httpx`, `httpx2`, `openai` a WARNING salvo `LOG_LEVEL=DEBUG`. Con la lezione 5 si
-  aggiungono `mcp` e `fastmcp`.
-- Messaggio di configurazione prefissato da «Configurazione non valida: ».
-- Fuso accettato solo se è in `zoneinfo.available_timezones()` (confronto esatto).
-- `recursion_limit` di LangGraph non impostato (default 10007).
-- Le `invalid_tool_calls` ricevono una risposta d'errore, come le chiamate.
-- Eccezioni diverse da `openai.APIError` non intercettate dal terminale.
-- Nessun test pytest per Compose e `.dockerignore`: le prove Docker restano manuali.
+- **Task 1:**
+  - `tools.py` usa `datetime.UTC`, perché il parametro `timezone` oscurerebbe `datetime.timezone`.
+  - Prove Docker con `-e LMSTUDIO_MODEL=…`, per non toccare il `.env`.
+- **Task 2:** il README è stato aggiornato già qui, con un esempio di log reale; altrimenti avrebbe
+  descritto log non più esistenti.
+- **Task 4:** due rifiuti in più nella calcolatrice:
+  - `OverflowError` dei float → «Numero troppo grande: oltre 1e100.»;
+  - risultato complesso (`(-8) ** 0.5`) → «Risultato non reale: …».
+- **Task 8:** `McpStartupError` con un modulo inesistente dice solo «Connection closed»; il motivo
+  dettagliato arriva su stderr dal sottoprocesso.
+- **Task 9:**
+  - **Collisione di nomi:** `main` passa esplicitamente `ALLOWED_MCP_TOOLS` all'adattatore. Una
+    collisione può nascere solo da un elenco consentito che contiene un nome locale; il test lo
+    simula.
+  - **Fixture dei test di `main`:** usano `monkeypatch.chdir(tmp_path)`, così nessun test crea
+    `data/` nel repository.
+  - **Log del server** (difetto trovato nella prova manuale): il logger ha nome esplicito
+    `assistant.mcp_server` (con `python -m` sarebbe `__main__`), e anche nel sottoprocesso
+    `mcp`/`fastmcp` restano a WARNING salvo DEBUG. Test `test_server_logs_use_module_name_and_hide_library_info`.
+- **Task 10:**
+  - In CA-19 la nota della prima sessione si aggiunge con `client.call_tool`: la prova riguarda la
+    persistenza.
+  - In CA-20 il codice di `get_item` si confronta senza distinzione di maiuscole, come lo accetta il
+    server.
 
 ## Punti aperti
 
-- **Lezione 5:** tutto il piano (Task 1–12).
-- **Audit del 2026-11-03, punti M4–M13:** non affrontati. La descrizione non è nel repository: va
-  ripresa dal resoconto dell'audit.
+- **Revisione indipendente finale** del diff `84ec958..HEAD`: prevista da `executing-plans`, vedi
+  l'esito nella sezione seguente quando c'è.
+- **Prove manuali non ripetute:**
+  - CA-9 con i tasti reali (`esci`, Ctrl+Z, Ctrl+C), in locale e con
+    `docker compose run --rm assistant`, verificando con `Get-Process python` e `docker ps` che il
+    server non resti attivo;
+  - CA-5, LM Studio fermato e riavviato.
+- **Audit del 2026-11-03, punti M4–M13:** non affrontati. La descrizione non è nel repository.
 - **Minori ancora aperti:**
-  - README, diagnosi «LM Studio non raggiungibile dal container»: il comando di prova usa
-    `host.docker.internal:1234` fisso; con `LMSTUDIO_BASE_URL_DOCKER` va adattato a mano;
-  - testo con `MAX_PASSI=1`: «il limite di 1 passaggi» (correzione proposta, non fatta);
-  - con `MAX_PASSI` oltre ~5000 si avrebbe un errore di LangGraph invece del messaggio di RF-10;
-  - container senza init (`docker stop` attende 10 s); possibile `init: true`;
-  - su Windows con stdout rediretto, caratteri fuori da cp1252 possono causare `UnicodeEncodeError`.
-    Va tenuto d'occhio con le note che contengono «€» o accenti.
-- **Mai provati dopo l'audit:**
-  - `docker compose run` interattivo con i tasti reali;
+  - con `MAX_STEPS=1` il testo dice «il limite di 1 passaggi»;
+  - con `MAX_STEPS` oltre ~5000 si avrebbe un errore di LangGraph invece del messaggio di RF-10;
+  - il container non ha init (`docker stop` attende 10 s); possibile `init: true`;
+  - su Windows con stdout rediretto, caratteri fuori da cp1252 potrebbero dare
+    `UnicodeEncodeError`. Nelle prove via pipe di questa sessione «venerdì» è passato senza
+    errori, ma «€» non è stato provato in uscita dal terminale.
+- **Mai provati:**
   - LM Studio su un'altra porta tramite `LMSTUDIO_BASE_URL_DOCKER`;
-  - `docker compose build --no-cache`;
-  - la procedura per cambiare una versione;
-  - un revisore indipendente sul diff `708b40a..5854213`.
-- Le caselle `- [ ]` dei piani del 26/10 e del 03/11 non sono state spuntate.
+  - `docker compose build --no-cache`.
 
-## Comandi (stato attuale, prima del Task 1)
+## Comandi
 
 Da PowerShell in `assistente-laboratorio/`:
 
@@ -161,16 +178,20 @@ Da PowerShell in `assistente-laboratorio/`:
 & "$HOME\.lmstudio\bin\lms.exe" server start
 & "$HOME\.lmstudio\bin\lms.exe" load google/gemma-4-e2b --context-length 8192 -y
 $env:LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
-$env:LMSTUDIO_MODELLO = "google/gemma-4-e2b"
-.\.venv\Scripts\python.exe -m pytest            # senza modello: 60 passed, 2 deselected
-.\.venv\Scripts\python.exe -m pytest -m reale -v
-.\.venv\Scripts\python.exe -m assistente
+$env:LMSTUDIO_MODEL = "google/gemma-4-e2b"
+.\.venv\Scripts\python.exe -m pytest            # senza modello: 159 passed, 9 deselected
+.\.venv\Scripts\python.exe -m pytest -m real -v # 9 prove reali, circa 4 minuti
+.\.venv\Scripts\python.exe -m assistant
 docker compose build
-"Che ore sono a Tokyo?", "esci" | docker compose run --rm -T assistente
+"Quanto fa 17 * 23?", "esci" | docker compose run --rm -T assistant
 ```
 
-Dopo il Task 1 i nomi diventano `LMSTUDIO_MODEL`, `-m real`, `-m assistant` e il servizio
-`assistant`; il piano e il README aggiornato riportano i comandi nuovi. Le variabili valgono solo
-nella finestra di PowerShell in cui si impostano. Docker legge `.env`, dove nel container
-`LMSTUDIO_BASE_URL` vale `http://host.docker.internal:1234/v1`, oppure `LMSTUDIO_BASE_URL_DOCKER`
-se è impostata.
+Le variabili valgono solo nella finestra di PowerShell in cui si impostano. Docker legge `.env`;
+nel container `LMSTUDIO_BASE_URL` vale `http://host.docker.internal:1234/v1`, oppure
+`LMSTUDIO_BASE_URL_DOCKER` se è impostata.
+
+Documenti precedenti:
+- base: [`specs/2026-10-26-assistente-laboratorio-design.md`](specs/2026-10-26-assistente-laboratorio-design.md),
+  [`plans/2026-10-26-assistente-laboratorio.md`](plans/2026-10-26-assistente-laboratorio.md);
+- audit: [`specs/2026-11-03-correzioni-audit-design.md`](specs/2026-11-03-correzioni-audit-design.md),
+  [`plans/2026-11-03-correzioni-audit.md`](plans/2026-11-03-correzioni-audit.md).

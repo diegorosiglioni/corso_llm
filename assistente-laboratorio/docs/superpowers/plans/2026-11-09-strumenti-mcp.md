@@ -20,7 +20,7 @@ fastmcp 4.1.6 (nuova), SQLite (`sqlite3`), pytest 9.1.1, Docker Compose.
 **Spec:** [`../specs/2026-11-09-strumenti-mcp-design.md`](../specs/2026-11-09-strumenti-mcp-design.md),
 con i requisiti [`../requisiti.md`](../requisiti.md) §8.
 
-**Stato (2026-11-09):** scritto e committato; nessun task iniziato. Da confermare all'inizio
+**Stato (2026-11-09):** eseguito il 2026-11-09 con `superpowers:executing-plans` (Task 1–12); resta aperto il Task 11, Step 4 (prova interattiva con i tasti reali). Testo originale: scritto e committato; da confermare all'inizio
 dell'esecuzione, insieme alla modalità (consigliata: esecuzione nella sessione,
 `superpowers:executing-plans`, con revisione indipendente finale).
 
@@ -965,7 +965,7 @@ def test_system_prompt_mentions_every_tool():
 - Modify: `README.md`, `docs/superpowers/handoff.md`,
   `docs/superpowers/specs/2026-10-26-assistente-laboratorio-design.md`, `../CLAUDE.md`
 
-- [ ] **Step 1: README.**
+- [x] **Step 1: README.**
   - Sezione «Strumenti»:
     - l'orologio locale e il server MCP con i 7 strumenti, con un esempio di domanda e di
       risultato per ciascuno;
@@ -979,10 +979,10 @@ def test_system_prompt_mentions_every_tool():
     in attesa su stdin.
   - Riportare solo comandi eseguiti in questo piano.
 
-- [ ] **Step 2: Specifica di base.** Nei §2, §3, §5, §6, §8, §9 e §10 aggiungere la nota
+- [x] **Step 2: Specifica di base.** Nei §2, §3, §5, §6, §8, §9 e §10 aggiungere la nota
   «*Rivisto il 2026-11-09: vedi [`2026-11-09-strumenti-mcp-design.md`](2026-11-09-strumenti-mcp-design.md).*».
 
-- [ ] **Step 3: Handoff.**
+- [x] **Step 3: Handoff.**
   - Stato e commit della lezione 5.
   - Tabella delle verifiche: CA-1…CA-22, con il comando e l'esito reale di ciascuna.
   - Decisioni prese durante l'esecuzione.
@@ -990,14 +990,14 @@ def test_system_prompt_mentions_every_tool():
   - Avviso sul `.env` da aggiornare.
   - Comandi per riprendere, con i nomi nuovi.
 
-- [ ] **Step 4: `CLAUDE.md`.** Struttura con i moduli nuovi (`units.py`, `calculator.py`,
+- [x] **Step 4: `CLAUDE.md`.** Struttura con i moduli nuovi (`units.py`, `calculator.py`,
   `catalog.py`, `notes.py`, `mcp_server.py`, `mcp_client.py`, `assistant/data/`), `FakeMcpClient` in
   `conftest.py`, volume Docker.
 
-- [ ] **Step 5: Verifica finale.**
+- [x] **Step 5: Verifica finale.**
   - `pytest -v` → verde.
   - `git status --ignored`: `.env`, `.venv/`, `data/` e cache sono solo ignorati; il PDF resta non
     tracciato.
   - Ogni comando del README è stato eseguito in uno dei task.
 
-- [ ] **Step 6: Commit** — `docs: aggiorna README, handoff e CLAUDE.md per la lezione 5`.
+- [x] **Step 6: Commit** — `docs: aggiorna README, handoff e CLAUDE.md per la lezione 5`.
