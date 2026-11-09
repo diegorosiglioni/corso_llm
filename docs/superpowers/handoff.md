@@ -102,7 +102,7 @@ Comandi da PowerShell nella cartella del progetto (allora `assistente-laboratori
 | CA-6 | `pytest` (`test_limit`, `test_session_continues_after_the_limit`) | ✅ |
 | CA-7 | `python -m assistant` senza `LMSTUDIO_MODEL`; `docker compose run --rm -T -e LMSTUDIO_MODEL= assistant` | ✅ «Configurazione non valida: Manca LMSTUDIO_MODEL.», exit 1, in locale e nel container |
 | CA-8 | `docker compose build`; `"Che ore sono a Tokyo?", "esci" \| docker compose run --rm -T -e LMSTUDIO_MODEL=google/gemma-4-e2b assistant` | ✅ `get_current_time` con `Asia/Tokyo`, risposta «Attualmente a Tokyo sono le 23:27 (9 novembre 2026).» |
-| CA-9 | `pytest` (test del terminale); prova a mano con i tasti reali | ✅ automatica; ⏳ manuale non ripetuta: `esci`, Ctrl+Z e Ctrl+C, in locale e con `docker compose run --rm assistant` |
+| CA-9 | `pytest` (test del terminale); prova a mano con i tasti reali | ✅ automatica; ✅ manuale (utente, 2026-11-09): `esci` e Ctrl+C con i tasti reali, in locale e con `docker compose run --rm assistant`; dopo: 0 processi `python`, 0 container. Ctrl+Z non provato a mano |
 | CA-10 | `git status --ignored` | ✅ vedi Task 12 |
 | CA-11 | `pytest tests/test_mcp_server.py tests/test_mcp_client.py tests/test_main.py` | ✅ sette nomi, descrizioni e schemi dal server; `shell` scartato; collisione → exit 1 |
 | CA-12 | `pytest tests/test_mcp_server.py tests/test_mcp_client.py` | ✅ ogni strumento via stdio; errori → `{"error": …}` senza `structured_content` |
@@ -194,11 +194,7 @@ Rimandati (minori):
 
 ## Punti aperti
 
-- **Prove manuali non ripetute:**
-  - CA-9 con i tasti reali (`esci`, Ctrl+Z, Ctrl+C), in locale e con
-    `docker compose run --rm assistant`, verificando con `Get-Process python` e `docker ps` che il
-    server non resti attivo;
-  - CA-5, LM Studio fermato e riavviato.
+- **Prove manuali non ripetute:** CA-5, LM Studio fermato e riavviato; Ctrl+Z con i tasti reali.
 - **Audit del 2026-11-03, punti M4–M13:** non affrontati. La descrizione non è nel repository.
 - **Minori ancora aperti:**
   - con `MAX_STEPS=1` il testo dice «il limite di 1 passaggi»;

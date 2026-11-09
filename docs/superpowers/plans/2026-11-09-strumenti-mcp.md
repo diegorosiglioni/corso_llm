@@ -20,7 +20,7 @@ fastmcp 4.1.6 (nuova), SQLite (`sqlite3`), pytest 9.1.1, Docker Compose.
 **Spec:** [`../specs/2026-11-09-strumenti-mcp-design.md`](../specs/2026-11-09-strumenti-mcp-design.md),
 con i requisiti [`../requisiti.md`](../requisiti.md) §8.
 
-**Stato (2026-11-09):** eseguito il 2026-11-09 con `superpowers:executing-plans` (Task 1–12); resta aperto il Task 11, Step 4 (prova interattiva con i tasti reali). Testo originale: scritto e committato; da confermare all'inizio
+**Stato (2026-11-09):** eseguito il 2026-11-09 con `superpowers:executing-plans` (Task 1–12); Task 11, Step 4 (prova interattiva con i tasti reali) eseguito dall'utente. Testo originale: scritto e committato; da confermare all'inizio
 dell'esecuzione, insieme alla modalità (consigliata: esecuzione nella sessione,
 `superpowers:executing-plans`, con revisione indipendente finale).
 
@@ -951,7 +951,7 @@ def test_system_prompt_mentions_every_tool():
   - Senza `LMSTUDIO_MODEL`: `docker compose run --rm -T -e LMSTUDIO_MODEL= assistant` → exit 1 e
     «Manca LMSTUDIO_MODEL.».
 
-- [ ] **Step 4: Interattivo.** `docker compose run --rm assistant`: una domanda, poi `esci`; poi di
+- [x] **Step 4: Interattivo.** `docker compose run --rm assistant`: una domanda, poi `esci`; poi di
   nuovo con Ctrl+C. Expected: saluto, nessuna traccia d'errore, nessun container rimasto
   (`docker ps`).
 
