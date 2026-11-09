@@ -341,7 +341,7 @@ def test_below_absolute_zero():
   - solleva `ValueError` per input non valido;
   - `CALCULATOR_DESCRIPTION: str` (spec §6.2).
 
-- [ ] **Step 1: Scrivere i test.**
+- [x] **Step 1: Scrivere i test.**
 
 ```python
 @pytest.mark.parametrize("expr,expected", [
@@ -378,9 +378,9 @@ def test_no_eval_in_module():
     assert "eval(" not in source.replace('mode="eval"', "") and "exec(" not in source
 ```
 
-- [ ] **Step 2: Eseguire i test.** `pytest tests/test_calculator.py -v` → FAIL.
+- [x] **Step 2: Eseguire i test.** `pytest tests/test_calculator.py -v` → FAIL.
 
-- [ ] **Step 3: Implementare `calculate`.**
+- [x] **Step 3: Implementare `calculate`.**
   - Controlli preliminari, nell'ordine: testo vuoto dopo `strip()`; lunghezza > 200; `^` presente →
     «Espressione non valida: usa ** per le potenze.»; regex `\d,\d` → «Espressione non valida: usa
     il punto per i decimali.».
@@ -394,9 +394,9 @@ def test_no_eval_in_module():
   - `ZeroDivisionError` → «Divisione per zero.».
   - Un risultato `float` viene restituito come `float(f"{x:.12g}")`.
 
-- [ ] **Step 4: Eseguire i test.** `pytest tests/test_calculator.py -v` → PASS; `pytest` → verde.
+- [x] **Step 4: Eseguire i test.** `pytest tests/test_calculator.py -v` → PASS; `pytest` → verde.
 
-- [ ] **Step 5: Commit** — `feat(strumenti): aggiunge la calcolatrice sicura senza eval`.
+- [x] **Step 5: Commit** — `feat(strumenti): aggiunge la calcolatrice sicura senza eval`.
 
 ---
 
