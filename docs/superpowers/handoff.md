@@ -1,10 +1,19 @@
 # Handoff — Assistente del laboratorio
 
 Data: 2026-11-09
-Stato: **lezione 5 implementata.** Sono stati eseguiti i 12 task del piano
-[`plans/2026-11-09-strumenti-mcp.md`](plans/2026-11-09-strumenti-mcp.md), tutti con commit
-locali; nessun push. Restano alcune prove manuali e la revisione indipendente finale (vedi
-«Punti aperti»).
+Stato: **lezione 5 implementata, revisionata e pubblicata.** Sono stati eseguiti i 12 task del
+piano [`plans/2026-11-09-strumenti-mcp.md`](plans/2026-11-09-strumenti-mcp.md). Dopo la
+revisione indipendente finale e le sue correzioni, il push su `origin/main` è arrivato a
+`7bff3ec`. Restano alcune prove manuali (vedi «Punti aperti»).
+
+**Struttura cambiata il 2026-11-09, dopo il push.** Su richiesta dell'utente il progetto è
+stato spostato da `assistente-laboratorio/` alla radice della repository. Inoltre `lezione3/`
+è uscita da Git: resta solo in locale, esclusa con `.gitignore`.
+- La `.venv` è stata ricreata in radice, con le stesse versioni.
+- `compose.yaml` fissa `name: assistente-laboratorio`: immagine e volume mantengono i nomi
+  precedenti, qualunque sia la cartella della repository.
+- I documenti precedenti (specifiche, piani, requisiti) citano ancora `assistente-laboratorio/`:
+  sono documenti storici e non sono stati riscritti.
 
 ## Riprendere da qui
 
@@ -15,7 +24,7 @@ L'agente non lo modifica. Senza l'aggiornamento `docker compose run` esce con
 aggirato il problema passando `-e LMSTUDIO_MODEL=google/gemma-4-e2b`.
 
 Leggere prima, in quest'ordine:
-1. `../../../CLAUDE.md`: regole del progetto, struttura e comandi aggiornati.
+1. `../../CLAUDE.md`: regole del progetto, struttura e comandi aggiornati.
 2. [`specs/2026-11-09-strumenti-mcp-design.md`](specs/2026-11-09-strumenti-mcp-design.md): il
    **come** della lezione 5.
 3. Questo file, sezioni «Decisioni prese durante l'esecuzione» e «Punti aperti».
@@ -75,11 +84,11 @@ sono in italiano.
 | `4cb78f6` | Task 11: Docker con il volume delle note |
 | (successivo) | Task 12: README, handoff, `CLAUDE.md`, note nella specifica di base |
 
-`origin/main` è fermo a `5854213`.
+Prima di questi commit `origin/main` era fermo a `5854213`; il push del 2026-11-09 lo ha portato a `7bff3ec`.
 
 ## Verifiche (2026-11-09)
 
-Comandi da PowerShell in `assistente-laboratorio/`. Per le prove reali: LM Studio con
+Comandi da PowerShell nella cartella del progetto (allora `assistente-laboratorio/`, oggi la radice). Per le prove reali: LM Studio con
 `google/gemma-4-e2b` (contesto 8192) e
 `$env:LMSTUDIO_BASE_URL="http://localhost:1234/v1"; $env:LMSTUDIO_MODEL="google/gemma-4-e2b"`.
 
@@ -202,7 +211,7 @@ Rimandati (minori):
 
 ## Comandi
 
-Da PowerShell in `assistente-laboratorio/`:
+Da PowerShell nella radice della repository:
 
 ```powershell
 & "$HOME\.lmstudio\bin\lms.exe" server start

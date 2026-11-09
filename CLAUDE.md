@@ -1,24 +1,25 @@
 # Assistente del laboratorio
 
 Progetto del corso «Deep Learning e LLM: costruire chatbot e agenti».
-La cartella del progetto è `"C:\Users\diegorosiglioni\Desktop\paolo\test_paolo"`; all'inizio contiene soltanto questo file.
-Requisiti, specifica e piano: `assistente-laboratorio/docs/superpowers/`.
-Stato corrente e prossimo passo: `assistente-laboratorio/docs/superpowers/handoff.md` (leggerlo per primo).
+La cartella del progetto è `"C:\Users\diegorosiglioni\Desktop\paolo\test_paolo"`, radice della
+repository: il progetto sta direttamente lì (fino al 2026-11-09 stava in `assistente-laboratorio/`).
+Requisiti, specifica e piano: `docs/superpowers/`.
+Stato corrente e prossimo passo: `docs/superpowers/handoff.md` (leggerlo per primo).
 
 ## Struttura e comandi
-- Codice in `assistente-laboratorio/assistant/`: `config.py`, `model.py`, `tools.py`,
+- Codice in `assistant/`: `config.py`, `model.py`, `tools.py`,
   `graph.py`, `session.py`, `terminal.py`; logica pura degli strumenti MCP in `units.py`,
   `calculator.py`, `catalog.py` (dati in `assistant/data/catalog.json`), `notes.py`; server
   FastMCP in `mcp_server.py`, client sincrono e adattatore in `mcp_client.py`. Solo
   `__main__.py` collega i moduli.
-- Test in `assistente-laboratorio/tests/`; il modello finto (`FakeModel`), il client MCP finto
+- Test in `tests/`; il modello finto (`FakeModel`), il client MCP finto
   (`FakeMcpClient`) e gli aiuti comuni sono in `conftest.py`. I test MCP avviano il server
   reale via stdio. Le prove con LM Studio stanno in `test_real.py` (marcatore `real`).
 - Note in SQLite: in locale `NOTES_DB` (default `data/notes.sqlite3`, ignorato da Git), in
   Docker il volume `notes-data`.
 - Dipendenze dirette in `requirements.txt` (app) e `requirements-dev.txt` (test); tutte le
   versioni verificate in `constraints.txt`, richiamato da `requirements.txt`.
-- Comandi da PowerShell in `assistente-laboratorio/`, senza attivare l'ambiente:
+- Comandi da PowerShell nella radice della repository, senza attivare l'ambiente:
   - ambiente: `py -3.13 -m venv .venv` e `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`
   - test senza modello: `.\.venv\Scripts\python.exe -m pytest`
   - prove reali (LM Studio attivo, variabili impostate): `.\.venv\Scripts\python.exe -m pytest -m real -v`
@@ -41,10 +42,9 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
   concordati; altri strumenti, altri server MCP, workflow e RAG arriveranno nelle lezioni
   successive: non anticiparli.
 - Niente interfacce grafiche, servizi cloud o framework non concordati.
-- Lavorare solo dentro `assistente-laboratorio/`. La repository contiene altre lezioni:
-  non leggerle per copiarne il codice e non modificarle.
+- La cartella `lezione3/` è una lezione passata: resta solo in locale, esclusa da Git con
+  `.gitignore`. Non leggerla per copiarne il codice e non modificarla.
 - Lavorare nel branch corrente; nessun branch o worktree nuovo se non richiesto.
-- Non modificare la cartella lezione3 che è solo una parte passata
 
 ## Scelte tecniche
 - Python, codice sincrono e moduli piccoli, con una separazione semplice tra
@@ -64,7 +64,7 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
 ## Metodo: Superpowers
 - Usare le skill di Superpowers per brainstorming, specifica, piano, implementazione e verifica.
 - Non scrivere codice prima che io abbia approvato la specifica e poi il piano.
-- Salvare specifica e piano in `assistente-laboratorio/docs/superpowers/`.
+- Salvare specifica e piano in `docs/superpowers/`.
 - Procedere per incrementi piccoli, ciascuno verificato prima del commit.
 
 ## Test e verifiche
@@ -85,5 +85,4 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
 - Tenere aggiornato il README con configurazione, avvio, test e diagnosi, riportando solo
   comandi verificati.
 - Aggiornare questo file quando cambiano convenzioni stabili (struttura, comandi di test,
-  regole di lavoro), non per annotare l'avanzamento.
-- Non tenere conto della la cartella lezione3 
+  regole di lavoro), non per annotare l'avanzamento. 

@@ -1,3 +1,6 @@
+# Nome fisso: immagine e volume non dipendono dalla cartella in cui si trova la repository.
+name: assistente-laboratorio
+
 services:
   assistant:
     build: .

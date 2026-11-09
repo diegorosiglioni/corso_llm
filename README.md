@@ -15,7 +15,7 @@ Requisiti e specifica: [`docs/superpowers/`](docs/superpowers/).
 
 ## Installazione
 
-Tutti i comandi si eseguono in PowerShell dalla cartella `assistente-laboratorio`.
+Tutti i comandi si eseguono in PowerShell dalla radice della repository.
 
 ```powershell
 py -3.13 -m venv .venv

@@ -1,0 +1,14 @@
+.env
+.venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+tests/
+docs/
+.git
+data/
+# Non servono all'immagine: lezione passata, stato di lavoro degli agenti, materiale del corso
+lezione3/
+.superpowers/
+*.pdf
+CLAUDE.md

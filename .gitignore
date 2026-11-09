@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 .pytest_cache/
 /data/
+# Lezione passata, tenuta solo in locale
+/lezione3/
