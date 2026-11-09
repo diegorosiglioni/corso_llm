@@ -428,7 +428,7 @@ def test_no_eval_in_module():
 | DB-101 | Basi di dati e SQL | Trieste | 30 |
 | CLD-101 | Docker e servizi in container | Online | 20 |
 
-- [ ] **Step 1: Scrivere i test.**
+- [x] **Step 1: Scrivere i test.**
 
 ```python
 def test_search_by_word():
@@ -468,20 +468,20 @@ def test_missing_field_rejected():
     with pytest.raises(ValueError, match="title"): Catalog([{"code": "A-1"}])
 ```
 
-- [ ] **Step 2: Eseguire i test.** `pytest tests/test_catalog.py -v` → FAIL.
+- [x] **Step 2: Eseguire i test.** `pytest tests/test_catalog.py -v` → FAIL.
 
-- [ ] **Step 3: Implementare `Catalog` e scrivere `catalog.json`.**
+- [x] **Step 3: Implementare `Catalog` e scrivere `catalog.json`.**
   - Ricerca: le parole di `query` (con `split()`, confronto con `casefold()`) devono comparire tutte
     nel testo `code + title + location`. I risultati sono nell'ordine del file.
   - `Catalog.load` legge il file in UTF-8.
   - La validazione nel costruttore produce i messaggi «Campo mancante nel catalogo: 'title' (corso
     'A-1').» e «Codice duplicato nel catalogo: 'A-1'.».
 
-- [ ] **Step 4: Eseguire i test.** `pytest tests/test_catalog.py -v` → PASS; `pytest` → verde.
+- [x] **Step 4: Eseguire i test.** `pytest tests/test_catalog.py -v` → PASS; `pytest` → verde.
   Verificare con `git status` che `assistant/data/catalog.json` sia fra i file da aggiungere: non
   deve essere ignorato.
 
-- [ ] **Step 5: Commit** — `feat(strumenti): aggiunge il catalogo locale dei corsi con ricerca e dettaglio`.
+- [x] **Step 5: Commit** — `feat(strumenti): aggiunge il catalogo locale dei corsi con ricerca e dettaglio`.
 
 ---
 

@@ -1,0 +1,58 @@
+[
+  {
+    "code": "DL-101",
+    "title": "Deep learning: fondamenti",
+    "location": "Pordenone",
+    "duration_hours": 40,
+    "description": "Reti neurali, discesa del gradiente e addestramento di modelli semplici con esercitazioni pratiche."
+  },
+  {
+    "code": "DL-201",
+    "title": "Deep learning per la visione artificiale",
+    "location": "Udine",
+    "duration_hours": 32,
+    "description": "Reti convoluzionali per classificare e riconoscere oggetti nelle immagini."
+  },
+  {
+    "code": "LLM-101",
+    "title": "LLM: costruire chatbot e agenti",
+    "location": "Pordenone",
+    "duration_hours": 48,
+    "description": "Modelli linguistici locali, tool calling, grafi di agenti e strumenti condivisi con MCP."
+  },
+  {
+    "code": "PY-101",
+    "title": "Python per l'analisi dei dati",
+    "location": "Trieste",
+    "duration_hours": 40,
+    "description": "Pulizia, trasformazione e visualizzazione di dati tabellari con Python."
+  },
+  {
+    "code": "PY-201",
+    "title": "Python avanzato: test e packaging",
+    "location": "Online",
+    "duration_hours": 24,
+    "description": "Test automatici con pytest, struttura dei progetti e distribuzione dei pacchetti."
+  },
+  {
+    "code": "NET-101",
+    "title": "Reti e sicurezza informatica",
+    "location": "Udine",
+    "duration_hours": 36,
+    "description": "Protocolli di rete, configurazione di base e principi di difesa dei sistemi."
+  },
+  {
+    "code": "DB-101",
+    "title": "Basi di dati e SQL",
+    "location": "Trieste",
+    "duration_hours": 30,
+    "description": "Progettazione di basi di dati relazionali e interrogazioni in SQL."
+  },
+  {
+    "code": "CLD-101",
+    "title": "Docker e servizi in container",
+    "location": "Online",
+    "duration_hours": 20,
+    "description": "Immagini, container e Docker Compose per avviare applicazioni in modo ripetibile."
+  }
+]
