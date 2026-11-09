@@ -85,7 +85,7 @@ Comandi da PowerShell in `assistente-laboratorio/`. Per le prove reali: LM Studi
 
 | CA | Comando | Esito |
 |----|---------|-------|
-| CA-1 | `.\.venv\Scripts\python.exe -m pytest` | ✅ 159 passed, 9 deselected (LM Studio non usato) |
+| CA-1 | `.\.venv\Scripts\python.exe -m pytest` | ✅ 165 passed, 9 deselected dopo le correzioni della revisione (LM Studio non usato) |
 | CA-2, CA-3, CA-4 | `pytest -m real -v` | ✅ passate, insieme alle altre prove reali (9 passed in 226 s) |
 | CA-5 | LM Studio fermato e riavviato durante una sessione | ⏳ non ripetuta dopo la lezione 5 (✅ il 26–28/10); il comportamento del terminale è invariato e coperto dai test |
 | CA-6 | `pytest` (`test_limit`, `test_session_continues_after_the_limit`) | ✅ |
