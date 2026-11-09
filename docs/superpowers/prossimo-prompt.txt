@@ -1,0 +1,14 @@
+Leggi il CLAUDE.md e poi docs/superpowers/handoff.md (sezione «Lezione 6 — prossimo passo») e docs/superpowers/lezione6.md, che riassume per intero la traccia LLM_Lez_6.pdf. Controlla lo stato della repository.
+
+Confermo: procediamo uno step alla volta, con il ciclo Superpowers completo per ciascuno (brainstorming, specifica approvata, piano approvato, implementazione TDD, verifica, commit).
+
+Vogliamo realizzare lo Step 1 · Router: conversazione o fuori ambito.
+Obiettivo: le domande fuori ambito ricevono una risposta di rifiuto senza raggiungere l'agente.
+Requisiti:
+1. l'ambito dell'agente è descritto in configurazione, non nel codice;
+2. un nodo router LLM, posto prima dell'agente, con output strutturato: categoria (conversazione o fuori ambito) e motivo;
+3. arco condizionale: conversazione → agente; fuori ambito → nodo di rifiuto → fine;
+4. il router non valuta gli strumenti: se servono, lo decide l'agente come prima.
+Evidenze richieste: per una domanda in ambito, log con categoria, motivo e passaggio all'agente; per una domanda fuori ambito, rifiuto e nessuna esecuzione del nodo agente nei log; test con risposte del router simulate per entrambi i percorsi; una prova reale con LM Studio.
+
+Il progetto attuale funziona fino alla lezione 5: estendilo senza riscriverlo e non anticipare gli step successivi (revisore, riassunto, resource, prompt, HTTP, ecc.). Chiariscimi le decisioni mancanti una alla volta e proponi una soluzione semplice. Distingui i test con il modello simulato dalle prove reali con LM Studio. Le evidenze richieste devono essere verificabili nei log o nei test. Non iniziare l'implementazione prima dell'approvazione della specifica e del piano.

@@ -5,6 +5,8 @@ Stato: **lezione 5 implementata, revisionata e pubblicata.** Sono stati eseguiti
 piano [`plans/2026-11-09-strumenti-mcp.md`](plans/2026-11-09-strumenti-mcp.md). Dopo la
 revisione indipendente finale e le sue correzioni, il push su `origin/main` è arrivato a
 `7bff3ec`. Restano alcune prove manuali (vedi «Punti aperti»).
+**Lezione 6: traccia letta e riassunta, nessun codice.** Si riparte dallo Step 1 (Router): vedi
+la sezione «Lezione 6 — prossimo passo».
 
 **Struttura cambiata il 2026-11-09, dopo il push.** Su richiesta dell'utente il progetto è
 stato spostato da `assistente-laboratorio/` alla radice della repository. Inoltre `lezione3/`
@@ -15,7 +17,38 @@ stato spostato da `assistente-laboratorio/` alla radice della repository. Inoltr
 - I documenti precedenti (specifiche, piani, requisiti) citano ancora `assistente-laboratorio/`:
   sono documenti storici e non sono stati riscritti.
 
-## Riprendere da qui
+## Lezione 6 — prossimo passo (2026-11-09)
+
+**Nessun codice scritto per la lezione 6.** La traccia del docente (`LLM_Lez_6.pdf`, nella radice,
+non tracciato) è stata letta per intero e riassunta in [`lezione6.md`](lezione6.md): nove step
+in tre blocchi (A: router, revisore, riassunto; B: resource e prompt MCP; C: agente HTTP,
+back-end con PostgreSQL, front-end, Docker Compose a quattro container).
+
+Decisioni di metodo già prese:
+- **Lavoro architetturale, scomposto:** ogni step è un sotto-progetto con il proprio ciclo
+  Superpowers: brainstorming → specifica in `specs/` (approvata) → piano in `plans/` (approvato)
+  → esecuzione TDD → verifica (`pytest`, `pytest -m real`, README) → commit.
+- **Uno step alla volta, si parte dallo Step 1 (Router).** È l'opzione consigliata; l'utente
+  non l'ha ancora confermata esplicitamente (domanda lasciata aperta: uno step alla volta
+  oppure step 1–3 insieme).
+- Il brainstorming dello Step 1 è appena iniziato: non è stata posta ancora nessuna domanda di
+  design.
+
+Da tenere presente per lo Step 1:
+- Il grafo attuale (`assistant/graph.py`) ha `START → llm ⇄ tools`, `limit`, funzione `route`;
+  il router va inserito tra `START` e `llm`, con un nodo di rifiuto che va a `END`.
+- La configurazione si legge solo da variabili d'ambiente (`assistant/config.py`); l'«ambito
+  in configurazione» va deciso lì (variabile d'ambiente o file indicato da una variabile).
+- `CLAUDE.md`, sezione «Confini», dice di non anticipare le lezioni successive: va aggiornato
+  quando lo Step 1 viene concordato, aggiungendo solo quello step.
+- Gli step 6–9 introducono framework nuovi (server HTTP, PostgreSQL, front-end): vanno motivati
+  e concordati quando ci si arriva.
+- **In questa macchina `pdftoppm` non c'è:** il Read dei PDF fallisce. Il testo è stato estratto
+  con `pypdf` installato nella scratchpad; non serve rifarlo, basta `lezione6.md`.
+
+Prompt da incollare nella prossima sessione: [`prossimo-prompt.txt`](prossimo-prompt.txt).
+
+## Riprendere da qui (stato della lezione 5)
 
 **`.env` aggiornato (2026-11-09).** L'utente ha cambiato i nomi delle variabili:
 `LMSTUDIO_MODELLO` → `LMSTUDIO_MODEL` e `MAX_PASSI` → `MAX_STEPS`.
@@ -34,7 +67,8 @@ Leggere prima, in quest'ordine:
 Da sapere:
 - **In Git Bash `python` apre il REPL di Windows** e blocca il comando. Usare sempre
   `.venv/Scripts/python.exe` (o `py -3.13`).
-- **`LLM_Lez_5.pdf`** è nella cartella, non tracciato: non aggiungerlo a Git senza chiedere.
+- **`LLM_Lez_5.pdf`** e **`LLM_Lez_6.pdf`** non sono tracciati: non aggiungerli a Git senza
+  chiedere.
 - Suite predefinita: `pytest` → `165 passed, 9 deselected`, in circa 20 s. I test MCP avviano il
   server come sottoprocesso, circa 1 s ciascuno.
 
