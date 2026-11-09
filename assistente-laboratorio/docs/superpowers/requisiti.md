@@ -1,7 +1,8 @@
 # Requisiti — Assistente del laboratorio
 
 Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5)
-Stato: §1–§7 approvati il 2026-10-26; revisioni del 2026-11-09 e §8 in revisione
+Stato: §1–§7 approvati il 2026-10-26; revisioni del 2026-11-09 e §8 approvate il 2026-11-09
+(insieme alla specifica `specs/2026-11-09-strumenti-mcp-design.md`)
 
 Questo documento fissa **che cosa** deve fare l'applicazione. Il **come** (architettura,
 moduli, dettagli del grafo) sarà descritto nella specifica, che rimanda a questi requisiti.
@@ -169,7 +170,7 @@ riconnessione automatica al server MCP.*
 ## 8. Lezione 5 — strumenti MCP (2026-11-09)
 
 Riferimento: `LLM_Lez_5.pdf` («MCP: dalle funzioni agli strumenti condivisi»), blocchi 2, 4 e 5
-e laboratorio. Stato: in revisione.
+e laboratorio. Stato: approvati il 2026-11-09.
 
 ### 8.1 Server MCP e discovery
 

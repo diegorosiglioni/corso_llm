@@ -1,7 +1,10 @@
 # Specifica — Lezione 5: strumenti MCP e codice in inglese
 
 Data: 2026-11-09
-Stato: in revisione
+Stato: approvata il 2026-11-09
+Piano: [`../plans/2026-11-09-strumenti-mcp.md`](../plans/2026-11-09-strumenti-mcp.md), che annota
+gli scostamenti emersi durante la stesura (`ToolSpec`, `cwd` di `McpClient`, schema senza modello
+Pydantic, test del server con il client in memoria).
 Requisiti: [`../requisiti.md`](../requisiti.md), §8 (RF-15…RF-22, RNF-10, CA-11…CA-22) e le note
 «Rivisto il 2026-11-09».
 Specifiche precedenti: [`2026-10-26-assistente-laboratorio-design.md`](2026-10-26-assistente-laboratorio-design.md)

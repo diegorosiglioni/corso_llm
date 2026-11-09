@@ -20,6 +20,10 @@ fastmcp 4.1.6 (nuova), SQLite (`sqlite3`), pytest 9.1.1, Docker Compose.
 **Spec:** [`../specs/2026-11-09-strumenti-mcp-design.md`](../specs/2026-11-09-strumenti-mcp-design.md),
 con i requisiti [`../requisiti.md`](../requisiti.md) §8.
 
+**Stato (2026-11-09):** scritto e committato; nessun task iniziato. Da confermare all'inizio
+dell'esecuzione, insieme alla modalità (consigliata: esecuzione nella sessione,
+`superpowers:executing-plans`, con revisione indipendente finale).
+
 ## Global Constraints
 
 - Comandi da PowerShell in `assistente-laboratorio/`, senza attivare il venv:
