@@ -76,6 +76,8 @@ def convert_units(value: float, from_unit: str, to_unit: str) -> dict:
     else:
         factors = _FACTORS[quantity]
         result = value * factors[source] / factors[target]
+    if not math.isfinite(result):
+        raise ValueError("Risultato troppo grande per essere rappresentato.")
     return {
         "value": value,
         "from_unit": source,

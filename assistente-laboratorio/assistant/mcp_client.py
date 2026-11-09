@@ -159,10 +159,33 @@ ALLOWED_MCP_TOOLS = (
 )
 
 
-def _caller(client, name: str):
-    """Function that forwards a call to `name`; a factory avoids late binding in the loop."""
+# Marker of the argument-validation errors produced by the server (pydantic, in English).
+_VALIDATION_MARKER = "validation error for call["
+
+
+def _expected_arguments(schema: dict) -> str:
+    required = set(schema.get("required", []))
+    names = [
+        f"{name} (obbligatorio)" if name in required else name
+        for name in schema.get("properties", {})
+    ]
+    return ", ".join(names) or "nessuno"
+
+
+def _caller(client, spec: ToolSpec):
+    """Function that forwards a call to `spec`; a factory avoids late binding in the loop.
+
+    The server's argument-validation errors are in English and carry a URL: the model gets
+    an Italian message with the expected arguments and the tool description instead.
+    """
     def call(**arguments) -> dict:
-        return client.call_tool(name, arguments)
+        result = client.call_tool(spec.name, arguments)
+        if _VALIDATION_MARKER in str(result.get("error", "")):
+            return {
+                "error": f"Argomenti non validi per '{spec.name}'. Argomenti attesi: "
+                f"{_expected_arguments(spec.input_schema)}. Uso: {spec.description}"
+            }
+        return result
     return call
 
 
@@ -179,7 +202,7 @@ def create_mcp_tools(client, allowed=ALLOWED_MCP_TOOLS) -> list[BaseTool]:
             name=spec.name,
             description=spec.description,
             args_schema=spec.input_schema,  # the server's JSON Schema, passed on unchanged
-            func=_caller(client, spec.name),
+            func=_caller(client, spec),
             metadata={"variant": "mcp"},
         ))
     for name in allowed:

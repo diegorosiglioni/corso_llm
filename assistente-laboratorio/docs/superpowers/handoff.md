@@ -24,7 +24,7 @@ Da sapere:
 - **In Git Bash `python` apre il REPL di Windows** e blocca il comando. Usare sempre
   `.venv/Scripts/python.exe` (o `py -3.13`).
 - **`LLM_Lez_5.pdf`** è nella cartella, non tracciato: non aggiungerlo a Git senza chiedere.
-- Suite predefinita: `pytest` → `159 passed, 9 deselected`, in circa 15 s. I test MCP avviano il
+- Suite predefinita: `pytest` → `165 passed, 9 deselected`, in circa 20 s. I test MCP avviano il
   server come sottoprocesso, circa 1 s ciascuno.
 
 ## Che cosa c'è oggi (lezione 5)
@@ -149,10 +149,40 @@ Si aggiungono a quelle del piano («Scostamenti dalla specifica»).
   - In CA-20 il codice di `get_item` si confronta senza distinzione di maiuscole, come lo accetta il
     server.
 
+## Revisione indipendente finale (2026-11-09)
+
+Un revisore con contesto pulito ha esaminato il diff `84ec958..178466b`. Esito: «With fixes»,
+nessun problema critico. Tutti e cinque i punti della Review Focus sono stati verificati anche
+lungo il percorso adattatore → grafo. Il revisore ha anche provato il server terminato a metà
+sessione e Ctrl+C durante una chiamata lenta: nessun processo orfano, archivio rilasciato.
+
+Corretti nel commit successivo, ciascuno con un test che prima falliva:
+- discovery fallita dopo l'handshake → «Server MCP non avviato: …» ed exit 1, non un traceback
+  (`test_discovery_failure_exits_1`);
+- errori di validazione degli argomenti MCP (in inglese, con URL di pydantic) → messaggio italiano
+  con gli argomenti attesi e la descrizione dello strumento
+  (`test_invalid_arguments_reach_the_model_in_italian`);
+- il server non stampa più nel terminale, in formato Rich, le righe di fastmcp per ogni errore
+  atteso; a DEBUG restano, nel formato dell'app (`test_expected_tool_errors_add_no_server_log_lines`);
+- `convert_units` con risultato infinito → errore invece di un falso successo
+  (`test_overflowing_result_is_rejected`).
+
+Dopo queste correzioni le prove reali non sono state ripetute. Toccano solo percorsi d'errore che
+le prove reali non attraversano.
+
+Rimandati (minori):
+- con Windows, Ctrl+C durante una chiamata MCP bloccata arriva solo alla fine della chiamata
+  (fino a 35 s); con strumenti normali dura millisecondi;
+- manca un test che termini il server a metà sessione (il comportamento, verificato dal revisore,
+  è corretto);
+- `NOTES_DB` con una cartella padre non creabile (per esempio un file) → traceback invece di un
+  messaggio;
+- in `_shutdown`, se la chiusura supera 10 s, l'annullamento del task può non essere eseguito (il
+  Job Object di Windows termina comunque il server);
+- il log di avvio `tools=[…]` usa il nome `__main__`.
+
 ## Punti aperti
 
-- **Revisione indipendente finale** del diff `84ec958..HEAD`: prevista da `executing-plans`, vedi
-  l'esito nella sezione seguente quando c'è.
 - **Prove manuali non ripetute:**
   - CA-9 con i tasti reali (`esci`, Ctrl+Z, Ctrl+C), in locale e con
     `docker compose run --rm assistant`, verificando con `Get-Process python` e `docker ps` che il
@@ -179,7 +209,7 @@ Da PowerShell in `assistente-laboratorio/`:
 & "$HOME\.lmstudio\bin\lms.exe" load google/gemma-4-e2b --context-length 8192 -y
 $env:LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
 $env:LMSTUDIO_MODEL = "google/gemma-4-e2b"
-.\.venv\Scripts\python.exe -m pytest            # senza modello: 159 passed, 9 deselected
+.\.venv\Scripts\python.exe -m pytest            # senza modello: 165 passed, 9 deselected
 .\.venv\Scripts\python.exe -m pytest -m real -v # 9 prove reali, circa 4 minuti
 .\.venv\Scripts\python.exe -m assistant
 docker compose build

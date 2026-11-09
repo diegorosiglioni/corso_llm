@@ -44,6 +44,11 @@ def test_non_finite_value(v):
         convert_units(v, "m", "km")
 
 
+def test_overflowing_result_is_rejected():
+    with pytest.raises(ValueError, match=r"^Risultato troppo grande per essere rappresentato\.$"):
+        convert_units(1e308, "km", "mm")
+
+
 def test_below_absolute_zero():
     with pytest.raises(ValueError, match=r"^Temperatura sotto lo zero assoluto: -500 C\.$"):
         convert_units(-500, "C", "F")

@@ -26,8 +26,10 @@ from assistant.units import UNITS_DESCRIPTION, convert_units
 # Explicit name: run with "python -m", __name__ would be "__main__".
 log = logging.getLogger("assistant.mcp_server")
 
-# Library loggers kept at WARNING unless --log-level DEBUG, as in the application.
-QUIET_LIBRARIES = ("mcp", "fastmcp")
+# Minimum level of the library loggers unless --log-level DEBUG. fastmcp logs every tool error
+# and every invalid argument at WARNING/ERROR: the client graph already reports them
+# (execution=tool_error), so only fastmcp's real failures (ERROR) are kept.
+LIBRARY_LEVELS = {"mcp": logging.WARNING, "fastmcp": logging.ERROR}
 
 SERVER_NAME = "Strumenti del laboratorio"
 
@@ -37,7 +39,19 @@ def _run(function: Callable[..., dict], *args) -> dict:
     try:
         return function(*args)
     except ValueError as error:
-        raise ToolError(str(error)) from None
+        # An expected input error, not a server failure: logged by fastmcp only at INFO.
+        raise ToolError(str(error), log_level=logging.INFO) from None
+
+
+def _configure_library_logging(level: str) -> None:
+    """Routes fastmcp's records through the standard handler (no Rich output) and quiets them."""
+    fastmcp_logger = logging.getLogger("fastmcp")
+    for handler in fastmcp_logger.handlers[:]:
+        fastmcp_logger.removeHandler(handler)
+    fastmcp_logger.propagate = True
+    if level != "DEBUG":
+        for name, minimum in LIBRARY_LEVELS.items():
+            logging.getLogger(name).setLevel(max(minimum, logging.getLevelName(level)))
 
 
 def build_server(notes: NotesStore, catalog: Catalog) -> FastMCP:
@@ -90,9 +104,7 @@ def main(argv: list[str] | None = None) -> int:
         level=args.log_level,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    if args.log_level != "DEBUG":
-        for library in QUIET_LIBRARIES:
-            logging.getLogger(library).setLevel(logging.WARNING)
+    _configure_library_logging(args.log_level)
     build_server(NotesStore(args.notes_db), Catalog.load()).run(
         transport="stdio", show_banner=False
     )

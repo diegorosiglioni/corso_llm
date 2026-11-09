@@ -19,7 +19,7 @@ from assistant.mcp_client import (
 from assistant.model import create_model
 from assistant.session import Session
 from assistant.terminal import run
-from assistant.tools import create_current_time_tool
+from assistant.tools import ToolUnavailableError, create_current_time_tool
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +56,12 @@ def main(env: Mapping[str, str] = os.environ) -> int:
 
 def _converse(config, client) -> int:
     """Collects local and MCP tools, then runs the conversation while the session is open."""
-    tools = [create_current_time_tool(), *create_mcp_tools(client, ALLOWED_MCP_TOOLS)]
+    try:
+        mcp_tools = create_mcp_tools(client, ALLOWED_MCP_TOOLS)
+    except ToolUnavailableError as error:  # discovery failed after the handshake
+        print(f"Server MCP non avviato: {error}", file=sys.stderr)
+        return 1
+    tools = [create_current_time_tool(), *mcp_tools]
     duplicates = [name for name, n in Counter(t.name for t in tools).items() if n > 1]
     if duplicates:
         names = ", ".join(f"'{name}'" for name in duplicates)

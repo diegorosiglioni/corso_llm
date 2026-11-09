@@ -92,6 +92,19 @@ def test_extra_argument_is_tool_error(client):
     assert set(client.call_tool("calculate", {"expression": "1+1", "precision": 2})) == {"error"}
 
 
+@pytest.mark.parametrize("name,arguments", [
+    ("add_note", {}),
+    ("calculate", {"expression": "1+1", "precision": 2}),
+    ("convert_units", {"value": "dieci", "from_unit": "km", "to_unit": "mi"}),
+])
+def test_invalid_arguments_reach_the_model_in_italian(client, name, arguments):
+    tool = {t.name: t for t in create_mcp_tools(client)}[name]
+    error = tool.invoke(arguments)["error"]
+    assert error.startswith(f"Argomenti non validi per '{name}'. Argomenti attesi: "), error
+    assert "validation error" not in error and "http" not in error, error
+    assert tool.description in error
+
+
 def test_numeric_strings_are_coerced(client):
     result = client.call_tool("convert_units", {"value": "10", "from_unit": "m", "to_unit": "cm"})
     assert result["result"] == 1000
@@ -125,6 +138,15 @@ def test_server_logs_use_module_name_and_hide_library_info(tmp_path, capfd):
     err = capfd.readouterr().err
     assert "INFO assistant.mcp_server: event=note_added id=1" in err
     assert "Starting MCP server" not in err
+
+
+def test_expected_tool_errors_add_no_server_log_lines(tmp_path, capfd):
+    command, args, cwd = server_command(tmp_path / "n.sqlite3", "INFO")
+    with McpClient(command, args, cwd=cwd) as c:
+        c.call_tool("get_item", {"code": "XX-999"})
+        c.call_tool("add_note", {})
+    err = capfd.readouterr().err
+    assert "Error calling tool" not in err and "Invalid arguments" not in err, err
 
 
 def test_close_releases_the_database(tmp_path):

@@ -6,6 +6,7 @@ import assistant.__main__ as entry
 from assistant.__main__ import main
 from assistant.mcp_client import ALLOWED_MCP_TOOLS, ToolSpec
 from assistant.session import Session
+from assistant.tools import ToolUnavailableError
 from conftest import MCP_SPECS, FakeMcpClient
 
 VALID = {"LMSTUDIO_BASE_URL": "http://localhost:1234/v1", "LMSTUDIO_MODEL": "google/gemma-4-e2b"}
@@ -64,6 +65,19 @@ def test_mcp_startup_failure_exits_1(capsys, monkeypatch):
     monkeypatch.setattr(entry, "run", _must_not_call)
     assert main(VALID) == 1
     assert "Server MCP non avviato: comando non trovato" in capsys.readouterr().err
+
+
+class DiscoveryFails(FakeMcpClient):
+    def list_tools(self):
+        raise ToolUnavailableError("nessuna risposta entro 30 s")
+
+
+def test_discovery_failure_exits_1(capsys, monkeypatch):
+    monkeypatch.setattr(entry, "McpClient", lambda *a, **k: DiscoveryFails(MCP_SPECS))
+    monkeypatch.setattr(entry, "create_model", _must_not_call)
+    monkeypatch.setattr(entry, "run", _must_not_call)
+    assert main(VALID) == 1
+    assert "Server MCP non avviato: nessuna risposta entro 30 s" in capsys.readouterr().err
 
 
 def test_name_collision_exits_1(capsys, monkeypatch):
