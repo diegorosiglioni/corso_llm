@@ -12,5 +12,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY assistant/ assistant/
 
+# Cartella delle note: il volume notes-data, alla prima creazione, ne eredita il proprietario.
+RUN mkdir /app/data && chown assistant /app/data
+
 USER assistant
 CMD ["python", "-m", "assistant"]

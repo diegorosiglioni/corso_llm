@@ -930,19 +930,19 @@ def test_system_prompt_mentions_every_tool():
 **Files:**
 - Modify: `Dockerfile`, `compose.yaml`, `.dockerignore`
 
-- [ ] **Step 1: Modificare i file.**
+- [x] **Step 1: Modificare i file.**
   - `Dockerfile`: prima di `USER assistant`, `RUN mkdir /app/data && chown assistant /app/data`.
   - `compose.yaml`: nel servizio `volumes: ["notes-data:/app/data"]`; a livello radice
     `volumes: {notes-data: {}}`.
   - `.dockerignore`: aggiungere `data/`.
 
-- [ ] **Step 2: Build e contenuto dell'immagine.**
+- [x] **Step 2: Build e contenuto dell'immagine.**
   - `docker compose build` → riuscito.
   - `docker compose run --rm -T assistant ls -A /app/assistant/data` → `catalog.json`.
   - `docker compose run --rm -T assistant ls -A /app` → nessuna cartella `data` del progetto copiata
     dall'host (c'è solo il volume).
 
-- [ ] **Step 3: CA-22.**
+- [x] **Step 3: CA-22.**
   - `"Quanto fa 17 * 23?", "esci" | docker compose run --rm -T assistant` → `calculate` nel log,
     391 nella risposta.
   - `"Ricordami di comprare il latte", "esci" | docker compose run --rm -T assistant`, poi
@@ -955,7 +955,7 @@ def test_system_prompt_mentions_every_tool():
   nuovo con Ctrl+C. Expected: saluto, nessuna traccia d'errore, nessun container rimasto
   (`docker ps`).
 
-- [ ] **Step 5: Commit** — `build(docker): conserva le note in un volume e include il catalogo`.
+- [x] **Step 5: Commit** — `build(docker): conserva le note in un volume e include il catalogo`.
 
 ---
 

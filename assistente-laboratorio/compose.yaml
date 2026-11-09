@@ -9,3 +9,8 @@ services:
       - "host.docker.internal:host-gateway"
     stdin_open: true
     tty: true
+    volumes:
+      - notes-data:/app/data
+
+volumes:
+  notes-data: {}
