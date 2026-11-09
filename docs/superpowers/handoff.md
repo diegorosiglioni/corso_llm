@@ -17,11 +17,13 @@ stato spostato da `assistente-laboratorio/` alla radice della repository. Inoltr
 
 ## Riprendere da qui
 
-**Prima di tutto, il `.env` va aggiornato a mano:** `LMSTUDIO_MODELLO` → `LMSTUDIO_MODEL`,
-`MAX_PASSI` → `MAX_STEPS`. Il 2026-11-09 il `.env` dell'utente aveva ancora i nomi vecchi.
-L'agente non lo modifica. Senza l'aggiornamento `docker compose run` esce con
-«Configurazione non valida: Manca LMSTUDIO_MODEL.». Le prove Docker di questa sessione hanno
-aggirato il problema passando `-e LMSTUDIO_MODEL=google/gemma-4-e2b`.
+**`.env` aggiornato (2026-11-09).** L'utente ha cambiato i nomi delle variabili:
+`LMSTUDIO_MODELLO` → `LMSTUDIO_MODEL` e `MAX_PASSI` → `MAX_STEPS`.
+- Verifica: senza `-e`,
+  `"Che ore sono a Tokyo?", "esci" | docker compose run --rm -T assistant` chiama
+  `get_current_time` con `Asia/Tokyo` ed esce con codice 0.
+- Le prove Docker fatte prima dell'aggiornamento passavano `-e LMSTUDIO_MODEL=…`.
+- Un `.env` creato prima della lezione 5 va aggiornato allo stesso modo (vedi README).
 
 Leggere prima, in quest'ordine:
 1. `../../CLAUDE.md`: regole del progetto, struttura e comandi aggiornati.
