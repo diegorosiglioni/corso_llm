@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
+DEFAULT_NOTES_DB = "data/notes.sqlite3"
 
 
 @dataclass(frozen=True)
@@ -12,6 +13,7 @@ class Config:
     model: str  # LMSTUDIO_MODEL     (required)
     max_steps: int = 5  # MAX_STEPS   (integer >= 1)
     log_level: str = "INFO"  # LOG_LEVEL   (DEBUG, INFO, WARNING, ERROR)
+    notes_db: str = DEFAULT_NOTES_DB  # NOTES_DB    (path of the SQLite file)
 
 
 class ConfigError(Exception):
@@ -54,6 +56,8 @@ def load_config(env: Mapping[str, str]) -> Config:
             f"ricevuto '{read('LOG_LEVEL')}'."
         )
 
+    notes_db = read("NOTES_DB") or DEFAULT_NOTES_DB
+
     if problems:
         raise ConfigError(" ".join(problems))
-    return Config(base_url, model, max_steps, log_level)
+    return Config(base_url, model, max_steps, log_level, notes_db)

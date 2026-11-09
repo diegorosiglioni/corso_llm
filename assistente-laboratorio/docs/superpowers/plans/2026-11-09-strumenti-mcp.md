@@ -500,7 +500,7 @@ def test_missing_field_rejected():
   - `ADD_NOTE_DESCRIPTION`, `LIST_NOTES_DESCRIPTION`, `DELETE_NOTE_DESCRIPTION` (spec §6.4);
   - `Config.notes_db: str = "data/notes.sqlite3"` (variabile `NOTES_DB`; vuota → default).
 
-- [ ] **Step 1: Scrivere i test** (archivio in `tmp_path`, istante fisso
+- [x] **Step 1: Scrivere i test** (archivio in `tmp_path`, istante fisso
   `datetime(2026, 11, 9, 14, 2, 11, tzinfo=timezone.utc)`).
 
 ```python
@@ -546,9 +546,9 @@ def test_inaccessible_store(tmp_path):
     `"x.db"`, `NOTES_DB=""` → default;
   - aggiornare `test_valid_values_and_defaults`, perché `Config` ha un campo in più.
 
-- [ ] **Step 2: Eseguire i test.** `pytest tests/test_notes.py tests/test_config.py -v` → FAIL.
+- [x] **Step 2: Eseguire i test.** `pytest tests/test_notes.py tests/test_config.py -v` → FAIL.
 
-- [ ] **Step 3: Implementare.**
+- [x] **Step 3: Implementare.**
   - `NotesStore`:
     - una connessione per operazione (`with closing(sqlite3.connect(path))` e transazione), tabella
       della spec §6.4 creata se manca;
@@ -559,9 +559,9 @@ def test_inaccessible_store(tmp_path):
   - `.env.example`: riga commentata `# NOTES_DB=data/notes.sqlite3`.
   - `.gitignore`: aggiungere `/data/`.
 
-- [ ] **Step 4: Eseguire i test.** `pytest -v` → verde.
+- [x] **Step 4: Eseguire i test.** `pytest -v` → verde.
 
-- [ ] **Step 5: Commit** — `feat(strumenti): aggiunge l'archivio SQLite delle note persistenti`.
+- [x] **Step 5: Commit** — `feat(strumenti): aggiunge l'archivio SQLite delle note persistenti`.
 
 ---
 

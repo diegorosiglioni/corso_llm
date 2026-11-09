@@ -13,7 +13,15 @@ def error(env) -> str:
 
 def test_valid_values_and_defaults():
     c = load_config(VALID)
-    assert c == Config("http://localhost:1234/v1", "google/gemma-4-e2b", 5, "INFO")
+    assert c == Config(
+        "http://localhost:1234/v1", "google/gemma-4-e2b", 5, "INFO", "data/notes.sqlite3"
+    )
+
+
+def test_notes_db_default_and_override():
+    assert load_config(VALID).notes_db == "data/notes.sqlite3"
+    assert load_config({**VALID, "NOTES_DB": " x.db "}).notes_db == "x.db"
+    assert load_config({**VALID, "NOTES_DB": ""}).notes_db == "data/notes.sqlite3"
 
 
 def test_optional_values():
