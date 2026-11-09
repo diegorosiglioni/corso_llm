@@ -682,7 +682,7 @@ def test_note_round_trip_and_log(server, caplog):
 `cwd` serve perché il sottoprocesso trovi il pacchetto `assistant`. Con stdio l'ambiente del
 sottoprocesso è ridotto: tutto il necessario passa come argomenti.
 
-- [ ] **Step 1: Scrivere i test** (server reale via stdio, archivio in `tmp_path`).
+- [x] **Step 1: Scrivere i test** (server reale via stdio, archivio in `tmp_path`).
 
 ```python
 @pytest.fixture
@@ -722,9 +722,9 @@ def test_close_releases_the_database(tmp_path):
     db.unlink()   # su Windows fallisce se il processo del server tiene ancora il file
 ```
 
-- [ ] **Step 2: Eseguire i test.** `pytest tests/test_mcp_client.py -v` → FAIL.
+- [x] **Step 2: Eseguire i test.** `pytest tests/test_mcp_client.py -v` → FAIL.
 
-- [ ] **Step 3: Implementare `McpClient`.** È il punto delicato: entrata e uscita dal contesto del
+- [x] **Step 3: Implementare `McpClient`.** È il punto delicato: entrata e uscita dal contesto del
   client fastmcp devono avvenire nello **stesso task asyncio** (cancel scope di anyio). Per questo
   una coroutine di servizio lunga quanto la sessione tiene aperto il client, e le chiamate arrivano
   come task separati nello stesso loop:
@@ -764,14 +764,14 @@ async def _serve(self, ready: concurrent.futures.Future) -> None:
     - `is_error` → `{"error": "\n".join(testi dei contenuti)}`;
     - altrimenti → `structured_content or {}`.
 
-- [ ] **Step 4: Eseguire i test.** `pytest tests/test_mcp_client.py -v` → PASS. Se un test di
+- [x] **Step 4: Eseguire i test.** `pytest tests/test_mcp_client.py -v` → PASS. Se un test di
   Review Focus fallisce, correggere il codice, non il test. Esempio: se il testo con «venerdì €» si
   altera, controllare la codifica dei flussi stdio.
 
-- [ ] **Step 5: Eseguire la suite.** `pytest -v` → verde. Annotare la durata dei test MCP
+- [x] **Step 5: Eseguire la suite.** `pytest -v` → verde. Annotare la durata dei test MCP
   (`--durations=5`).
 
-- [ ] **Step 6: Commit** — `feat(mcp): aggiunge il client MCP sincrono con sessione stdio persistente`.
+- [x] **Step 6: Commit** — `feat(mcp): aggiunge il client MCP sincrono con sessione stdio persistente`.
 
 ---
 
