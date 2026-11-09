@@ -52,8 +52,8 @@ L'applicazione legge solo variabili d'ambiente:
 | Variabile | Obbligatoria | Default | Significato |
 |-----------|--------------|---------|-------------|
 | `LMSTUDIO_BASE_URL` | sì | — | indirizzo dell'API di LM Studio, es. `http://localhost:1234/v1` |
-| `LMSTUDIO_MODELLO` | sì | — | identificativo del modello restituito da `GET /v1/models` |
-| `MAX_PASSI` | no | `5` | chiamate massime al modello in un turno (intero ≥ 1) |
+| `LMSTUDIO_MODEL` | sì | — | identificativo del modello restituito da `GET /v1/models` |
+| `MAX_STEPS` | no | `5` | chiamate massime al modello in un turno (intero ≥ 1) |
 | `LOG_LEVEL` | no | `INFO` | `DEBUG`, `INFO`, `WARNING` o `ERROR` |
 
 `.env.example` è il modello versionato; la copia reale `.env` resta fuori da Git ed è letta da
@@ -63,19 +63,23 @@ Docker Compose:
 Copy-Item .env.example .env
 ```
 
+**Un `.env` creato prima della lezione 5 va aggiornato a mano:** `LMSTUDIO_MODELLO` diventa
+`LMSTUDIO_MODEL` e `MAX_PASSI` diventa `MAX_STEPS`. Con i nomi vecchi l'avvio con Docker si ferma
+con «Configurazione non valida: Manca LMSTUDIO_MODEL.».
+
 In locale Python non legge `.env`: le variabili si impostano nella sessione di PowerShell.
 
 ```powershell
 $env:LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
-$env:LMSTUDIO_MODELLO = "google/gemma-4-e2b"
+$env:LMSTUDIO_MODEL = "google/gemma-4-e2b"
 ```
 
 Se manca una variabile obbligatoria o un valore non è valido, l'applicazione non parte, elenca i
 problemi su stderr ed esce con codice 1:
 
 ```powershell
-Remove-Item Env:LMSTUDIO_MODELLO
-.\.venv\Scripts\python.exe -m assistente
+Remove-Item Env:LMSTUDIO_MODEL
+.\.venv\Scripts\python.exe -m assistant
 $LASTEXITCODE    # 1
 ```
 
@@ -84,7 +88,7 @@ $LASTEXITCODE    # 1
 Con LM Studio avviato, il modello caricato e le variabili impostate:
 
 ```powershell
-.\.venv\Scripts\python.exe -m assistente
+.\.venv\Scripts\python.exe -m assistant
 ```
 
 Si conversa al prompt `Tu>`. La sessione termina con `esci`, con Ctrl+Z seguito da Invio
@@ -94,7 +98,7 @@ La conversazione va su stdout, i log su stderr.
 Per una prova non interattiva si possono passare le domande in ingresso:
 
 ```powershell
-"Mi chiamo Paolo", "Come mi chiamo?", "esci" | .\.venv\Scripts\python.exe -m assistente
+"Mi chiamo Paolo", "Come mi chiamo?", "esci" | .\.venv\Scripts\python.exe -m assistant
 ```
 
 ## Prove reali con LM Studio
@@ -102,7 +106,7 @@ Per una prova non interattiva si possono passare le domande in ingresso:
 Sono separate dai test automatici e partono solo su richiesta, con le variabili impostate:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -m reale -v
+.\.venv\Scripts\python.exe -m pytest -m real -v
 ```
 
 Senza variabili le prove falliscono con un messaggio esplicito invece di essere saltate.
@@ -111,27 +115,27 @@ solo questa prova.
 
 ## Strumento orologio
 
-Il modello può richiedere, tramite tool calling, lo strumento `ora_corrente` con un unico
-parametro `fuso`: un nome di fuso orario IANA (es. `Europe/Rome`, `Asia/Tokyo`). Il programma lo
+Il modello può richiedere, tramite tool calling, lo strumento `get_current_time` con un unico
+parametro `timezone`: un nome di fuso orario IANA (es. `Europe/Rome`, `Asia/Tokyo`). Il programma lo
 esegue davvero e restituisce al modello, per esempio,
-`{"fuso": "Asia/Tokyo", "data_ora": "2026-10-27T01:45:21+09:00"}`. Con un fuso sconosciuto
+`{"timezone": "Asia/Tokyo", "datetime": "2026-10-27T01:45:21+09:00"}`. Con un fuso sconosciuto
 restituisce un messaggio d'errore con un esempio di nome valido, così il modello può correggersi.
 
-In un turno il modello è chiamato al più `MAX_PASSI` volte; se all'ultimo passaggio chiede ancora
+In un turno il modello è chiamato al più `MAX_STEPS` volte; se all'ultimo passaggio chiede ancora
 uno strumento, il turno termina con «Ho raggiunto il limite di 5 passaggi senza una risposta
 finale.» e la sessione resta utilizzabile.
 
 A livello `INFO` i log su stderr mostrano ogni passaggio, ogni chiamata e il suo risultato:
 
 ```
-INFO assistente.grafo: passaggio 1/5 → modello
-INFO assistente.grafo: passaggio 1/5 chiamata ora_corrente {'fuso': 'Asia/Tokyo'}
-INFO assistente.grafo: passaggio 1/5 risultato ora_corrente {'fuso': 'Asia/Tokyo', 'data_ora': '2026-10-27T01:45:21+09:00'}
-INFO assistente.grafo: passaggio 2/5 → modello
+INFO assistant.graph: passaggio 1/5 → modello
+INFO assistant.graph: passaggio 1/5 chiamata get_current_time {'timezone': 'Asia/Tokyo'}
+INFO assistant.graph: passaggio 1/5 risultato get_current_time {'timezone': 'Asia/Tokyo', 'datetime': '2026-10-27T01:45:21+09:00'}
+INFO assistant.graph: passaggio 2/5 → modello
 Tu> Assistente> Ora a Tokyo è le 01:45 del 27 ottobre 2026.
 ```
 
-Le prove reali (`pytest -m reale`) verificano con il modello locale che la domanda su Tokyo produca
+Le prove reali (`pytest -m real`) verificano con il modello locale che la domanda su Tokyo produca
 una chiamata con `Asia/Tokyo` e una risposta con l'orario restituito, che «E a Roma?» produca una
 chiamata con `Europe/Rome` e che un nome detto in precedenza venga ricordato senza strumenti.
 
@@ -145,23 +149,23 @@ LM Studio resta sull'host; nel container gira solo l'applicazione. Compose legge
 ```powershell
 Copy-Item .env.example .env      # solo la prima volta
 docker compose build
-docker compose run --rm assistente
+docker compose run --rm assistant
 ```
 
 L'avvio interattivo si fa con `docker compose run --rm`: `docker compose up` non collega
 correttamente l'input del terminale. Per una prova non interattiva serve `-T`:
 
 ```powershell
-"Che ore sono a Tokyo?", "esci" | docker compose run --rm -T assistente
+"Che ore sono a Tokyo?", "esci" | docker compose run --rm -T assistant
 ```
 
-L'immagine (`python:3.13.18-slim-trixie`, fissata per digest nel `Dockerfile`) contiene solo il pacchetto `assistente` e le dipendenze
+L'immagine (`python:3.13.18-slim-trixie`, fissata per digest nel `Dockerfile`) contiene solo il pacchetto `assistant` e le dipendenze
 dell'applicazione, ed esegue come utente non root. Nel container l'orario dei log è in UTC;
 l'orario restituito dallo strumento dipende solo dal fuso richiesto.
 
 ## Diagnosi
 
-**Quali modelli serve LM Studio?** L'identificativo da usare in `LMSTUDIO_MODELLO` è quello
+**Quali modelli serve LM Studio?** L'identificativo da usare in `LMSTUDIO_MODEL` è quello
 restituito dal server:
 
 ```powershell
@@ -185,16 +189,16 @@ cronologia riparte da zero), oppure aumentare in LM Studio la lunghezza del cont
 **Più dettagli.** Con `$env:LOG_LEVEL = "DEBUG"` i log mostrano la traccia completa degli errori
 e le richieste HTTP verso LM Studio.
 
-**Il modello non usa lo strumento.** Nei log manca la riga `chiamata ora_corrente` e l'orario è
-inventato, oppure il risultato contiene `errore` per un fuso non IANA. È un limite del modello, non
+**Il modello non usa lo strumento.** Nei log manca la riga `chiamata get_current_time` e l'orario è
+inventato, oppure il risultato contiene `error` per un fuso non IANA. È un limite del modello, non
 del programma: con `google/gemma-4-e2b` le prove reali del 2026-10-26 sono passate (chiamate con
 `Asia/Tokyo` ed `Europe/Rome`, orario riportato correttamente). Un altro modello si prova cambiando
-solo `LMSTUDIO_MODELLO` e ripetendo `pytest -m reale`.
+solo `LMSTUDIO_MODEL` e ripetendo `pytest -m real`.
 
 **LM Studio non raggiungibile dal container.** Si verifica così:
 
 ```powershell
-docker compose run --rm -T assistente python -c "import urllib.request; print(urllib.request.urlopen('http://host.docker.internal:1234/v1/models').read()[:200])"
+docker compose run --rm -T assistant python -c "import urllib.request; print(urllib.request.urlopen('http://host.docker.internal:1234/v1/models').read()[:200])"
 ```
 
 Deve stampare l'elenco dei modelli. Con Docker Desktop su Windows ha funzionato senza modificare
@@ -204,5 +208,5 @@ LM Studio; se fallisce, attivare in LM Studio l'opzione per servire anche sulla 
 esempio per verificare il messaggio di configurazione mancante:
 
 ```powershell
-docker compose run --rm -T -e LMSTUDIO_MODELLO= assistente
+docker compose run --rm -T -e LMSTUDIO_MODEL= assistant
 ```

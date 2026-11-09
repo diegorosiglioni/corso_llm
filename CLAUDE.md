@@ -6,18 +6,18 @@ Requisiti, specifica e piano: `assistente-laboratorio/docs/superpowers/`.
 Stato corrente e prossimo passo: `assistente-laboratorio/docs/superpowers/handoff.md` (leggerlo per primo).
 
 ## Struttura e comandi
-- Codice in `assistente-laboratorio/assistente/`: `config.py`, `modello.py`, `strumenti.py`,
-  `grafo.py`, `sessione.py`, `terminale.py`; solo `__main__.py` collega i moduli.
-- Test in `assistente-laboratorio/tests/`; il modello finto (`ModelloFinto`) e gli aiuti comuni
-  sono in `conftest.py`. Le prove con LM Studio stanno in `test_reale.py` (marcatore `reale`).
+- Codice in `assistente-laboratorio/assistant/`: `config.py`, `model.py`, `tools.py`,
+  `graph.py`, `session.py`, `terminal.py`; solo `__main__.py` collega i moduli.
+- Test in `assistente-laboratorio/tests/`; il modello finto (`FakeModel`) e gli aiuti comuni
+  sono in `conftest.py`. Le prove con LM Studio stanno in `test_real.py` (marcatore `real`).
 - Dipendenze dirette in `requirements.txt` (app) e `requirements-dev.txt` (test); tutte le
   versioni verificate in `constraints.txt`, richiamato da `requirements.txt`.
 - Comandi da PowerShell in `assistente-laboratorio/`, senza attivare l'ambiente:
   - ambiente: `py -3.13 -m venv .venv` e `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`
   - test senza modello: `.\.venv\Scripts\python.exe -m pytest`
-  - prove reali (LM Studio attivo, variabili impostate): `.\.venv\Scripts\python.exe -m pytest -m reale -v`
-  - avvio locale: `.\.venv\Scripts\python.exe -m assistente`
-  - Docker: `docker compose build` e `docker compose run --rm assistente` (non `up`)
+  - prove reali (LM Studio attivo, variabili impostate): `.\.venv\Scripts\python.exe -m pytest -m real -v`
+  - avvio locale: `.\.venv\Scripts\python.exe -m assistant`
+  - Docker: `docker compose build` e `docker compose run --rm assistant` (non `up`)
 
 ## Obiettivo
 Un'applicazione da terminale in Python che conversa con un modello locale e:

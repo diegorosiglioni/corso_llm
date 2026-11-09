@@ -3,14 +3,14 @@ FROM python:3.13.18-slim-trixie@sha256:ae14d4ce8771606477a81446e7ef429edd6762305
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-RUN useradd --create-home assistente
+RUN useradd --create-home assistant
 WORKDIR /app
 
 # Prima le dipendenze: il livello resta in cache finché requirements.txt e constraints.txt non cambiano.
 COPY requirements.txt constraints.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY assistente/ assistente/
+COPY assistant/ assistant/
 
-USER assistente
-CMD ["python", "-m", "assistente"]
+USER assistant
+CMD ["python", "-m", "assistant"]

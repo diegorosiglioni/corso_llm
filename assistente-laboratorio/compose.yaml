@@ -1,5 +1,5 @@
 services:
-  assistente:
+  assistant:
     build: .
     env_file: .env
     environment:

@@ -119,12 +119,12 @@ Comportamento invariato (spec §4). Nessuna funzionalità nuova.
     in `test_graph.py`; `VALID` in `test_main.py` e `test_config.py`.
   - Marcatore pytest `real`.
 
-- [ ] **Step 1: Registrare la base.** Eseguire `pytest -v` e annotare il risultato.
+- [x] **Step 1: Registrare la base.** Eseguire `pytest -v` e annotare il risultato.
   Expected: `60 passed, 2 deselected`.
 
-- [ ] **Step 2: Rinominare i file con `git mv`** come elencato sopra.
+- [x] **Step 2: Rinominare i file con `git mv`** come elencato sopra.
 
-- [ ] **Step 3: Tradurre identificatori e chiavi** secondo la tabella della spec §4.
+- [x] **Step 3: Tradurre identificatori e chiavi** secondo la tabella della spec §4.
   - Comprende i parametri (`adesso` → `now`, `fuso` → `timezone`, `leggi`/`scrivi` → `read`/`write`),
     le variabili locali, i commenti e le docstring.
   - Chiavi dei risultati: `{"timezone", "datetime"}` e `{"error"}`.
@@ -136,11 +136,11 @@ Comportamento invariato (spec §4). Nessuna funzionalità nuova.
   - Descrizione dello strumento: «Restituisce data e ora correnti nel fuso orario indicato.
     `timezone` è un nome IANA, per esempio "Europe/Rome" o "Asia/Tokyo".»
 
-- [ ] **Step 4: Tradurre i test.** Nomi delle funzioni di test in inglese (es.
+- [x] **Step 4: Tradurre i test.** Nomi delle funzioni di test in inglese (es.
   `test_risposta_fissa_in_un_passo` → `test_fixed_reply_in_one_step`). Stesse asserzioni, con i
   nomi e le chiavi nuovi. Nessun test aggiunto né tolto.
 
-- [ ] **Step 5: Aggiornare la configurazione dei file.**
+- [x] **Step 5: Aggiornare la configurazione dei file.**
   - `pytest.ini`: `addopts = -m "not real"` e il marcatore
     `real: prove con LM Studio attivo (eseguire con: pytest -m real)`.
   - `.env.example`: `LMSTUDIO_MODEL=google/gemma-4-e2b`, `MAX_STEPS=5`; il resto invariato.
@@ -148,23 +148,23 @@ Comportamento invariato (spec §4). Nessuna funzionalità nuova.
     `CMD ["python", "-m", "assistant"]`.
   - `compose.yaml`: servizio `assistant`.
 
-- [ ] **Step 6: Verificare che non resti italiano nel codice.**
+- [x] **Step 6: Verificare che non resti italiano nel codice.**
   Run: `git grep -n -E "assistente|modello|strumenti|grafo|sessione|terminale|fuso|data_ora|errore|passi|MODELLO|MAX_PASSI|reale" -- assistant tests pytest.ini Dockerfile compose.yaml .env.example`
   Expected: solo righe con testi in italiano permessi (messaggi, prompt, descrizioni), nessun
   identificatore.
 
-- [ ] **Step 7: Eseguire la suite.**
+- [x] **Step 7: Eseguire la suite.**
   Run: `.\.venv\Scripts\python.exe -m pytest -v`
   Expected: `60 passed, 2 deselected`, come allo Step 1.
 
-- [ ] **Step 8: Aggiornare README e `CLAUDE.md`.**
+- [x] **Step 8: Aggiornare README e `CLAUDE.md`.**
   - README: nomi dei comandi (`python -m assistant`, `pytest -m real`, servizio `assistant`),
     tabella delle variabili, esempio dello strumento, esempi di log.
   - Aggiungere al README un avviso: un `.env` con `LMSTUDIO_MODELLO`/`MAX_PASSI` va aggiornato.
   - `CLAUDE.md`, sezione «Struttura e comandi»: cartella `assistant/`, moduli nuovi, `FakeModel`,
     `test_real.py`, marcatore `real`, `python -m assistant`, `pytest -m real`.
 
-- [ ] **Step 9: Prove reali e Docker.** Con LM Studio attivo e
+- [x] **Step 9: Prove reali e Docker.** Con LM Studio attivo e
   `$env:LMSTUDIO_BASE_URL="http://localhost:1234/v1"; $env:LMSTUDIO_MODEL="google/gemma-4-e2b"`:
   - `.\.venv\Scripts\python.exe -m pytest -m real -v` → `2 passed`;
   - `docker compose build`, poi `"Che ore sono a Tokyo?", "esci" | docker compose run --rm -T assistant`.
@@ -174,7 +174,7 @@ Comportamento invariato (spec §4). Nessuna funzionalità nuova.
     «Manca LMSTUDIO_MODEL.». È il comportamento atteso: chiedere all'utente di aggiornarlo, non
     modificarlo.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
   ```bash
   git add -A assistant tests pytest.ini .env.example Dockerfile compose.yaml README.md ../CLAUDE.md
   git status   # assistente/ risulta rinominata; nessun .env, data/, PDF

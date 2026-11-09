@@ -1,45 +1,45 @@
 import logging
 
-import assistente.__main__ as avvio
-from assistente.__main__ import main
-from assistente.sessione import Sessione
+import assistant.__main__ as entry
+from assistant.__main__ import main
+from assistant.session import Session
 
-VALIDO = {"LMSTUDIO_BASE_URL": "http://localhost:1234/v1", "LMSTUDIO_MODELLO": "google/gemma-4-e2b"}
+VALID = {"LMSTUDIO_BASE_URL": "http://localhost:1234/v1", "LMSTUDIO_MODEL": "google/gemma-4-e2b"}
 
 
-def _non_chiamare(*args, **kwargs):
+def _must_not_call(*args, **kwargs):
     raise AssertionError("LM Studio non deve essere contattato")
 
 
-def test_configurazione_mancante_esce_con_1(capsys, monkeypatch):
-    monkeypatch.setattr(avvio, "crea_modello", _non_chiamare)
-    monkeypatch.setattr(avvio, "avvia", _non_chiamare)
+def test_missing_config_exits_with_1(capsys, monkeypatch):
+    monkeypatch.setattr(entry, "create_model", _must_not_call)
+    monkeypatch.setattr(entry, "run", _must_not_call)
     assert main({"LMSTUDIO_BASE_URL": "http://localhost:1234/v1"}) == 1
-    assert "Manca LMSTUDIO_MODELLO." in capsys.readouterr().err
+    assert "Manca LMSTUDIO_MODEL." in capsys.readouterr().err
 
 
-def test_avvio_collega_i_moduli(capsys, monkeypatch):
-    ricevute = []
-    monkeypatch.setattr(avvio, "avvia", ricevute.append)
-    assert main(VALIDO) == 0
-    assert len(ricevute) == 1 and isinstance(ricevute[0], Sessione)
+def test_startup_wires_the_modules(capsys, monkeypatch):
+    received = []
+    monkeypatch.setattr(entry, "run", received.append)
+    assert main(VALID) == 0
+    assert len(received) == 1 and isinstance(received[0], Session)
     assert (
         "Assistente del laboratorio — modello google/gemma-4-e2b su http://localhost:1234/v1. "
         "Scrivi 'esci' per uscire."
     ) in capsys.readouterr().out
 
 
-def test_log_http_delle_librerie_nascosti_a_info(monkeypatch, caplog):
-    caplog.set_level(logging.INFO)  # come nell'app, dove la radice è a INFO
-    monkeypatch.setattr(avvio, "avvia", lambda sessione: None)
-    main(VALIDO)
-    for libreria in ("httpx", "httpx2", "openai"):
-        assert logging.getLogger(libreria).getEffectiveLevel() == logging.WARNING, libreria
+def test_library_http_logs_hidden_at_info(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)  # as in the app, where the root is at INFO
+    monkeypatch.setattr(entry, "run", lambda session: None)
+    main(VALID)
+    for library in ("httpx", "httpx2", "openai"):
+        assert logging.getLogger(library).getEffectiveLevel() == logging.WARNING, library
 
 
-def test_lo_strumento_orologio_arriva_al_modello(monkeypatch):
-    ricevuti = []
-    monkeypatch.setattr(avvio, "crea_modello", lambda config, strumenti: ricevuti.append(strumenti))
-    monkeypatch.setattr(avvio, "avvia", lambda sessione: None)
-    assert main(VALIDO) == 0
-    assert [s.name for s in ricevuti[0]] == ["ora_corrente"]
+def test_clock_tool_reaches_the_model(monkeypatch):
+    received = []
+    monkeypatch.setattr(entry, "create_model", lambda config, tools: received.append(tools))
+    monkeypatch.setattr(entry, "run", lambda session: None)
+    assert main(VALID) == 0
+    assert [t.name for t in received[0]] == ["get_current_time"]

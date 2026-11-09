@@ -4,40 +4,42 @@ import httpx2
 import openai
 from langchain_core.messages import AIMessage, BaseMessage
 
-from assistente.grafo import costruisci_grafo
-from assistente.strumenti import crea_ora_corrente
+from assistant.graph import build_graph
+from assistant.tools import create_current_time_tool
 
-ORA_FISSA = datetime(2026, 10, 26, 15, 47, 12, 345678, tzinfo=timezone.utc)
-
-
-class ModelloFinto:
-    """Modello con risposte programmate: le restituisce in ordine e solleva quelle che sono eccezioni."""
-
-    def __init__(self, risposte: list[AIMessage | BaseException]):
-        self._risposte = list(risposte)
-        self.chiamate: list[list[BaseMessage]] = []
-
-    def invoke(self, messaggi) -> AIMessage:
-        self.chiamate.append(list(messaggi))
-        risposta = self._risposte.pop(0)
-        if isinstance(risposta, BaseException):
-            raise risposta
-        return risposta
+FIXED_NOW = datetime(2026, 10, 26, 15, 47, 12, 345678, tzinfo=timezone.utc)
 
 
-def grafo_finto(modello, strumenti=None, max_passi=5):
-    if strumenti is None:
-        strumenti = [crea_ora_corrente(lambda: ORA_FISSA)]
-    return costruisci_grafo(modello, list(strumenti), max_passi)
+class FakeModel:
+    """Model with scripted replies: returns them in order and raises those that are exceptions."""
+
+    def __init__(self, replies: list[AIMessage | BaseException]):
+        self._replies = list(replies)
+        self.calls: list[list[BaseMessage]] = []
+
+    def invoke(self, messages) -> AIMessage:
+        self.calls.append(list(messages))
+        reply = self._replies.pop(0)
+        if isinstance(reply, BaseException):
+            raise reply
+        return reply
 
 
-def chiamata(fuso: str | None = "Asia/Tokyo", id: str = "c1", nome: str = "ora_corrente") -> AIMessage:
-    """Risposta del modello che chiede uno strumento; fuso=None → argomenti vuoti."""
-    args = {} if fuso is None else {"fuso": fuso}
-    return AIMessage("", tool_calls=[{"name": nome, "args": args, "id": id}])
+def fake_graph(model, tools=None, max_steps=5):
+    if tools is None:
+        tools = [create_current_time_tool(lambda: FIXED_NOW)]
+    return build_graph(model, list(tools), max_steps)
 
 
-def errore_lm_studio() -> openai.APIConnectionError:
+def tool_call(
+    timezone: str | None = "Asia/Tokyo", id: str = "c1", name: str = "get_current_time"
+) -> AIMessage:
+    """Model reply that requests a tool; timezone=None → empty arguments."""
+    args = {} if timezone is None else {"timezone": timezone}
+    return AIMessage("", tool_calls=[{"name": name, "args": args, "id": id}])
+
+
+def lm_studio_error() -> openai.APIConnectionError:
     return openai.APIConnectionError(
         request=httpx2.Request("POST", "http://localhost:1234/v1/chat/completions")
     )
