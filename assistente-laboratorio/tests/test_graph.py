@@ -2,8 +2,10 @@ import json
 import logging
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.tools import StructuredTool
 
 from assistant.graph import SYSTEM_PROMPT, route
+from assistant.tools import ToolUnavailableError
 from conftest import FakeModel, fake_graph, tool_call
 
 
@@ -29,10 +31,10 @@ def test_system_prompt_sent_but_not_stored():
     assert not any(isinstance(m, SystemMessage) for m in result["messages"])
 
 
-def test_step_log(caplog):
+def test_llm_step_log(caplog):
     caplog.set_level(logging.INFO, logger="assistant.graph")
     start_turn(FakeModel([AIMessage("Ciao!")]))
-    assert "passaggio 1/5 → modello" in caplog.text
+    assert "step=1/5 node=llm" in caplog.text
 
 
 # --- routing, tools and limit ---
@@ -117,19 +119,44 @@ def test_high_limit_without_recursion_error():
     assert r["messages"][-1].content == "Ho raggiunto il limite di 20 passaggi senza una risposta finale."
 
 
-def test_call_logs(caplog):
+def test_tool_call_logs_follow_slide_26(caplog):
     caplog.set_level(logging.INFO, logger="assistant.graph")
     start_turn(FakeModel([tool_call(), tool_call(timezone="Tokio", id="c2"), AIMessage("ok")]))
-    assert "passaggio 1/5 chiamata get_current_time {'timezone': 'Asia/Tokyo'}" in caplog.text
     assert (
-        "passaggio 1/5 risultato get_current_time "
+        "step=1/5 variant=local tool=get_current_time call_id=c1 "
+        "arguments={'timezone': 'Asia/Tokyo'}"
+    ) in caplog.text
+    assert (
+        "step=1/5 execution=ok call_id=c1 result="
         "{'timezone': 'Asia/Tokyo', 'datetime': '2026-10-27T00:47:12+09:00'}"
     ) in caplog.text
+    assert "tool_message.call_id=c1 next_node=llm" in caplog.text
     warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
-    assert any(w.startswith("passaggio 2/5 risultato get_current_time {'error'") for w in warnings)
+    assert any(
+        w.startswith("step=2/5 execution=tool_error call_id=c2 result={'error'") for w in warnings
+    )
 
 
-def test_limit_and_unparsable_arguments_logs(caplog):
+def test_unavailable_tool_is_transport_error(caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+
+    def down(**_):
+        raise ToolUnavailableError("server terminato")
+
+    remote = StructuredTool.from_function(
+        down, name="add_note", description="d",
+        args_schema={"type": "object", "properties": {}},
+        metadata={"variant": "mcp"},
+    )
+    r = start_turn(FakeModel([tool_call(name="add_note"), AIMessage("ok")]), tools=[remote])
+    assert json.loads(tool_messages(r["messages"])[0].content) == {
+        "error": "Strumento non raggiungibile: server terminato. Riprova o riavvia l'assistente."
+    }
+    assert "variant=mcp tool=add_note call_id=c1" in caplog.text
+    assert "step=1/5 execution=transport_error call_id=c1" in caplog.text
+
+
+def test_limit_and_invalid_calls_logs(caplog):
     caplog.set_level(logging.INFO, logger="assistant.graph")
     invalid = AIMessage("", invalid_tool_calls=[{
         "name": "get_current_time", "args": "{timezone", "id": "x", "error": "json",
@@ -138,8 +165,8 @@ def test_limit_and_unparsable_arguments_logs(caplog):
     start_turn(FakeModel([invalid, AIMessage("ok")]))
     start_turn(FakeModel([tool_call()]), max_steps=1)
     warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
-    assert any(w.startswith("passaggio 1/5 argomenti non interpretabili:") for w in warnings)
-    assert "limite di 1 passaggi raggiunto, chiamate non eseguite: ['get_current_time']" in warnings
+    assert any(w.startswith("step=1/5 invalid_tool_calls=") for w in warnings)
+    assert "step=1/1 limit_reached pending=['get_current_time']" in warnings
 
 
 def invalid_call(id="x"):

@@ -6,6 +6,10 @@ from zoneinfo import ZoneInfo, available_timezones
 
 from langchain_core.tools import BaseTool, tool
 
+
+class ToolUnavailableError(Exception):
+    """Raised by a tool when the service behind it does not answer (connection error)."""
+
 CURRENT_TIME_DESCRIPTION = (
     "Restituisce data e ora correnti nel fuso orario indicato. `timezone` è un nome IANA, "
     'per esempio "Europe/Rome" o "Asia/Tokyo".'

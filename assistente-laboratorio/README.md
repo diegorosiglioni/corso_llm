@@ -125,14 +125,17 @@ In un turno il modello è chiamato al più `MAX_STEPS` volte; se all'ultimo pass
 uno strumento, il turno termina con «Ho raggiunto il limite di 5 passaggi senza una risposta
 finale.» e la sessione resta utilizzabile.
 
-A livello `INFO` i log su stderr mostrano ogni passaggio, ogni chiamata e il suo risultato:
+A livello `INFO` i log su stderr mostrano ogni passaggio, ogni chiamata con variante e `call_id`,
+l'esito (`ok`, `tool_error`, `transport_error`; WARNING se diverso da `ok`) e il messaggio
+restituito al modello:
 
 ```
-INFO assistant.graph: passaggio 1/5 → modello
-INFO assistant.graph: passaggio 1/5 chiamata get_current_time {'timezone': 'Asia/Tokyo'}
-INFO assistant.graph: passaggio 1/5 risultato get_current_time {'timezone': 'Asia/Tokyo', 'datetime': '2026-10-27T01:45:21+09:00'}
-INFO assistant.graph: passaggio 2/5 → modello
-Tu> Assistente> Ora a Tokyo è le 01:45 del 27 ottobre 2026.
+INFO assistant.graph: step=1/5 node=llm
+INFO assistant.graph: step=1/5 variant=local tool=get_current_time call_id=vF1T1spFZHM9iM8l6qCemFTvG3Ze3xCH arguments={'timezone': 'Asia/Tokyo'}
+INFO assistant.graph: step=1/5 execution=ok call_id=vF1T1spFZHM9iM8l6qCemFTvG3Ze3xCH result={'timezone': 'Asia/Tokyo', 'datetime': '2026-11-09T23:29:22+09:00'}
+INFO assistant.graph: tool_message.call_id=vF1T1spFZHM9iM8l6qCemFTvG3Ze3xCH next_node=llm
+INFO assistant.graph: step=2/5 node=llm
+Tu> Assistente> Attualmente a Tokyo sono le 23:29 (del 9 novembre 2026).
 ```
 
 Le prove reali (`pytest -m real`) verificano con il modello locale che la domanda su Tokyo produca
@@ -189,7 +192,7 @@ cronologia riparte da zero), oppure aumentare in LM Studio la lunghezza del cont
 **Più dettagli.** Con `$env:LOG_LEVEL = "DEBUG"` i log mostrano la traccia completa degli errori
 e le richieste HTTP verso LM Studio.
 
-**Il modello non usa lo strumento.** Nei log manca la riga `chiamata get_current_time` e l'orario è
+**Il modello non usa lo strumento.** Nei log manca la riga `tool=get_current_time` e l'orario è
 inventato, oppure il risultato contiene `error` per un fuso non IANA. È un limite del modello, non
 del programma: con `google/gemma-4-e2b` le prove reali del 2026-10-26 sono passate (chiamate con
 `Asia/Tokyo` ed `Europe/Rome`, orario riportato correttamente). Un altro modello si prova cambiando

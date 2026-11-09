@@ -197,7 +197,7 @@ Comportamento invariato (spec §4). Nessuna funzionalità nuova.
     `"local"`.
 - Consumes: `build_graph`, `FakeModel`, `tool_call` (Task 1).
 
-- [ ] **Step 1: Sostituire i test dei log in `tests/test_graph.py`.** I test sui vecchi testi di
+- [x] **Step 1: Sostituire i test dei log in `tests/test_graph.py`.** I test sui vecchi testi di
   log diventano:
 
 ```python
@@ -238,11 +238,11 @@ def test_unavailable_tool_is_transport_error(caplog):
   (`StructuredTool.from_function` accetta `args_schema` come dizionario: verificato nel venv con
   langchain-core 1.7.0.)
 
-- [ ] **Step 2: Eseguire i test.**
+- [x] **Step 2: Eseguire i test.**
   Run: `pytest tests/test_graph.py -v`
   Expected: i quattro test nuovi FAIL (testi di log diversi, `ToolUnavailableError` inesistente).
 
-- [ ] **Step 3: Implementare.**
+- [x] **Step 3: Implementare.**
   - In `tools.py`: `class ToolUnavailableError(Exception)`.
   - In `graph.py`:
     - le righe di log della spec §8, nodo `tools`: chiamata, esecuzione, `tool_message`;
@@ -255,11 +255,11 @@ def test_unavailable_tool_is_transport_error(caplog):
     - altrimenti → `ok`.
   - WARNING per ogni esito diverso da `ok`. Il messaggio di RF-10 non cambia.
 
-- [ ] **Step 4: Eseguire la suite.**
+- [x] **Step 4: Eseguire la suite.**
   Run: `pytest -v`
   Expected: tutto verde (60 + 1 nuovo, 2 deselected).
 
-- [ ] **Step 5: Commit** — `feat(grafo): registra call_id, variante ed esito delle chiamate (slide 26)`.
+- [x] **Step 5: Commit** — `feat(grafo): registra call_id, variante ed esito delle chiamate (slide 26)`.
 
 ---
 

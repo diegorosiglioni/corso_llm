@@ -16,6 +16,8 @@ from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
+from assistant.tools import ToolUnavailableError
+
 log = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
@@ -66,49 +68,64 @@ def build_graph(model: Runnable, tools: list[BaseTool], max_steps: int):
 
     def llm_node(state: State) -> dict:
         step = state["steps"] + 1
-        log.info("passaggio %d/%d → modello", step, max_steps)
+        log.info("step=%d/%d node=llm", step, max_steps)
         reply = model.invoke([SystemMessage(SYSTEM_PROMPT)] + state["messages"])
         if getattr(reply, "invalid_tool_calls", None):
             log.warning(
-                "passaggio %d/%d argomenti non interpretabili: %s",
-                step, max_steps, reply.invalid_tool_calls,
+                "step=%d/%d invalid_tool_calls=%s", step, max_steps, reply.invalid_tool_calls
             )
         return {"messages": [reply], "steps": step}
+
+    def run_tool(call: dict, invalid: list[dict]) -> tuple[dict, str]:
+        """Runs one call; returns the result and the outcome (ok, tool_error, transport_error)."""
+        name, arguments = call["name"], call["args"]
+        tool = by_name.get(name)
+        if tool is None:
+            return {"error": f"Strumento sconosciuto: '{name}'."}, "tool_error"
+        if call in invalid:
+            return {
+                "error": f"Argomenti non interpretabili per '{name}': '{arguments}'. "
+                f"Uso: {tool.description}"
+            }, "tool_error"
+        try:
+            result = tool.invoke(arguments)
+        except ToolUnavailableError as error:
+            return {
+                "error": f"Strumento non raggiungibile: {error}. Riprova o riavvia l'assistente."
+            }, "transport_error"
+        except Exception as error:
+            return {
+                "error": f"Argomenti non validi per '{name}': {error}. Uso: {tool.description}"
+            }, "tool_error"
+        return result, ("tool_error" if "error" in result else "ok")
 
     def tools_node(state: State) -> dict:
         steps = state["steps"]
         replies = []
         valid, invalid = _calls(state["messages"][-1])
         for call in valid + invalid:
-            name, arguments = call["name"], call["args"]
-            log.info("passaggio %d/%d chiamata %s %s", steps, max_steps, name, arguments)
-            tool = by_name.get(name)
-            if tool is None:
-                result = {"error": f"Strumento sconosciuto: '{name}'."}
-            elif call in invalid:
-                result = {
-                    "error": f"Argomenti non interpretabili per '{name}': '{arguments}'. "
-                    f"Uso: {tool.description}"
-                }
-            else:
-                try:
-                    result = tool.invoke(arguments)
-                except Exception as error:
-                    result = {
-                        "error": f"Argomenti non validi per '{name}': {error}. "
-                        f"Uso: {tool.description}"
-                    }
-            level = logging.WARNING if "error" in result else logging.INFO
-            log.log(level, "passaggio %d/%d risultato %s %s", steps, max_steps, name, result)
+            tool = by_name.get(call["name"])
+            variant = ((tool.metadata or {}).get("variant") if tool else None) or "local"
+            log.info(
+                "step=%d/%d variant=%s tool=%s call_id=%s arguments=%s",
+                steps, max_steps, variant, call["name"], call["id"], call["args"],
+            )
+            result, outcome = run_tool(call, invalid)
+            level = logging.INFO if outcome == "ok" else logging.WARNING
+            log.log(
+                level, "step=%d/%d execution=%s call_id=%s result=%s",
+                steps, max_steps, outcome, call["id"], result,
+            )
             replies.append(_tool_message(call, result))
+            log.info("tool_message.call_id=%s next_node=llm", call["id"])
         return {"messages": replies}
 
     def limit_node(state: State) -> dict:
         valid, invalid = _calls(state["messages"][-1])
         pending = valid + invalid
         log.warning(
-            "limite di %d passaggi raggiunto, chiamate non eseguite: %s",
-            max_steps, [call["name"] for call in pending],
+            "step=%d/%d limit_reached pending=%s",
+            state["steps"], max_steps, [call["name"] for call in pending],
         )
         not_run = {"error": "Non eseguito: limite di passaggi raggiunto."}
         replies = [_tool_message(call, not_run) for call in pending]
