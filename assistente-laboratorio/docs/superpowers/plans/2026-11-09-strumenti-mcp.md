@@ -285,7 +285,7 @@ Tabelle (spec §6.1):
 Nomi delle grandezze, con l'articolo per i messaggi: `lunghezza`/«una lunghezza»,
 `massa`/«una massa», `temperatura`/«una temperatura», `volume`/«un volume».
 
-- [ ] **Step 1: Scrivere i test.**
+- [x] **Step 1: Scrivere i test.**
 
 ```python
 def test_length():
@@ -314,17 +314,17 @@ def test_below_absolute_zero():
         convert_units(-500, "C", "F")
 ```
 
-- [ ] **Step 2: Eseguire i test.** `pytest tests/test_units.py -v` → FAIL (modulo inesistente).
+- [x] **Step 2: Eseguire i test.** `pytest tests/test_units.py -v` → FAIL (modulo inesistente).
 
-- [ ] **Step 3: Implementare `convert_units`.**
+- [x] **Step 3: Implementare `convert_units`.**
   - Il risultato è `float(f"{x:.6g}")`.
   - Le unità vengono normalizzate con `strip()`, rimozione di un `°` iniziale e confronto senza
     distinzione di maiuscole; nel risultato compare la forma canonica.
   - Il valore del messaggio sullo zero assoluto si formatta con `:g`.
 
-- [ ] **Step 4: Eseguire i test.** `pytest tests/test_units.py -v` → PASS; poi `pytest` → verde.
+- [x] **Step 4: Eseguire i test.** `pytest tests/test_units.py -v` → PASS; poi `pytest` → verde.
 
-- [ ] **Step 5: Commit** — `feat(strumenti): aggiunge il convertitore di unità con elenco chiuso`.
+- [x] **Step 5: Commit** — `feat(strumenti): aggiunge il convertitore di unità con elenco chiuso`.
 
 ---
 
