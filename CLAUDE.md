@@ -3,6 +3,7 @@
 Progetto del corso «Deep Learning e LLM: costruire chatbot e agenti».
 La cartella del progetto è `"C:\Users\diegorosiglioni\Desktop\paolo\test_paolo"`; all'inizio contiene soltanto questo file.
 Requisiti, specifica e piano: `assistente-laboratorio/docs/superpowers/`.
+Stato corrente e prossimo passo: `assistente-laboratorio/docs/superpowers/handoff.md` (leggerlo per primo).
 
 ## Struttura e comandi
 - Codice in `assistente-laboratorio/assistente/`: `config.py`, `modello.py`, `strumenti.py`,
