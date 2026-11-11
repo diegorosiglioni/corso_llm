@@ -1,10 +1,12 @@
-"""Configuration read from environment variables."""
+"""Configuration read from environment variables and from the scope file they point to."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 DEFAULT_NOTES_DB = "data/notes.sqlite3"
+DEFAULT_SCOPE_FILE = str(Path(__file__).parent / "data" / "scope.txt")
 
 
 @dataclass(frozen=True)
@@ -14,6 +16,8 @@ class Config:
     max_steps: int = 5  # MAX_STEPS   (integer >= 1)
     log_level: str = "INFO"  # LOG_LEVEL   (DEBUG, INFO, WARNING, ERROR)
     notes_db: str = DEFAULT_NOTES_DB  # NOTES_DB    (path of the SQLite file)
+    scope_file: str = DEFAULT_SCOPE_FILE  # SCOPE_FILE  (text file with the scope)
+    scope: str = ""  # text read from scope_file
 
 
 class ConfigError(Exception):
@@ -58,6 +62,17 @@ def load_config(env: Mapping[str, str]) -> Config:
 
     notes_db = read("NOTES_DB") or DEFAULT_NOTES_DB
 
+    scope_file = read("SCOPE_FILE") or DEFAULT_SCOPE_FILE
+    scope = ""
+    try:
+        scope = Path(scope_file).read_text(encoding="utf-8-sig").strip()
+    except (OSError, UnicodeDecodeError) as error:
+        reason = getattr(error, "strerror", None) or str(error)
+        problems.append(f"SCOPE_FILE non leggibile: '{scope_file}' ({reason}).")
+    else:
+        if not scope:
+            problems.append(f"SCOPE_FILE vuoto: '{scope_file}'.")
+
     if problems:
         raise ConfigError(" ".join(problems))
-    return Config(base_url, model, max_steps, log_level, notes_db)
+    return Config(base_url, model, max_steps, log_level, notes_db, scope_file, scope)

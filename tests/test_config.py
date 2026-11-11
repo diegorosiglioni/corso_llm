@@ -1,8 +1,13 @@
+from pathlib import Path
+
 import pytest
 
-from assistant.config import Config, ConfigError, load_config
+import assistant.config
+from assistant.config import DEFAULT_SCOPE_FILE, Config, ConfigError, load_config
 
 VALID = {"LMSTUDIO_BASE_URL": "http://localhost:1234/v1", "LMSTUDIO_MODEL": "google/gemma-4-e2b"}
+
+DEFAULT_SCOPE = Path(DEFAULT_SCOPE_FILE).read_text(encoding="utf-8").strip()
 
 
 def error(env) -> str:
@@ -12,9 +17,9 @@ def error(env) -> str:
 
 
 def test_valid_values_and_defaults():
-    c = load_config(VALID)
-    assert c == Config(
-        "http://localhost:1234/v1", "google/gemma-4-e2b", 5, "INFO", "data/notes.sqlite3"
+    assert load_config(VALID) == Config(
+        "http://localhost:1234/v1", "google/gemma-4-e2b", 5, "INFO", "data/notes.sqlite3",
+        DEFAULT_SCOPE_FILE, DEFAULT_SCOPE,
     )
 
 
@@ -75,3 +80,52 @@ def test_all_problems_in_one_message():
         "Manca LMSTUDIO_BASE_URL. Manca LMSTUDIO_MODEL. "
         "MAX_STEPS deve essere un intero ≥ 1, ricevuto 'zero'."
     )
+
+
+# --- scope (lesson 6, step 1) ---
+
+def test_default_scope_is_the_package_file():
+    c = load_config(VALID)
+    assert Path(c.scope_file) == Path(assistant.config.__file__).parent / "data" / "scope.txt"
+    assert c.scope.startswith("L'assistente del laboratorio si occupa solo di:")
+    assert c.scope.endswith("Ogni altra richiesta è fuori ambito.")
+
+
+def test_scope_file_override(tmp_path):
+    f = tmp_path / "ambito.txt"
+    f.write_text("  Solo calcoli.\n", encoding="utf-8")
+    c = load_config({**VALID, "SCOPE_FILE": f" {f} "})
+    assert (c.scope_file, c.scope) == (str(f), "Solo calcoli.")
+
+
+def test_blank_scope_file_uses_default():
+    assert load_config({**VALID, "SCOPE_FILE": "  "}).scope_file == DEFAULT_SCOPE_FILE
+
+
+def test_missing_scope_file(tmp_path):
+    missing = tmp_path / "manca.txt"
+    assert f"SCOPE_FILE non leggibile: '{missing}' (" in error({**VALID, "SCOPE_FILE": str(missing)})
+
+
+def test_scope_file_is_a_directory(tmp_path):
+    assert f"SCOPE_FILE non leggibile: '{tmp_path}' (" in error(
+        {**VALID, "SCOPE_FILE": str(tmp_path)}
+    )
+
+
+def test_empty_scope_file(tmp_path):
+    f = tmp_path / "vuoto.txt"
+    f.write_text("  \n", encoding="utf-8")
+    assert error({**VALID, "SCOPE_FILE": str(f)}) == f"SCOPE_FILE vuoto: '{f}'."
+
+
+def test_scope_file_with_bom(tmp_path):
+    f = tmp_path / "bom.txt"
+    f.write_bytes(b"\xef\xbb\xbfSolo calcoli.")
+    assert load_config({**VALID, "SCOPE_FILE": str(f)}).scope == "Solo calcoli."
+
+
+def test_scope_problem_listed_with_the_others(tmp_path):
+    missing = tmp_path / "manca.txt"
+    message = error({"LMSTUDIO_BASE_URL": "http://h/v1", "SCOPE_FILE": str(missing)})
+    assert message.startswith("Manca LMSTUDIO_MODEL. SCOPE_FILE non leggibile: ")
