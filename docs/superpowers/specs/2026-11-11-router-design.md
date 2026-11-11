@@ -1,8 +1,9 @@
 # Specifica — Lezione 6, Step 1: router (conversazione o fuori ambito)
 
 Data: 2026-11-11
-Stato: in revisione
+Stato: approvata il 2026-11-11
 Requisiti: [`../requisiti.md`](../requisiti.md), §9 (RF-23…RF-27, CA-23…CA-29).
+Piano: [`../plans/2026-11-11-router.md`](../plans/2026-11-11-router.md).
 Specifiche precedenti: [`2026-11-09-strumenti-mcp-design.md`](2026-11-09-strumenti-mcp-design.md)
 (lezione 5) e quelle che richiama.
 Fonte didattica: `LLM_Lez_6.pdf`, slide 3 («Il grafo dopo i primi tre step») e slide 4

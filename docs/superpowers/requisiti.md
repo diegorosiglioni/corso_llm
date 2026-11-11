@@ -2,8 +2,8 @@
 
 Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5)
 Stato: §1–§7 approvati il 2026-10-26; revisioni del 2026-11-09 e §8 approvate il 2026-11-09
-(insieme alla specifica `specs/2026-11-09-strumenti-mcp-design.md`); §9 (lezione 6, Step 1) in
-revisione dal 2026-11-11
+(insieme alla specifica `specs/2026-11-09-strumenti-mcp-design.md`); §9 (lezione 6, Step 1)
+approvata il 2026-11-11
 
 Questo documento fissa **che cosa** deve fare l'applicazione. Il **come** (architettura,
 moduli, dettagli del grafo) sarà descritto nella specifica, che rimanda a questi requisiti.
@@ -240,7 +240,7 @@ riportato così com'è, con il punto esatto del percorso (RT-4).
 
 ## 9. Lezione 6, Step 1 — router (2026-11-11)
 
-Riferimento: `LLM_Lez_6.pdf`, slide 3 e 4 (riassunto in `lezione6.md`). Stato: in revisione,
+Riferimento: `LLM_Lez_6.pdf`, slide 3 e 4 (riassunto in `lezione6.md`). Stato: approvati il 2026-11-11,
 insieme alla specifica `specs/2026-11-11-router-design.md`.
 
 - **RF-23** *Ambito in configurazione* — L'ambito dell'assistente è un testo in un file, non nel
