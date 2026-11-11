@@ -1,8 +1,11 @@
 # Handoff — Assistente del laboratorio
 
 Data: 2026-11-11
-Stato: **lezione 6, Step 1 (router) implementato e verificato su `dev`, non ancora pubblicato.**
-Specifica [`specs/2026-11-11-router-design.md`](specs/2026-11-11-router-design.md), piano
+Stato: **lezione 6, Step 2 (revisore): specifica approvata, piano da scrivere.** Step 1 (router)
+implementato e verificato su `dev`, non ancora pubblicato.
+Step 2: specifica [`specs/2026-11-11-revisore-design.md`](specs/2026-11-11-revisore-design.md),
+requisiti §10 (RF-28…RF-33, CA-30…CA-37). Step 1: specifica
+[`specs/2026-11-11-router-design.md`](specs/2026-11-11-router-design.md), piano
 [`plans/2026-11-11-router.md`](plans/2026-11-11-router.md), requisiti §9 (RF-23…RF-27,
 CA-23…CA-29). Il push si fa solo su richiesta dell'utente (regola in `CLAUDE.md`, sezione «Git»).
 La lezione 5 resta come descritta più sotto.
@@ -18,20 +21,47 @@ storici e non sono stati riscritti.
 
 ## Lezione 6 — prossimo passo (2026-11-11)
 
-**Prossimo: Step 2 · Revisore**, con un nuovo ciclo Superpowers (brainstorming → specifica →
-piano → TDD → verifica → commit). Prompt da incollare: [`prossimo-prompt.txt`](prossimo-prompt.txt).
+**Prossimo: piano dello Step 2 · Revisore** con la skill `superpowers:writing-plans`, partendo
+dalla specifica approvata [`specs/2026-11-11-revisore-design.md`](specs/2026-11-11-revisore-design.md)
+(salvare in `plans/2026-11-11-revisore.md`). Poi: revisione del piano da parte dell'utente e
+scelta del modo di esecuzione → implementazione TDD per incrementi (§12 della specifica) →
+verifica → commit. Prompt per riprendere: [`prossimo-prompt.txt`](prossimo-prompt.txt).
 Traccia completa: [`lezione6.md`](lezione6.md); lo schema del grafo dei tre step è la slide 3 di
 `LLM_Lez_6.pdf` (non tracciato). In questa macchina manca `pdftoppm`: le slide si leggono come
 immagini con PyMuPDF installato nella scratchpad (`pip install --target`), non nel progetto.
 
-Da tenere presente per lo Step 2:
-- il grafo oggi è `START → router → llm ⇄ tools / limit → END` e `router → refusal → END`; nella
-  slide 3 il revisore sta dopo l'agente, quando non ci sono più tool_call;
-- `State` ha già `category` e `reason` (del router): il revisore avrà campi propri;
-- router e modello del router sono in `router.py` e `model.py` (`create_router_model`,
-  `guard_router_output`): schema di output strutturato e conversione degli errori in
-  `RouterOutputError` sono un esempio riusabile;
-- le prove reali durano ormai circa 10 minuti (12 prove).
+### Step 2 — brainstorming concluso (2026-11-11)
+
+Decisioni prese con l'utente, una alla volta (dettagli e motivi nella specifica, §1):
+1. il motivo del revisore entra nella cronologia come `HumanMessage(name="reviewer")` e **resta**
+   nella sessione insieme alla bozza rifiutata; `router_messages` le scarta entrambe;
+2. il revisore vede **solo** la domanda dell'utente e la risposta proposta (niente cronologia,
+   niente strumenti);
+3. `MAX_REVIEWS` (default 2) conta le chiamate al revisore nel turno; `MAX_STEPS` **non** si
+   azzera dopo un rifiuto e il revisore non consuma passaggi;
+4. si rivedono solo le risposte finali dell'agente (non il rifiuto né l'avviso di `limit`);
+   output non valido → risposta approvata con WARNING `fallback=invalid_output`; `APIError` al
+   terminale;
+5. approccio: modulo `reviewer.py` gemello di `router.py`, nodo `reviewer` esplicito nel grafo,
+   `guard_router_output` → `guard_structured_output(structured, error_type)`;
+6. prova reale dell'evidenza minima con la **prima risposta dell'agente imposta**
+   (`PartialFirstAnswer`) e revisore e riscrittura reali, più una prova interamente reale.
+
+Da tenere presente nel piano:
+- l'unico test esistente che cambia attesa è il caso «nessuna tool_call» di `test_route_cases`
+  (`"end"` → `"reviewer"`); gli altri restano verdi grazie all'`ApprovingReviewer` predefinito
+  di `fake_graph`;
+- `start_turn` e `routed_turn` in `test_graph.py` invocano il grafo con `{"messages", "steps"}`:
+  vanno aggiunti `"reviews": 0` (come in `Session.send`);
+- la nuova firma di `build_graph` rompe `__main__.py`, `conftest.py` e `test_real.py` finché non
+  sono aggiornati: grafo, `Session`, avvio e `conftest` vanno in un solo commit (lezione dello
+  Step 1);
+- nelle prove reali cercare `step=N/M node=llm` per l'agente: `next_node=llm` compare anche nelle
+  righe di router e revisore;
+- rischio da verificare subito nella prova reale: come LM Studio tratta il campo `name` del
+  messaggio utente (specifica §14);
+- le prove reali durano già circa 10 minuti (12 prove); con il revisore saranno di più;
+- README non ancora toccato: va aggiornato solo con comandi verificati, a implementazione fatta.
 
 ## Lezione 6, Step 1 — router (2026-11-11)
 

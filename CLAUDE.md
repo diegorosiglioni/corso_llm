@@ -41,9 +41,10 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
 - si avvia anche con Docker Compose.
 
 ## Confini
-- Implementare solo i requisiti concordati. MCP e i quattro strumenti della lezione 5 e lo
-  Step 1 della lezione 6 (router) sono concordati; gli step successivi della lezione 6 (revisore,
-  riassunto, resource e prompt MCP, servizio HTTP, back-end, front-end, Compose a più container),
+- Implementare solo i requisiti concordati. MCP e i quattro strumenti della lezione 5 e gli
+  Step 1 (router) e 2 (revisore, specifica approvata) della lezione 6 sono concordati; gli step
+  successivi della lezione 6 (riassunto, resource e prompt MCP, servizio HTTP, back-end,
+  front-end, Compose a più container),
   altri strumenti, altri server MCP, workflow e RAG non vanno anticipati: ognuno avrà il proprio
   ciclo di specifica e piano.
 - Niente interfacce grafiche, servizi cloud o framework non concordati.

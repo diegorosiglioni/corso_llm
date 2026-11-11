@@ -3,7 +3,7 @@
 Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5)
 Stato: §1–§7 approvati il 2026-10-26; revisioni del 2026-11-09 e §8 approvate il 2026-11-09
 (insieme alla specifica `specs/2026-11-09-strumenti-mcp-design.md`); §9 (lezione 6, Step 1)
-approvata il 2026-11-11
+e §10 (lezione 6, Step 2) approvate il 2026-11-11
 
 Questo documento fissa **che cosa** deve fare l'applicazione. Il **come** (architettura,
 moduli, dettagli del grafo) sarà descritto nella specifica, che rimanda a questi requisiti.
@@ -272,3 +272,42 @@ insieme alla specifica `specs/2026-11-11-router-design.md`.
 | CA-27 | Con LM Studio: «Che ore sono a Tokyo?» → `category=conversation` e `node=llm`; «Chi ha vinto i Mondiali del 2006?» → rifiuto, nessun `node=llm`, nessuno strumento; «Ciao!» → `conversation`. | reale |
 | CA-28 | Le prove reali precedenti (CA-2…CA-4, CA-16…CA-21) passano anche con il router attivo. | reale |
 | CA-29 | Da terminale, in locale e con Docker Compose, una domanda in ambito e una fuori ambito mostrano nei log i due percorsi. | reale, manuale |
+
+## 10. Lezione 6, Step 2 — revisore (2026-11-11)
+
+Riferimento: `LLM_Lez_6.pdf`, slide 3 e slide dello Step 2 (riassunto in `lezione6.md`). Stato:
+approvati il 2026-11-11, insieme alla specifica `specs/2026-11-11-revisore-design.md`.
+
+- **RF-28** *Revisore* — Dopo la risposta finale dell'agente (nessuna richiesta di strumenti) un
+  nodo LLM (stesso modello, prompt di sistema diverso, nessuno strumento) riceve solo la domanda
+  dell'utente e la risposta proposta e decide se la risposta è coerente: risponde a tutte le parti
+  della domanda senza uscire dal tema. Non giudica stile, lunghezza né esattezza dei dati. Il
+  rifiuto del router e l'avviso del limite dei passaggi non vengono rivisti.
+- **RF-29** *Output strutturato* — Il revisore produce un motivo e un verdetto (`coherent`: sì o
+  no).
+- **RF-30** *Motivo nella cronologia* — Se la risposta non è coerente, il motivo entra nella
+  cronologia come indicazione per l'agente (un messaggio utente marcato come del revisore) e il
+  turno torna all'agente. Bozza rifiutata e indicazione restano nella cronologia della sessione; il
+  router non le vede. La domanda giudicata resta sempre quella dell'utente.
+- **RF-31** *Limite delle revisioni* — `MAX_REVIEWS` (intero ≥ 1, default 2) fissa le chiamate al
+  revisore in un turno; il contatore sta nello stato. Al limite si restituisce l'ultima risposta
+  dell'agente e il log lo segnala con un WARNING. Il revisore non consuma i passaggi di RF-9, che
+  restano il limite totale delle chiamate all'agente nel turno. Un valore non valido impedisce
+  l'avvio con un messaggio comprensibile (come RF-14).
+- **RF-32** *Errori del revisore* — Se l'output del revisore non è valido, la risposta passa come
+  coerente e il log lo segnala con un WARNING. Gli errori di collegamento con LM Studio sono
+  trattati come per l'agente.
+- **RF-33** *Log* — Per ogni revisione il log riporta numero e limite della revisione, verdetto,
+  motivo e nodo successivo (`llm` o `end`); il raggiungimento del limite e il ripiego sono
+  WARNING. All'avvio il log riporta `max_reviews`.
+
+| ID | Verifica | Come |
+|----|----------|------|
+| CA-30 | `MAX_REVIEWS` predefinito 2, valori non validi → «Configurazione non valida: …», exit 1; il revisore riceve solo domanda e risposta, anche dopo gli strumenti e alla seconda revisione. | automatica |
+| CA-31 | Revisore simulato che approva → una chiamata all'agente e una al revisore; log `coherent=true … next_node=end`; nessuna indicazione nella cronologia. | automatica |
+| CA-32 | Domanda in due parti con risposta parziale simulata → rifiuto con motivo, indicazione all'agente, nuova risposta completa approvata; log dei due passaggi. | automatica |
+| CA-33 | Revisore simulato che rifiuta sempre → revisore e agente chiamati `MAX_REVIEWS` volte, ultima risposta restituita, WARNING `review_limit_reached`. | automatica |
+| CA-34 | Output del revisore non valido o `None` → risposta approvata con WARNING `fallback=invalid_output`; errore di LM Studio nel revisore → cronologia invariata. | automatica |
+| CA-35 | Rifiuto del router e avviso di `limit` non rivisti; il revisore non consuma passaggi; limite dei passaggi durante una riscrittura → `limit`. | automatica |
+| CA-36 | Con LM Studio: prima risposta parziale imposta → rifiuto motivato del revisore reale e risposta completa dell'agente reale entro il limite; la stessa domanda interamente reale → risposta completa e righe `node=reviewer` nei log. | reale |
+| CA-37 | Le prove reali precedenti (CA-2…CA-4, CA-16…CA-21, CA-27) passano con il revisore attivo; da terminale, in locale e con Docker Compose, la domanda in due parti mostra le righe `node=reviewer`. | reale, manuale |

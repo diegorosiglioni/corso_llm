@@ -1,16 +1,7 @@
-Leggi il CLAUDE.md e poi docs/superpowers/handoff.md (sezione «Lezione 6 — prossimo passo») e docs/superpowers/lezione6.md, che riassume per intero la traccia LLM_Lez_6.pdf. Controlla lo stato della repository.
+Leggi il CLAUDE.md e poi docs/superpowers/handoff.md (sezioni «Lezione 6 — prossimo passo» e «Step 2 — brainstorming concluso»). Controlla lo stato della repository.
 
-Procediamo uno step alla volta, con il ciclo Superpowers completo per ciascuno (brainstorming, specifica approvata, piano approvato, implementazione TDD, verifica, commit). Lo Step 1 (router) è completato.
+Stiamo realizzando lo Step 2 · Revisore della lezione 6 con il ciclo Superpowers completo. Brainstorming e specifica sono conclusi: la specifica approvata è docs/superpowers/specs/2026-11-11-revisore-design.md (requisiti §10 in docs/superpowers/requisiti.md).
 
-Vogliamo realizzare lo Step 2 · Revisore: la risposta è coerente con la domanda?
-Obiettivo: una risposta incompleta o fuori tema torna all'agente con il motivo, finché non è coerente o si raggiunge il limite.
-Requisiti:
-1. nodo revisore che riceve la domanda dell'utente e la risposta proposta dall'agente;
-2. output strutturato: coerente (sì o no) e motivo;
-3. se non coerente, il motivo entra nella cronologia come indicazione per l'agente;
-4. limite di revisioni nello stato: al limite si restituisce l'ultima risposta e lo si segnala nei log.
-Evidenze richieste: domanda in due parti con risposta parziale → rifiuto motivato e nuova risposta completa; risposta coerente approvata al primo passaggio; limite rispettato con un revisore simulato che rifiuta sempre; una prova reale con LM Studio.
-Evidenza minima di consegna (slide 19): risposta incompleta corretta dopo la revisione, entro il limite. Per lo step servono anche test automatici, prova reale con LM Studio, README aggiornato e commit.
-Posizione nel grafo (slide 3): Agente → Revisore; coerente → END; non coerente + motivo → Agente.
+Prossimo passo: scrivi il piano di implementazione con la skill writing-plans, partendo dalla specifica approvata, e salvalo in docs/superpowers/plans/2026-11-11-revisore.md. Segui gli incrementi del §12 della specifica e i punti «Da tenere presente nel piano» dell'handoff. Poi fermati: non iniziare l'implementazione prima che io abbia approvato il piano e scelto il modo di esecuzione.
 
-Il progetto attuale funziona fino allo Step 1: estendilo senza riscriverlo e non anticipare gli step successivi (riassunto, resource, prompt, HTTP, ecc.). Chiariscimi le decisioni mancanti una alla volta e proponi una soluzione semplice. Distingui i test con il modello simulato dalle prove reali con LM Studio. Le evidenze richieste devono essere verificabili nei log o nei test. Non iniziare l'implementazione prima dell'approvazione della specifica e del piano.
+Estendi il progetto senza riscriverlo e non anticipare gli step successivi (riassunto, resource, prompt, HTTP, ecc.). Distingui i test con il modello simulato dalle prove reali con LM Studio; le evidenze richieste devono essere verificabili nei log o nei test.
