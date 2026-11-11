@@ -2,7 +2,8 @@
 
 Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5)
 Stato: §1–§7 approvati il 2026-10-26; revisioni del 2026-11-09 e §8 approvate il 2026-11-09
-(insieme alla specifica `specs/2026-11-09-strumenti-mcp-design.md`)
+(insieme alla specifica `specs/2026-11-09-strumenti-mcp-design.md`); §9 (lezione 6, Step 1) in
+revisione dal 2026-11-11
 
 Questo documento fissa **che cosa** deve fare l'applicazione. Il **come** (architettura,
 moduli, dettagli del grafo) sarà descritto nella specifica, che rimanda a questi requisiti.
@@ -236,3 +237,38 @@ e laboratorio. Stato: approvati il 2026-11-09.
 
 Se una prova reale fallisce perché il modello non sceglie lo strumento o lo usa male, l'esito viene
 riportato così com'è, con il punto esatto del percorso (RT-4).
+
+## 9. Lezione 6, Step 1 — router (2026-11-11)
+
+Riferimento: `LLM_Lez_6.pdf`, slide 3 e 4 (riassunto in `lezione6.md`). Stato: in revisione,
+insieme alla specifica `specs/2026-11-11-router-design.md`.
+
+- **RF-23** *Ambito in configurazione* — L'ambito dell'assistente è un testo in un file, non nel
+  codice: per default `assistant/data/scope.txt`, sostituibile con la variabile `SCOPE_FILE`. Sono
+  in ambito gli argomenti degli strumenti (data e ora, conversioni di unità, calcoli, catalogo dei
+  corsi, note), i saluti, i ringraziamenti, le domande sull'assistente, le presentazioni
+  dell'utente e le domande su quanto detto nella conversazione. Un file mancante, illeggibile o
+  vuoto impedisce l'avvio con un messaggio comprensibile (come RF-14).
+- **RF-24** *Router* — Prima dell'agente un nodo LLM (stesso modello, prompt di sistema diverso)
+  classifica l'ultimo messaggio dell'utente con un output strutturato: categoria (`conversation`
+  oppure `out_of_scope`) e motivo. Legge l'ambito e la cronologia filtrata (domande dell'utente e
+  risposte testuali dell'assistente); non riceve gli strumenti e non decide se usarli.
+- **RF-25** *Instradamento* — `conversation` → agente, che sceglie gli strumenti come prima;
+  `out_of_scope` → nodo di rifiuto → fine, senza eseguire l'agente. Il rifiuto riporta il motivo,
+  invita a chiedere che cosa sa fare l'assistente ed entra nella cronologia come una risposta.
+- **RF-26** *Errori del router* — Se l'output del router non è valido, il turno prosegue verso
+  l'agente come `conversation` e il log lo segnala con un WARNING. Gli errori di collegamento con
+  LM Studio sono trattati come per l'agente.
+- **RF-27** *Log* — Per ogni turno il log riporta la categoria, il motivo e il nodo successivo
+  (`llm` o `refusal`); il nodo di rifiuto scrive la propria riga. Il limite di RF-9 conta solo le
+  chiamate del modello dell'agente: la chiamata del router non consuma passaggi.
+
+| ID | Verifica | Come |
+|----|----------|------|
+| CA-23 | Ambito predefinito letto dal pacchetto; `SCOPE_FILE` personalizzato usato; file mancante o vuoto → «Configurazione non valida: …», exit 1. | automatica |
+| CA-24 | Router simulato `conversation` → l'agente viene eseguito; il log contiene categoria, motivo e `next_node=llm`; il router riceve l'ambito e la cronologia filtrata. | automatica |
+| CA-25 | Router simulato `out_of_scope` → risposta di rifiuto con il motivo; il modello dell'agente non viene chiamato; nel log `node=refusal` e nessuna riga `node=llm`. | automatica |
+| CA-26 | Output del router non valido → l'agente viene eseguito con il WARNING `fallback=invalid_output`; errore di LM Studio nel router → cronologia invariata. | automatica |
+| CA-27 | Con LM Studio: «Che ore sono a Tokyo?» → `category=conversation` e `node=llm`; «Chi ha vinto i Mondiali del 2006?» → rifiuto, nessun `node=llm`, nessuno strumento; «Ciao!» → `conversation`. | reale |
+| CA-28 | Le prove reali precedenti (CA-2…CA-4, CA-16…CA-21) passano anche con il router attivo. | reale |
+| CA-29 | Da terminale, in locale e con Docker Compose, una domanda in ambito e una fuori ambito mostrano nei log i due percorsi. | reale, manuale |
