@@ -54,7 +54,7 @@ poi la documentazione (Task 6).
 | CA-23 | `pytest tests/test_config.py tests/test_main.py` | ✅ ambito predefinito, `SCOPE_FILE`, file mancante, cartella, file vuoto, BOM; exit 1 all'avvio |
 | CA-24, CA-25 | `pytest tests/test_graph.py` | ✅ in ambito: log con categoria, motivo, `next_node=llm`; fuori ambito: rifiuto con motivo, `model.calls == []`, nessun `node=llm` |
 | CA-26 | `pytest tests/test_graph.py tests/test_session.py tests/test_model.py` | ✅ ripiego su errore di output e su `None`; `APIConnectionError` del router → cronologia invariata |
-| — | `pytest` | ✅ 200 passed, 12 deselected |
+| — | `pytest` | ✅ 201 passed, 12 deselected |
 | CA-27, CA-28 | `pytest -m real -v` (LM Studio, `google/gemma-4-e2b`, contesto 8192) | prima esecuzione 9 passed, 3 failed (falsi rifiuti, vedi sotto); dopo il ritocco dei testi ✅ 12 passed in 601 s |
 | CA-29 | `"Che ore sono a Tokyo?", "Chi ha vinto i Mondiali del 2006?", "esci"` in pipe verso `python -m assistant` e verso `docker compose run --rm -T assistant` (dopo `docker compose build`) | ✅ in locale e in Docker: `category=conversation … next_node=llm` e `get_current_time`; poi `category=out_of_scope … next_node=refusal`, `node=refusal`, nessun `node=llm`; in Docker `scope_file=/app/assistant/data/scope.txt` |
 | — | LM Studio non raggiungibile (`LMSTUDIO_BASE_URL=http://localhost:9/v1`) | ✅ «Errore: LM Studio non ha risposto correttamente (Connection error.). Riprova.», poi «Arrivederci!», exit 0 |
@@ -77,6 +77,29 @@ quelle domande, non che il router classifichi sempre così.
   converte `ValueError` (anche `pydantic.ValidationError`), `OpenAIRefusalError`,
   `openai.LengthFinishReasonError` e `openai.ContentFilterFinishReasonError` in
   `RouterOutputError`; `openai.APIError` passa fino al terminale.
+
+### Revisione indipendente finale (2026-11-11)
+
+Un revisore con contesto pulito ha esaminato `2b13342..7fa0149`. Esito: «Ready to merge: Yes»,
+nessun problema critico o importante. Due punti segnalati come minori sono stati rivalutati come
+importanti per il loro effetto e corretti, ciascuno con un test che prima falliva:
+- la prova reale `test_router_in_scope_reaches_the_agent` controllava `"node=llm"`, che compare
+  anche nella riga del router (`next_node=llm`): ora cerca `step=N/M node=llm` (rieseguita: le due
+  prove reali del router passano, 72 s);
+- `router_messages` scartava le risposte vuote dell'agente: il router avrebbe ricevuto due
+  messaggi utente di seguito, che alcuni template di chat rifiutano (ogni turno successivo
+  sarebbe fallito). Ora tiene le risposte senza tool_call anche se vuote
+  (`test_router_messages_keep_alternation_after_an_empty_answer`); specifica §5 allineata.
+
+Rimandati (minori):
+- il rifiuto si legge «…fuori dal mio ambito: La richiesta…» (motivo con la maiuscola);
+- il WARNING di ripiego per un risultato `None` scrive `error="None"`, poco informativo;
+- `INVALID_OUTPUT_ERRORS` comprende tutto `ValueError`: anche un errore diverso dall'output
+  diventerebbe un ripiego (visibile nei log); il testo dell'errore del parser è lungo;
+- `SCOPE_FILE` nel `.env` vale solo per Docker e deve indicare un percorso dentro l'immagine
+  (relativo a `/app`): il README non lo dice;
+- `test_create_router_model_needs_no_server` non verifica `json_schema` né l'assenza di
+  strumenti; manca un test per `scope.txt` non UTF-8 (il codice lo gestisce).
 
 ### Punti aperti (Step 1)
 
@@ -106,7 +129,7 @@ Da sapere:
   `.venv/Scripts/python.exe` (o `py -3.13`).
 - **`LLM_Lez_5.pdf`** e **`LLM_Lez_6.pdf`** non sono tracciati: non aggiungerli a Git senza
   chiedere.
-- Suite predefinita: `pytest` → `200 passed, 12 deselected` (Step 1 della lezione 6), in circa 25 s. I test MCP avviano il
+- Suite predefinita: `pytest` → `201 passed, 12 deselected` (Step 1 della lezione 6), in circa 25 s. I test MCP avviano il
   server come sottoprocesso, circa 1 s ciascuno.
 
 ## Che cosa c'è oggi (lezione 5)
@@ -287,7 +310,7 @@ Da PowerShell nella radice della repository:
 & "$HOME\.lmstudio\bin\lms.exe" load google/gemma-4-e2b --context-length 8192 -y
 $env:LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
 $env:LMSTUDIO_MODEL = "google/gemma-4-e2b"
-.\.venv\Scripts\python.exe -m pytest            # senza modello: 200 passed, 12 deselected
+.\.venv\Scripts\python.exe -m pytest            # senza modello: 201 passed, 12 deselected
 .\.venv\Scripts\python.exe -m pytest -m real -v # 12 prove reali, circa 10 minuti
 .\.venv\Scripts\python.exe -m assistant
 docker compose build

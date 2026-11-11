@@ -127,9 +127,10 @@ Il prompt non nomina gli strumenti e non chiede quale usare.
 
 ### Funzioni
 
-- `router_messages(history)`: restituisce, nell'ordine, le `HumanMessage` e le `AIMessage` che
-  hanno testo e nessuna `tool_calls` (né `invalid_tool_calls`). Scarta `ToolMessage`, `AIMessage`
-  di sole richieste di strumenti e messaggi di sistema. Non modifica la cronologia.
+- `router_messages(history)`: restituisce, nell'ordine, le `HumanMessage` e le `AIMessage` senza
+  `tool_calls` (né `invalid_tool_calls`), anche se vuote: così utente e assistente restano
+  alternati (correzione della revisione finale). Scarta `ToolMessage`, `AIMessage` con richieste
+  di strumenti e messaggi di sistema. Non modifica la cronologia.
 - `refusal_text(reason)`: `Mi dispiace, questa domanda è fuori dal mio ambito: {motivo}. Chiedimi
   pure che cosa so fare.` Il motivo viene ripulito da spazi e da un punto finale; se resta vuoto il
   testo diventa `Mi dispiace, questa domanda è fuori dal mio ambito. Chiedimi pure che cosa so

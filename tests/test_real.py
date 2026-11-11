@@ -6,6 +6,7 @@ Each test opens a real MCP server (stdio) with the notes store in tmp_path.
 import json
 import logging
 import os
+import re
 from contextlib import contextmanager
 from datetime import datetime
 
@@ -181,7 +182,8 @@ def test_router_in_scope_reaches_the_agent(real_session, caplog):
     caplog.set_level(logging.INFO, logger="assistant.graph")
     real_session.send("Che ore sono a Tokyo?")
     assert any("category=conversation" in line for line in router_lines(caplog)), caplog.text
-    assert "node=llm" in caplog.text
+    # "next_node=llm" in the router's own line also contains "node=llm": look for the agent's line.
+    assert re.search(r"step=\d+/\d+ node=llm", caplog.text), caplog.text
 
 
 def test_router_refuses_out_of_scope(real_session, caplog):

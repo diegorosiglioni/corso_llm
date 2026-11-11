@@ -39,14 +39,16 @@ class RouterOutputError(Exception):
 
 
 def router_messages(history: list[AnyMessage]) -> list[AnyMessage]:
-    """User questions and text answers of the assistant, without tool requests or results."""
+    """User questions and final answers of the assistant, without tool requests or results.
+
+    Final answers are kept even when empty, so user and assistant messages still alternate.
+    """
     return [
         message
         for message in history
         if isinstance(message, HumanMessage)
         or (
             isinstance(message, AIMessage)
-            and message.text.strip()
             and not message.tool_calls
             and not message.invalid_tool_calls
         )

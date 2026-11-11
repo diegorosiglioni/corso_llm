@@ -21,7 +21,7 @@ def history():
     )
     full = [
         SystemMessage("x"), q1, tool_call(), ToolMessage("{}", tool_call_id="c1"),
-        invalid, AIMessage(""), answer, q2,
+        invalid, answer, q2,
     ]
     return full, [q1, answer, q2]
 
@@ -58,3 +58,10 @@ def test_refusal_text():
     assert refusal_text("  ") == (
         "Mi dispiace, questa domanda è fuori dal mio ambito. Chiedimi pure che cosa so fare."
     )
+
+
+def test_router_messages_keep_alternation_after_an_empty_answer():
+    # An agent turn may end with an empty answer (Session shows EMPTY_REPLY): dropping it would
+    # send two user messages in a row, which some chat templates reject.
+    history = [HumanMessage("Ciao"), AIMessage(""), HumanMessage("Che ore sono?")]
+    assert router_messages(history) == history
