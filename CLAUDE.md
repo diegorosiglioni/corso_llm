@@ -44,7 +44,7 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
 - Niente interfacce grafiche, servizi cloud o framework non concordati.
 - La cartella `lezione3/` è una lezione passata: resta solo in locale, esclusa da Git con
   `.gitignore`. Non leggerla per copiarne il codice e non modificarla.
-- Lavorare nel branch corrente; nessun branch o worktree nuovo se non richiesto.
+- Lavorare nel branch `dev`; nessun altro branch o worktree se non richiesto.
 
 ## Scelte tecniche
 - Python, codice sincrono e moduli piccoli, con una separazione semplice tra
@@ -79,7 +79,12 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
   `docs: ...`.
 - Prima di ogni commit: `git status`, controllo del diff, staging selettivo dei soli file pertinenti.
 - Mai versionare credenziali, `.env`, ambienti virtuali, cache o pesi dei modelli.
-- Push soltanto su mia richiesta.
+- Push soltanto su mia richiesta, e Claude lo esegue per intero, in due passi:
+  1. i commit si fanno su `dev`, mai direttamente su `main`; push con `git push origin dev`;
+  2. `main` si porta allo stesso commit con un avanzamento rapido: `git push origin dev:main`,
+     poi `git fetch origin main:main` per allineare il `main` locale.
+  Se l'avanzamento rapido viene rifiutato (`main` ha commit che `dev` non ha), fermarsi e chiedere:
+  niente `--force`, niente merge automatici.
 
 ## Documentazione
 - Tenere aggiornato il README con configurazione, avvio, test e diagnosi, riportando solo

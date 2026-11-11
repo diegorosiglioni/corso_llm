@@ -8,6 +8,10 @@ revisione indipendente finale e le sue correzioni, il push su `origin/main` è a
 **Lezione 6: traccia letta e riassunta, nessun codice.** Si riparte dallo Step 1 (Router): vedi
 la sezione «Lezione 6 — prossimo passo».
 
+**Branch di lavoro dal 2026-11-11: `dev`.** Su richiesta dell'utente i commit si fanno su `dev`.
+Il push va prima su `origin/dev`, poi `main` si porta allo stesso commit con avanzamento rapido
+(`git push origin dev:main`). Regola completa in `CLAUDE.md`, sezione «Git».
+
 **Struttura cambiata il 2026-11-09, dopo il push.** Su richiesta dell'utente il progetto è
 stato spostato da `assistente-laboratorio/` alla radice della repository. Inoltre `lezione3/`
 è uscita da Git: resta solo in locale, esclusa con `.gitignore`.
