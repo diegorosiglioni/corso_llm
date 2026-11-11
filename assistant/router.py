@@ -18,6 +18,8 @@ Ambito:
 
 Usa la conversazione precedente solo per capire i messaggi brevi che la continuano (per esempio
 «E a Roma?» dopo una domanda sull'ora a Tokyo).
+Giudica che cosa chiede l'utente, non l'argomento delle parole. Se il messaggio potrebbe rientrare
+nell'ambito, scegli conversation; scegli out_of_scope solo quando chiaramente non rientra.
 - conversation: l'ultimo messaggio rientra nell'ambito;
 - out_of_scope: l'ultimo messaggio non rientra nell'ambito.
 Nel motivo spiega la scelta in una frase breve, in italiano."""

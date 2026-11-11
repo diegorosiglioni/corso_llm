@@ -16,7 +16,7 @@ from assistant.catalog import DEFAULT_CATALOG_PATH
 from assistant.config import ConfigError, load_config
 from assistant.graph import build_graph
 from assistant.mcp_client import McpClient, create_mcp_tools, server_command
-from assistant.model import create_model
+from assistant.model import create_model, create_router_model
 from assistant.session import Session
 from assistant.tools import create_current_time_tool
 
@@ -37,7 +37,14 @@ def open_session(config, db):
     command, args, cwd = server_command(db, "WARNING")
     with McpClient(command, args, cwd=cwd) as client:
         tools = [create_current_time_tool(), *create_mcp_tools(client)]
-        yield Session(build_graph(create_model(config, tools), tools, config.max_steps)), client
+        graph = build_graph(
+            create_model(config, tools),
+            tools,
+            config.max_steps,
+            router_model=create_router_model(config),
+            scope=config.scope,
+        )
+        yield Session(graph), client
 
 
 @pytest.fixture
@@ -162,3 +169,31 @@ def test_logs_correlate_call_ids(real_session, caplog):  # CA-21
     assert any(f"variant=mcp tool=add_note call_id={call_id}" in line for line in lines), lines
     assert any(f"execution=ok call_id={call_id}" in line for line in lines), lines
     assert f"tool_message.call_id={call_id} next_node=llm" in lines, lines
+
+
+# --- lesson 6, step 1: router (CA-27) ---
+
+def router_lines(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.getMessage().startswith("node=router")]
+
+
+def test_router_in_scope_reaches_the_agent(real_session, caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    real_session.send("Che ore sono a Tokyo?")
+    assert any("category=conversation" in line for line in router_lines(caplog)), caplog.text
+    assert "node=llm" in caplog.text
+
+
+def test_router_refuses_out_of_scope(real_session, caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    reply = real_session.send("Chi ha vinto i Mondiali del 2006?")
+    assert reply.startswith("Mi dispiace, questa domanda è fuori dal mio ambito"), reply
+    assert "next_node=refusal" in caplog.text, caplog.text
+    assert "node=llm" not in caplog.text
+    assert tool_calls(real_session.messages) == []
+
+
+def test_router_greeting_is_conversation(real_session, caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    real_session.send("Ciao!")
+    assert any("category=conversation" in line for line in router_lines(caplog)), caplog.text

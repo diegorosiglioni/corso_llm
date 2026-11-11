@@ -66,10 +66,10 @@ L'assistente del laboratorio si occupa solo di:
 - data e ora attuali in un fuso orario;
 - conversioni tra unità di misura (lunghezza, massa, temperatura, volume);
 - calcoli aritmetici;
-- corsi del catalogo del laboratorio (ricerca e dettaglio: codice, titolo, sede, durata);
-- note dell'utente (salvare, elencare, eliminare);
+- corsi del catalogo del laboratorio: cercarli su qualsiasi argomento, anche se il catalogo potrebbe non averne, e vederne il dettaglio (codice, titolo, sede, durata);
+- note dell'utente: salvare promemoria e cose da ricordare (su qualsiasi argomento), elencarle, eliminarle;
 - saluti, ringraziamenti e domande sull'assistente e su che cosa sa fare;
-- presentazioni dell'utente e domande su quanto detto in questa conversazione.
+- l'utente che si presenta o dice qualcosa di sé, e le domande su quanto detto in questa conversazione.
 Ogni altra richiesta è fuori ambito.
 ```
 
@@ -116,6 +116,8 @@ Ambito:
 
 Usa la conversazione precedente solo per capire i messaggi brevi che la continuano (per esempio
 «E a Roma?» dopo una domanda sull'ora a Tokyo).
+Giudica che cosa chiede l'utente, non l'argomento delle parole. Se il messaggio potrebbe rientrare
+nell'ambito, scegli conversation; scegli out_of_scope solo quando chiaramente non rientra.
 - conversation: l'ultimo messaggio rientra nell'ambito;
 - out_of_scope: l'ultimo messaggio non rientra nell'ambito.
 Nel motivo spiega la scelta in una frase breve, in italiano.
