@@ -3,7 +3,8 @@
 Applicazione Python da terminale che conversa con un modello locale servito da LM Studio,
 organizzata in un grafo LangGraph esplicito. Il modello usa un orologio locale e sette strumenti
 offerti da un server MCP locale (FastMCP, stdio): convertitore di unità, calcolatrice, catalogo
-dei corsi e note persistenti.
+dei corsi e note persistenti. Prima dell'agente un router LLM controlla che la domanda rientri
+nell'ambito dell'assistente: le domande fuori ambito ricevono un rifiuto senza raggiungere l'agente.
 
 Requisiti e specifica: [`docs/superpowers/`](docs/superpowers/).
 
@@ -50,15 +51,16 @@ delle note in una cartella temporanea (circa 1 s per test).
 
 ## Configurazione
 
-L'applicazione legge solo variabili d'ambiente:
+L'applicazione legge variabili d'ambiente e il file con l'ambito dell'assistente:
 
 | Variabile | Obbligatoria | Default | Significato |
 |-----------|--------------|---------|-------------|
 | `LMSTUDIO_BASE_URL` | sì | — | indirizzo dell'API di LM Studio, es. `http://localhost:1234/v1` |
 | `LMSTUDIO_MODEL` | sì | — | identificativo del modello restituito da `GET /v1/models` |
-| `MAX_STEPS` | no | `5` | chiamate massime al modello in un turno (intero ≥ 1) |
+| `MAX_STEPS` | no | `5` | chiamate massime al modello dell'agente in un turno (intero ≥ 1); il router non conta |
 | `LOG_LEVEL` | no | `INFO` | `DEBUG`, `INFO`, `WARNING` o `ERROR` |
 | `NOTES_DB` | no | `data/notes.sqlite3` | file SQLite delle note, relativo alla cartella di avvio |
+| `SCOPE_FILE` | no | `assistant/data/scope.txt` del pacchetto | file di testo (UTF-8) con l'ambito dell'assistente; un percorso relativo vale dalla cartella di avvio |
 
 `.env.example` è il modello versionato; la copia reale `.env` resta fuori da Git ed è letta da
 Docker Compose:
@@ -78,8 +80,8 @@ $env:LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
 $env:LMSTUDIO_MODEL = "google/gemma-4-e2b"
 ```
 
-Se manca una variabile obbligatoria o un valore non è valido, l'applicazione non parte, elenca i
-problemi su stderr ed esce con codice 1:
+Se manca una variabile obbligatoria, un valore non è valido o il file dell'ambito manca o è vuoto,
+l'applicazione non parte, elenca i problemi su stderr ed esce con codice 1:
 
 ```powershell
 Remove-Item Env:LMSTUDIO_MODEL
@@ -104,6 +106,47 @@ Per una prova non interattiva si possono passare le domande in ingresso:
 ```powershell
 "Mi chiamo Paolo", "Come mi chiamo?", "esci" | .\.venv\Scripts\python.exe -m assistant
 ```
+
+## Router: domande in ambito e fuori ambito
+
+Ogni turno parte dal nodo `router`: lo stesso modello, con un prompt di sistema diverso e senza
+strumenti, classifica l'ultimo messaggio come `conversation` o `out_of_scope`, con un motivo
+(output strutturato `json_schema`). Il router legge l'ambito e la cronologia senza le chiamate agli
+strumenti; se servono strumenti lo decide poi l'agente.
+
+```
+START → router ─ conversation ─→ llm ⇄ tools (o limit) → END
+          └──── out_of_scope ─→ refusal → END
+```
+
+- `conversation`: il turno prosegue verso l'agente come prima.
+- `out_of_scope`: il nodo `refusal` risponde «Mi dispiace, questa domanda è fuori dal mio ambito:
+  <motivo>. Chiedimi pure che cosa so fare.» e l'agente non viene eseguito. Il rifiuto resta nella
+  cronologia e la sessione continua.
+- Se il router risponde con un output non valido, il turno va all'agente e il log mostra un WARNING
+  `node=router fallback=invalid_output`.
+
+L'ambito è in [`assistant/data/scope.txt`](assistant/data/scope.txt): gli argomenti degli
+strumenti, i saluti, le domande sull'assistente, le presentazioni dell'utente e le domande su
+quanto detto nella conversazione. Per cambiarlo basta modificare il file, oppure indicarne un
+altro con `SCOPE_FILE`; il codice non cambia. Con Docker si modifica il file e si ricostruisce
+l'immagine (`docker compose build`).
+
+Log di una prova del 2026-11-11 (`"Che ore sono a Tokyo?", "Chi ha vinto i Mondiali del 2006?", "esci" | docker compose run --rm -T assistant`):
+
+```
+INFO __main__: scope_file=/app/assistant/data/scope.txt
+INFO assistant.graph: node=router category=conversation reason="La richiesta riguarda la data e l'ora attuale in un fuso orario." next_node=llm
+INFO assistant.graph: step=1/5 node=llm
+INFO assistant.graph: step=1/5 variant=local tool=get_current_time call_id=AXEA5NxqTb7gaiLGVw99URhZuPzpRz7i arguments={'timezone': 'Asia/Tokyo'}
+...
+INFO assistant.graph: node=router category=out_of_scope reason="La richiesta riguarda informazioni generali che non rientrano nelle funzioni dell'assistente del laboratorio." next_node=refusal
+INFO assistant.graph: node=refusal
+Tu> Assistente> Mi dispiace, questa domanda è fuori dal mio ambito: La richiesta riguarda informazioni generali che non rientrano nelle funzioni dell'assistente del laboratorio. Chiedimi pure che cosa so fare.
+```
+
+Per una domanda fuori ambito nel turno compaiono `next_node=refusal` e `node=refusal`, e nessuna
+riga `node=llm`.
 
 ## Prove reali con LM Studio
 
@@ -180,11 +223,13 @@ INFO assistant.graph: step=2/5 node=llm
 Tu> Assistente> Nota aggiunta: Ricordati di comprare il latte.
 ```
 
-Le prove reali (`pytest -m real`, 9 prove) verificano con il modello locale: l'orario a Tokyo e
-poi a Roma; un nome ricordato senza strumenti; `calculate` e `convert_units`; una sola `add_note`
-per una richiesta di ricordare; `delete_note` su un id inesistente che non elimina nulla; le note
-ritrovate dopo il riavvio del server; `search_catalog` seguito da `get_item`; una ricerca senza
-risultati; i log correlati dallo stesso `call_id`.
+Le prove reali (`pytest -m real`, 12 prove, circa 10 minuti) passano tutte dal router e
+verificano con il modello locale: l'orario a Tokyo e poi a Roma; un nome ricordato senza strumenti;
+`calculate` e `convert_units`; una sola `add_note` per una richiesta di ricordare; `delete_note` su
+un id inesistente che non elimina nulla; le note ritrovate dopo il riavvio del server;
+`search_catalog` seguito da `get_item`; una ricerca senza risultati; i log correlati dallo stesso
+`call_id`; il router che manda all'agente «Che ore sono a Tokyo?» e «Ciao!» e rifiuta «Chi ha
+vinto i Mondiali del 2006?» senza eseguire l'agente.
 
 ## Docker
 
@@ -207,7 +252,7 @@ correttamente l'input del terminale. Per una prova non interattiva serve `-T`:
 ```
 
 L'immagine (`python:3.13.18-slim-trixie`, fissata per digest nel `Dockerfile`) contiene solo il
-pacchetto `assistant` (con `assistant/data/catalog.json`) e le dipendenze dell'applicazione, ed
+pacchetto `assistant` (con `assistant/data/catalog.json` e `assistant/data/scope.txt`) e le dipendenze dell'applicazione, ed
 esegue come utente non root. Il server MCP gira nello stesso container, come sottoprocesso. Nel
 container l'orario dei log è in UTC; l'orario restituito dallo strumento dipende solo dal fuso
 richiesto.
@@ -238,6 +283,13 @@ Se la causa è una sola domanda troppo lunga, basta riformularla: la domanda rif
 nella cronologia. Se invece è la cronologia della sessione a essere diventata troppo lunga, ogni
 domanda successiva fallirà allo stesso modo: chiudere con `esci` e riavviare l'assistente (la
 cronologia riparte da zero), oppure aumentare in LM Studio la lunghezza del contesto del modello.
+
+**Una domanda in ambito viene rifiutata (o il contrario).** Il motivo scritto dal router è nella
+riga `node=router … reason="…"`. Il router è un modello piccolo e classifica in base al testo di
+`assistant/data/scope.txt`: conviene descrivere che cosa può chiedere l'utente, non solo gli
+argomenti. Nella prima prova del 2026-11-11 «Ricordami di comprare il latte» e «Ci sono corsi di
+astrologia?» erano rifiutate; con l'ambito attuale passano. Dopo una modifica si ripete
+`pytest -m real`.
 
 **Più dettagli.** Con `$env:LOG_LEVEL = "DEBUG"` i log mostrano la traccia completa degli errori
 e le richieste HTTP verso LM Studio.

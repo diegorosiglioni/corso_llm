@@ -7,13 +7,14 @@ Requisiti, specifica e piano: `docs/superpowers/`.
 Stato corrente e prossimo passo: `docs/superpowers/handoff.md` (leggerlo per primo).
 
 ## Struttura e comandi
-- Codice in `assistant/`: `config.py`, `model.py`, `tools.py`,
-  `graph.py`, `session.py`, `terminal.py`; logica pura degli strumenti MCP in `units.py`,
+- Codice in `assistant/`: `config.py`, `model.py`, `tools.py`, `router.py`,
+  `graph.py`, `session.py`, `terminal.py`; ambito del router in `assistant/data/scope.txt`
+  (sostituibile con `SCOPE_FILE`); logica pura degli strumenti MCP in `units.py`,
   `calculator.py`, `catalog.py` (dati in `assistant/data/catalog.json`), `notes.py`; server
   FastMCP in `mcp_server.py`, client sincrono e adattatore in `mcp_client.py`. Solo
   `__main__.py` collega i moduli.
-- Test in `tests/`; il modello finto (`FakeModel`), il client MCP finto
-  (`FakeMcpClient`) e gli aiuti comuni sono in `conftest.py`. I test MCP avviano il server
+- Test in `tests/`; il modello finto (`FakeModel`), il router finto (`ConversationRouter`), il
+  client MCP finto (`FakeMcpClient`) e gli aiuti comuni sono in `conftest.py`. I test MCP avviano il server
   reale via stdio. Le prove con LM Studio stanno in `test_real.py` (marcatore `real`).
 - Note in SQLite: in locale `NOTES_DB` (default `data/notes.sqlite3`, ignorato da Git), in
   Docker il volume `notes-data`.
@@ -29,6 +30,8 @@ Stato corrente e prossimo passo: `docs/superpowers/handoff.md` (leggerlo per pri
 ## Obiettivo
 Un'applicazione da terminale in Python che conversa con un modello locale e:
 - organizza il flusso in un grafo LangGraph esplicito (stato, nodi, instradamento riconoscibili);
+- (lezione 6, Step 1) un router LLM prima dell'agente, con ambito in configurazione, manda le
+  domande fuori ambito a un nodo di rifiuto senza eseguire l'agente;
 - usa un modello servito da LM Studio, che resta sul computer host;
 - conserva la cronologia della conversazione per la durata della sessione (la cronologia non è persistente);
 - offre uno strumento orologio con fuso orario esplicito, richiesto dal modello tramite tool calling
@@ -38,9 +41,11 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
 - si avvia anche con Docker Compose.
 
 ## Confini
-- Implementare solo i requisiti concordati. MCP e i quattro strumenti della lezione 5 sono
-  concordati; altri strumenti, altri server MCP, workflow e RAG arriveranno nelle lezioni
-  successive: non anticiparli.
+- Implementare solo i requisiti concordati. MCP e i quattro strumenti della lezione 5 e lo
+  Step 1 della lezione 6 (router) sono concordati; gli step successivi della lezione 6 (revisore,
+  riassunto, resource e prompt MCP, servizio HTTP, back-end, front-end, Compose a più container),
+  altri strumenti, altri server MCP, workflow e RAG non vanno anticipati: ognuno avrà il proprio
+  ciclo di specifica e piano.
 - Niente interfacce grafiche, servizi cloud o framework non concordati.
 - La cartella `lezione3/` è una lezione passata: resta solo in locale, esclusa da Git con
   `.gitignore`. Non leggerla per copiarne il codice e non modificarla.

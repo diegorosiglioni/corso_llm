@@ -1,56 +1,89 @@
 # Handoff — Assistente del laboratorio
 
-Data: 2026-11-09
-Stato: **lezione 5 implementata, revisionata e pubblicata.** Sono stati eseguiti i 12 task del
-piano [`plans/2026-11-09-strumenti-mcp.md`](plans/2026-11-09-strumenti-mcp.md). Dopo la
-revisione indipendente finale e le sue correzioni, il push su `origin/main` è arrivato a
-`7bff3ec`. Restano alcune prove manuali (vedi «Punti aperti»).
-**Lezione 6: traccia letta e riassunta, nessun codice.** Si riparte dallo Step 1 (Router): vedi
-la sezione «Lezione 6 — prossimo passo».
+Data: 2026-11-11
+Stato: **lezione 6, Step 1 (router) implementato e verificato su `dev`, non ancora pubblicato.**
+Specifica [`specs/2026-11-11-router-design.md`](specs/2026-11-11-router-design.md), piano
+[`plans/2026-11-11-router.md`](plans/2026-11-11-router.md), requisiti §9 (RF-23…RF-27,
+CA-23…CA-29). Il push si fa solo su richiesta dell'utente (regola in `CLAUDE.md`, sezione «Git»).
+La lezione 5 resta come descritta più sotto.
 
-**Branch di lavoro dal 2026-11-11: `dev`.** Su richiesta dell'utente i commit si fanno su `dev`.
-Il push va prima su `origin/dev`, poi `main` si porta allo stesso commit con avanzamento rapido
-(`git push origin dev:main`). Regola completa in `CLAUDE.md`, sezione «Git».
+**Branch di lavoro dal 2026-11-11: `dev`.** I commit si fanno su `dev`; il push va prima su
+`origin/dev`, poi `main` si porta allo stesso commit con avanzamento rapido
+(`git push origin dev:main`).
 
-**Struttura cambiata il 2026-11-09, dopo il push.** Su richiesta dell'utente il progetto è
-stato spostato da `assistente-laboratorio/` alla radice della repository. Inoltre `lezione3/`
-è uscita da Git: resta solo in locale, esclusa con `.gitignore`.
-- La `.venv` è stata ricreata in radice, con le stesse versioni.
-- `compose.yaml` fissa `name: assistente-laboratorio`: immagine e volume mantengono i nomi
-  precedenti, qualunque sia la cartella della repository.
-- I documenti precedenti (specifiche, piani, requisiti) citano ancora `assistente-laboratorio/`:
-  sono documenti storici e non sono stati riscritti.
+**Struttura cambiata il 2026-11-09.** Il progetto è nella radice della repository (prima in
+`assistente-laboratorio/`); `lezione3/` è solo locale, esclusa da Git. `compose.yaml` fissa
+`name: assistente-laboratorio`. I documenti precedenti citano ancora `assistente-laboratorio/`: sono
+storici e non sono stati riscritti.
 
-## Lezione 6 — prossimo passo (2026-11-09)
+## Lezione 6 — prossimo passo (2026-11-11)
 
-**Nessun codice scritto per la lezione 6.** La traccia del docente (`LLM_Lez_6.pdf`, nella radice,
-non tracciato) è stata letta per intero e riassunta in [`lezione6.md`](lezione6.md): nove step
-in tre blocchi (A: router, revisore, riassunto; B: resource e prompt MCP; C: agente HTTP,
-back-end con PostgreSQL, front-end, Docker Compose a quattro container).
+**Prossimo: Step 2 · Revisore**, con un nuovo ciclo Superpowers (brainstorming → specifica →
+piano → TDD → verifica → commit). Prompt da incollare: [`prossimo-prompt.txt`](prossimo-prompt.txt).
+Traccia completa: [`lezione6.md`](lezione6.md); lo schema del grafo dei tre step è la slide 3 di
+`LLM_Lez_6.pdf` (non tracciato). In questa macchina manca `pdftoppm`: le slide si leggono come
+immagini con PyMuPDF installato nella scratchpad (`pip install --target`), non nel progetto.
 
-Decisioni di metodo già prese:
-- **Lavoro architetturale, scomposto:** ogni step è un sotto-progetto con il proprio ciclo
-  Superpowers: brainstorming → specifica in `specs/` (approvata) → piano in `plans/` (approvato)
-  → esecuzione TDD → verifica (`pytest`, `pytest -m real`, README) → commit.
-- **Uno step alla volta, si parte dallo Step 1 (Router).** È l'opzione consigliata; l'utente
-  non l'ha ancora confermata esplicitamente (domanda lasciata aperta: uno step alla volta
-  oppure step 1–3 insieme).
-- Il brainstorming dello Step 1 è appena iniziato: non è stata posta ancora nessuna domanda di
-  design.
+Da tenere presente per lo Step 2:
+- il grafo oggi è `START → router → llm ⇄ tools / limit → END` e `router → refusal → END`; nella
+  slide 3 il revisore sta dopo l'agente, quando non ci sono più tool_call;
+- `State` ha già `category` e `reason` (del router): il revisore avrà campi propri;
+- router e modello del router sono in `router.py` e `model.py` (`create_router_model`,
+  `guard_router_output`): schema di output strutturato e conversione degli errori in
+  `RouterOutputError` sono un esempio riusabile;
+- le prove reali durano ormai circa 10 minuti (12 prove).
 
-Da tenere presente per lo Step 1:
-- Il grafo attuale (`assistant/graph.py`) ha `START → llm ⇄ tools`, `limit`, funzione `route`;
-  il router va inserito tra `START` e `llm`, con un nodo di rifiuto che va a `END`.
-- La configurazione si legge solo da variabili d'ambiente (`assistant/config.py`); l'«ambito
-  in configurazione» va deciso lì (variabile d'ambiente o file indicato da una variabile).
-- `CLAUDE.md`, sezione «Confini», dice di non anticipare le lezioni successive: va aggiornato
-  quando lo Step 1 viene concordato, aggiungendo solo quello step.
-- Gli step 6–9 introducono framework nuovi (server HTTP, PostgreSQL, front-end): vanno motivati
-  e concordati quando ci si arriva.
-- **In questa macchina `pdftoppm` non c'è:** il Read dei PDF fallisce. Il testo è stato estratto
-  con `pypdf` installato nella scratchpad; non serve rifarlo, basta `lezione6.md`.
+## Lezione 6, Step 1 — router (2026-11-11)
 
-Prompt da incollare nella prossima sessione: [`prossimo-prompt.txt`](prossimo-prompt.txt).
+Prima dell'agente il nodo `router` (stesso modello, prompt diverso, nessuno strumento, output
+`json_schema` con `category` e `reason`) classifica l'ultimo messaggio leggendo l'ambito di
+`assistant/data/scope.txt` (o `SCOPE_FILE`) e la cronologia senza tool_call né `ToolMessage`.
+`conversation` → `llm` come prima; `out_of_scope` → `refusal` → END, con il testo «Mi dispiace,
+questa domanda è fuori dal mio ambito: <motivo>. Chiedimi pure che cosa so fare.». Output non
+valido → WARNING `fallback=invalid_output` e il turno va all'agente. Il router non consuma
+`MAX_STEPS`.
+
+Commit: `69ff4cc` (Task 1, ambito), `0c6c070` (Task 2, `router.py`), `5d5bf61` (Task 3 e 4
+insieme: grafo, modello del router, avvio), `c8f0eb4` (Task 5, prove reali e ritocco dei testi),
+poi la documentazione (Task 6).
+
+### Verifiche (2026-11-11)
+
+| CA | Comando | Esito |
+|----|---------|-------|
+| CA-23 | `pytest tests/test_config.py tests/test_main.py` | ✅ ambito predefinito, `SCOPE_FILE`, file mancante, cartella, file vuoto, BOM; exit 1 all'avvio |
+| CA-24, CA-25 | `pytest tests/test_graph.py` | ✅ in ambito: log con categoria, motivo, `next_node=llm`; fuori ambito: rifiuto con motivo, `model.calls == []`, nessun `node=llm` |
+| CA-26 | `pytest tests/test_graph.py tests/test_session.py tests/test_model.py` | ✅ ripiego su errore di output e su `None`; `APIConnectionError` del router → cronologia invariata |
+| — | `pytest` | ✅ 200 passed, 12 deselected |
+| CA-27, CA-28 | `pytest -m real -v` (LM Studio, `google/gemma-4-e2b`, contesto 8192) | prima esecuzione 9 passed, 3 failed (falsi rifiuti, vedi sotto); dopo il ritocco dei testi ✅ 12 passed in 601 s |
+| CA-29 | `"Che ore sono a Tokyo?", "Chi ha vinto i Mondiali del 2006?", "esci"` in pipe verso `python -m assistant` e verso `docker compose run --rm -T assistant` (dopo `docker compose build`) | ✅ in locale e in Docker: `category=conversation … next_node=llm` e `get_current_time`; poi `category=out_of_scope … next_node=refusal`, `node=refusal`, nessun `node=llm`; in Docker `scope_file=/app/assistant/data/scope.txt` |
+| — | LM Studio non raggiungibile (`LMSTUDIO_BASE_URL=http://localhost:9/v1`) | ✅ «Errore: LM Studio non ha risposto correttamente (Connection error.). Riprova.», poi «Arrivederci!», exit 0 |
+
+Limite: una sola esecuzione delle prove reali dopo il ritocco. Dimostra il comportamento con
+quelle domande, non che il router classifichi sempre così.
+
+### Decisioni prese durante l'esecuzione
+
+- **Falsi rifiuti alla prima prova reale** («Mi chiamo Paolo», «Come mi chiamo?», «Ci sono corsi
+  di astrologia?», «Ricordami di comprare il latte»): il modello giudicava l'argomento delle
+  parole. Con l'accordo dell'utente sono cambiati solo i testi: `scope.txt` descrive le richieste
+  (promemoria su qualsiasi argomento, ricerca di corsi su qualsiasi argomento, l'utente che si
+  presenta) e `ROUTER_PROMPT` dice di giudicare la richiesta e, nel dubbio, scegliere
+  `conversation`. Specifica §4–§5 allineata. Costo: più domande di confine arrivano all'agente.
+- **Task 3 e 4 in un solo commit:** a fine Task 3 `__main__.py` chiamava ancora `build_graph` senza
+  router (4 test di `test_main` rossi); per non lasciare un commit con la suite rossa i due task
+  sono stati registrati insieme.
+- **Eccezioni di output del router** (decisione rimandata dalla specifica al piano): `model.py`
+  converte `ValueError` (anche `pydantic.ValidationError`), `OpenAIRefusalError`,
+  `openai.LengthFinishReasonError` e `openai.ContentFilterFinishReasonError` in
+  `RouterOutputError`; `openai.APIError` passa fino al terminale.
+
+### Punti aperti (Step 1)
+
+- Il motivo del router comincia spesso con la maiuscola, quindi il rifiuto si legge «…fuori dal
+  mio ambito: La richiesta…». Solo estetica, non toccata.
+- Nei log rediretti su file in Windows le lettere accentate possono uscire in cp1252 (già noto
+  dalla lezione 5).
 
 ## Riprendere da qui (stato della lezione 5)
 
@@ -73,7 +106,7 @@ Da sapere:
   `.venv/Scripts/python.exe` (o `py -3.13`).
 - **`LLM_Lez_5.pdf`** e **`LLM_Lez_6.pdf`** non sono tracciati: non aggiungerli a Git senza
   chiedere.
-- Suite predefinita: `pytest` → `165 passed, 9 deselected`, in circa 20 s. I test MCP avviano il
+- Suite predefinita: `pytest` → `200 passed, 12 deselected` (Step 1 della lezione 6), in circa 25 s. I test MCP avviano il
   server come sottoprocesso, circa 1 s ciascuno.
 
 ## Che cosa c'è oggi (lezione 5)
@@ -254,8 +287,8 @@ Da PowerShell nella radice della repository:
 & "$HOME\.lmstudio\bin\lms.exe" load google/gemma-4-e2b --context-length 8192 -y
 $env:LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
 $env:LMSTUDIO_MODEL = "google/gemma-4-e2b"
-.\.venv\Scripts\python.exe -m pytest            # senza modello: 165 passed, 9 deselected
-.\.venv\Scripts\python.exe -m pytest -m real -v # 9 prove reali, circa 4 minuti
+.\.venv\Scripts\python.exe -m pytest            # senza modello: 200 passed, 12 deselected
+.\.venv\Scripts\python.exe -m pytest -m real -v # 12 prove reali, circa 10 minuti
 .\.venv\Scripts\python.exe -m assistant
 docker compose build
 "Quanto fa 17 * 23?", "esci" | docker compose run --rm -T assistant
