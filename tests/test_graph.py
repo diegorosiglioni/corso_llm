@@ -4,10 +4,17 @@ import logging
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 
-from assistant.graph import SYSTEM_PROMPT, route
+from assistant.graph import SYSTEM_PROMPT, route, route_after_router
 from assistant.mcp_client import ALLOWED_MCP_TOOLS
+from assistant.router import (
+    ROUTER_PROMPT,
+    RouteDecision,
+    RouterOutputError,
+    refusal_text,
+    router_messages,
+)
 from assistant.tools import ToolUnavailableError
-from conftest import FakeModel, fake_graph, tool_call
+from conftest import TEST_SCOPE, ConversationRouter, FakeModel, fake_graph, tool_call
 
 
 def start_turn(model, text="salve", **kwargs):
@@ -200,3 +207,103 @@ def test_limit_also_answers_unparsable_arguments():
     requests = [c["id"] for m in r["messages"] if isinstance(m, AIMessage) for c in m.invalid_tool_calls]
     assert [t.tool_call_id for t in tool_messages(r["messages"])] == requests
     assert r["messages"][-1].content == "Ho raggiunto il limite di 5 passaggi senza una risposta finale."
+
+
+# --- router (lesson 6, step 1) ---
+
+def routed_turn(router, model, history=None, **kwargs):
+    messages = history if history is not None else [HumanMessage("domanda")]
+    return fake_graph(model, router=router, **kwargs).invoke({"messages": messages, "steps": 0})
+
+
+def decision(category, reason):
+    return RouteDecision(category=category, reason=reason)
+
+
+def test_in_scope_question_reaches_the_agent(caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    model = FakeModel([AIMessage("Sono le 10.")])
+    result = routed_turn(FakeModel([decision("conversation", "chiede l'ora")]), model)
+    assert result["messages"][-1].content == "Sono le 10."
+    assert len(model.calls) == 1
+    assert (result["category"], result["reason"]) == ("conversation", "chiede l'ora")
+    assert 'node=router category=conversation reason="chiede l\'ora" next_node=llm' in caplog.text
+    assert "step=1/5 node=llm" in caplog.text
+
+
+def test_out_of_scope_question_never_reaches_the_agent(caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    model = FakeModel([])
+    result = routed_turn(FakeModel([decision("out_of_scope", "domanda sul calcio")]), model)
+    refusal = result["messages"][-1]
+    assert isinstance(refusal, AIMessage)
+    assert refusal.content == refusal_text("domanda sul calcio")
+    assert model.calls == []
+    assert (
+        'node=router category=out_of_scope reason="domanda sul calcio" next_node=refusal'
+        in caplog.text
+    )
+    assert "node=refusal" in caplog.text
+    assert "node=llm" not in caplog.text
+
+
+def test_router_sees_scope_and_filtered_history():
+    history = [
+        HumanMessage("Che ore sono a Tokyo?"), tool_call(),
+        ToolMessage("{}", tool_call_id="c1"), AIMessage("Sono le 10."), HumanMessage("E a Roma?"),
+    ]
+    router = ConversationRouter()
+    routed_turn(router, FakeModel([AIMessage("Sono le 3.")]), history=history)
+    sent = router.calls[0]
+    assert sent[0] == SystemMessage(ROUTER_PROMPT.format(scope=TEST_SCOPE))
+    assert sent[1:] == router_messages(history)
+
+
+def fallback_line(error):
+    return (
+        f"node=router fallback=invalid_output error={error} category=conversation next_node=llm"
+    )
+
+
+def test_invalid_router_output_falls_back_to_the_agent(caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    model = FakeModel([AIMessage("Risposta.")])
+    result = routed_turn(FakeModel([RouterOutputError("JSON troncato")]), model)
+    assert result["messages"][-1].content == "Risposta."
+    assert result["category"] == "conversation"
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert warnings == [fallback_line('"JSON troncato"')]
+
+
+def test_router_without_decision_falls_back(caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    model = FakeModel([AIMessage("Risposta.")])
+    result = routed_turn(FakeModel([None]), model)
+    assert result["messages"][-1].content == "Risposta."
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1 and "node=router fallback=invalid_output" in warnings[0]
+
+
+def test_router_reason_is_logged_on_one_line(caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    routed_turn(FakeModel([decision("out_of_scope", 'riga 1\n"riga 2"')]), FakeModel([]))
+    line = next(r.getMessage() for r in caplog.records if "node=router" in r.getMessage())
+    assert "\n" not in line
+    assert r'reason="riga 1\n\"riga 2\""' in line
+
+
+def test_router_does_not_consume_steps(caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    result = routed_turn(ConversationRouter(), FakeModel([AIMessage("ok")]), max_steps=1)
+    assert result["steps"] == 1
+    assert "step=1/1 node=llm" in caplog.text
+
+
+def test_graph_has_router_and_refusal_nodes():
+    nodes = set(fake_graph(FakeModel([])).get_graph().nodes)
+    assert {"router", "refusal", "llm", "tools", "limit"} <= nodes
+
+
+def test_route_after_router_cases():
+    assert route_after_router({"category": "conversation"}) == "llm"
+    assert route_after_router({"category": "out_of_scope"}) == "refusal"

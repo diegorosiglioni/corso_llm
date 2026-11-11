@@ -2,6 +2,7 @@ import openai
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
+from assistant.router import RouteDecision, refusal_text
 from assistant.session import Session
 from conftest import FakeModel, fake_graph, lm_studio_error, tool_call
 
@@ -78,3 +79,29 @@ def test_error_after_the_tool_leaves_no_orphans():
     with pytest.raises(openai.APIConnectionError):
         s.send("che ore sono a Tokyo?")
     assert contents(s.messages) == ["salve", "Ciao."]
+
+
+# --- router (lesson 6, step 1) ---
+
+def test_router_error_leaves_history_untouched():
+    router = FakeModel([RouteDecision(category="conversation", reason="saluto"), lm_studio_error()])
+    s = Session(fake_graph(FakeModel([AIMessage("Ciao!")]), router=router))
+    s.send("Ciao")
+    before = contents(s.messages)
+    with pytest.raises(openai.APIConnectionError):
+        s.send("Domanda persa")
+    assert contents(s.messages) == before
+
+
+def test_conversation_continues_after_a_refusal():
+    router = FakeModel([
+        RouteDecision(category="out_of_scope", reason="calcio"),
+        RouteDecision(category="conversation", reason="chiede l'ora"),
+    ])
+    model = FakeModel([AIMessage("Sono le 10.")])
+    s = Session(fake_graph(model, router=router))
+    assert s.send("Chi ha vinto i Mondiali?") == refusal_text("calcio")
+    assert s.send("Che ore sono?") == "Sono le 10."
+    refusal = refusal_text("calcio")
+    assert contents(model.calls[0][1:]) == ["Chi ha vinto i Mondiali?", refusal, "Che ore sono?"]
+    assert contents(router.calls[1][1:]) == ["Chi ha vinto i Mondiali?", refusal, "Che ore sono?"]

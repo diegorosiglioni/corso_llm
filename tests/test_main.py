@@ -4,6 +4,7 @@ import pytest
 
 import assistant.__main__ as entry
 from assistant.__main__ import main
+from assistant.config import DEFAULT_SCOPE_FILE, load_config
 from assistant.mcp_client import ALLOWED_MCP_TOOLS, ToolSpec
 from assistant.session import Session
 from assistant.tools import ToolUnavailableError
@@ -94,3 +95,33 @@ def test_notes_folder_is_created(tmp_path, monkeypatch):
     monkeypatch.setattr(entry, "run", lambda session: None)
     main({**VALID, "NOTES_DB": str(tmp_path / "sub" / "n.sqlite3")})
     assert (tmp_path / "sub").is_dir()
+
+
+# --- router (lesson 6, step 1) ---
+
+def test_router_model_and_scope_reach_the_graph(monkeypatch):
+    router = object()
+    received = []
+    monkeypatch.setattr(entry, "create_router_model", lambda config: router)
+    monkeypatch.setattr(
+        entry, "build_graph", lambda *args, **kwargs: received.append(kwargs) or "graph"
+    )
+    monkeypatch.setattr(entry, "run", lambda session: None)
+    assert main(VALID) == 0
+    assert received[0]["router_model"] is router
+    assert received[0]["scope"] == load_config(VALID).scope
+
+
+def test_scope_file_is_logged(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    monkeypatch.setattr(entry, "run", lambda session: None)
+    main(VALID)
+    assert f"scope_file={DEFAULT_SCOPE_FILE}" in caplog.text
+
+
+def test_missing_scope_file_exits_1(capsys, monkeypatch, tmp_path):
+    monkeypatch.setattr(entry, "create_model", _must_not_call)
+    monkeypatch.setattr(entry, "create_router_model", _must_not_call)
+    monkeypatch.setattr(entry, "run", _must_not_call)
+    assert main({**VALID, "SCOPE_FILE": str(tmp_path / "manca.txt")}) == 1
+    assert "Configurazione non valida: SCOPE_FILE non leggibile:" in capsys.readouterr().err

@@ -1,4 +1,4 @@
-"""Startup: configuration → logging → MCP client → model → graph → session → terminal."""
+"""Startup: configuration → logging → MCP client → models (agent, router) → graph → session → terminal."""
 
 import logging
 import os
@@ -16,7 +16,7 @@ from assistant.mcp_client import (
     create_mcp_tools,
     server_command,
 )
-from assistant.model import create_model
+from assistant.model import create_model, create_router_model
 from assistant.session import Session
 from assistant.terminal import run
 from assistant.tools import ToolUnavailableError, create_current_time_tool
@@ -72,8 +72,17 @@ def _converse(config, client) -> int:
         ", ".join(f"{t.name} ({(t.metadata or {}).get('variant', 'local')})" for t in tools),
     )
 
+    log.info("scope_file=%s", config.scope_file)
+
     model = create_model(config, tools)
-    session = Session(build_graph(model, tools, config.max_steps))
+    graph = build_graph(
+        model,
+        tools,
+        config.max_steps,
+        router_model=create_router_model(config),
+        scope=config.scope,
+    )
+    session = Session(graph)
     print(
         f"Assistente del laboratorio — modello {config.model} su {config.base_url}. "
         "Scrivi 'esci' per uscire."

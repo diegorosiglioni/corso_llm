@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 
 from assistant.graph import build_graph
 from assistant.mcp_client import McpStartupError, ToolSpec
+from assistant.router import RouteDecision
 from assistant.tools import create_current_time_tool
 
 FIXED_NOW = datetime(2026, 10, 26, 15, 47, 12, 345678, tzinfo=timezone.utc)
@@ -26,10 +27,26 @@ class FakeModel:
         return reply
 
 
-def fake_graph(model, tools=None, max_steps=5):
+TEST_SCOPE = "Ambito di prova: ora e calcoli."
+
+
+class ConversationRouter:
+    """Router that always sends the turn to the agent; records the messages it receives."""
+
+    def __init__(self):
+        self.calls: list[list[BaseMessage]] = []
+
+    def invoke(self, messages) -> RouteDecision:
+        self.calls.append(list(messages))
+        return RouteDecision(category="conversation", reason="test")
+
+
+def fake_graph(model, tools=None, max_steps=5, router=None, scope=TEST_SCOPE):
     if tools is None:
         tools = [create_current_time_tool(lambda: FIXED_NOW)]
-    return build_graph(model, list(tools), max_steps)
+    if router is None:
+        router = ConversationRouter()
+    return build_graph(model, list(tools), max_steps, router_model=router, scope=scope)
 
 
 def tool_call(
