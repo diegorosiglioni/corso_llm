@@ -151,3 +151,40 @@ def test_max_reviews_problem_listed_with_the_others():
         "Manca LMSTUDIO_BASE_URL. Manca LMSTUDIO_MODEL. "
         "MAX_REVIEWS deve essere un intero ≥ 1, ricevuto '0'."
     )
+
+
+# --- summary (lesson 6, step 3) ---
+
+def test_summary_thresholds_default_and_override():
+    config = load_config(VALID)
+    assert (config.summary_max_messages, config.summary_keep_messages) == (20, 6)
+    config = load_config({**VALID, "SUMMARY_MAX_MESSAGES": " 4 ", "SUMMARY_KEEP_MESSAGES": "2"})
+    assert (config.summary_max_messages, config.summary_keep_messages) == (4, 2)
+
+
+@pytest.mark.parametrize("name", ["SUMMARY_MAX_MESSAGES", "SUMMARY_KEEP_MESSAGES"])
+@pytest.mark.parametrize("value", ["abc", "0", "-1", "2.5"])
+def test_invalid_summary_threshold(name, value):
+    assert error({**VALID, name: value}) == (
+        f"{name} deve essere un intero ≥ 1, ricevuto '{value}'."
+    )
+
+
+@pytest.mark.parametrize(("env", "keep", "maximum"), [
+    ({"SUMMARY_KEEP_MESSAGES": "20"}, 20, 20),
+    ({"SUMMARY_MAX_MESSAGES": "4", "SUMMARY_KEEP_MESSAGES": "5"}, 5, 4),
+    ({"SUMMARY_MAX_MESSAGES": "3"}, 6, 3),
+])
+def test_keep_must_be_below_max(env, keep, maximum):
+    assert error({**VALID, **env}) == (
+        "SUMMARY_KEEP_MESSAGES deve essere minore di SUMMARY_MAX_MESSAGES, "
+        f"ricevuti '{keep}' e '{maximum}'."
+    )
+
+
+def test_summary_problems_listed_with_the_others():
+    assert error({"SUMMARY_MAX_MESSAGES": "0", "SUMMARY_KEEP_MESSAGES": "x"}) == (
+        "Manca LMSTUDIO_BASE_URL. Manca LMSTUDIO_MODEL. "
+        "SUMMARY_MAX_MESSAGES deve essere un intero ≥ 1, ricevuto '0'. "
+        "SUMMARY_KEEP_MESSAGES deve essere un intero ≥ 1, ricevuto 'x'."
+    )

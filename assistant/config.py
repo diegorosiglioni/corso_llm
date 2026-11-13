@@ -19,6 +19,8 @@ class Config:
     scope_file: str = DEFAULT_SCOPE_FILE  # SCOPE_FILE  (text file with the scope)
     scope: str = ""  # text read from scope_file
     max_reviews: int = 2  # MAX_REVIEWS (integer >= 1): reviewer calls per turn
+    summary_max_messages: int = 20  # SUMMARY_MAX_MESSAGES (integer >= 1)
+    summary_keep_messages: int = 6  # SUMMARY_KEEP_MESSAGES (integer >= 1, < max)
 
 
 class ConfigError(Exception):
@@ -64,6 +66,32 @@ def load_config(env: Mapping[str, str]) -> Config:
         if max_reviews < 1:
             problems.append(f"MAX_REVIEWS deve essere un intero ≥ 1, ricevuto '{reviews_text}'.")
 
+    def read_positive(name: str, default: int) -> int | None:
+        """Integer >= 1 from `name`, `default` if unset; None (and a problem) if invalid."""
+        text = read(name)
+        if not text:
+            return default
+        try:
+            value = int(text)
+        except ValueError:
+            value = 0
+        if value < 1:
+            problems.append(f"{name} deve essere un intero ≥ 1, ricevuto '{text}'.")
+            return None
+        return value
+
+    summary_max_messages = read_positive("SUMMARY_MAX_MESSAGES", 20)
+    summary_keep_messages = read_positive("SUMMARY_KEEP_MESSAGES", 6)
+    if (
+        summary_max_messages is not None
+        and summary_keep_messages is not None
+        and summary_keep_messages >= summary_max_messages
+    ):
+        problems.append(
+            "SUMMARY_KEEP_MESSAGES deve essere minore di SUMMARY_MAX_MESSAGES, "
+            f"ricevuti '{summary_keep_messages}' e '{summary_max_messages}'."
+        )
+
     log_level = read("LOG_LEVEL").upper() or "INFO"
     if log_level not in LOG_LEVELS:
         problems.append(
@@ -87,5 +115,6 @@ def load_config(env: Mapping[str, str]) -> Config:
     if problems:
         raise ConfigError(" ".join(problems))
     return Config(
-        base_url, model, max_steps, log_level, notes_db, scope_file, scope, max_reviews
+        base_url, model, max_steps, log_level, notes_db, scope_file, scope, max_reviews,
+        summary_max_messages, summary_keep_messages,
     )
