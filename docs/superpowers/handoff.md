@@ -2,8 +2,9 @@
 
 Data: 2026-11-13
 Stato: **lezione 6, Step 1 (router), Step 2 (revisore) e Step 3 (riassunto): implementati e
-verificati. Step 1 e 2 pubblicati; Step 3 solo in locale su `dev` (push su richiesta).**
-Il 2026-11-13 `origin/dev` e `origin/main` sono stati portati a `f53b67a` (avanzamento rapido).
+verificati e pubblicati.**
+Il 2026-11-13 `origin/dev` e `origin/main` sono stati portati a `f53b67a` (Step 2) e poi, con lo
+Step 3, al commit che contiene questa riga (avanzamento rapido).
 Step 3: specifica [`specs/2026-11-13-riassunto-design.md`](specs/2026-11-13-riassunto-design.md),
 piano [`plans/2026-11-13-riassunto.md`](plans/2026-11-13-riassunto.md), requisiti §11 (RF-34…RF-38,
 CA-38…CA-45). Step 2: specifica [`specs/2026-11-11-revisore-design.md`](specs/2026-11-11-revisore-design.md),
@@ -27,7 +28,7 @@ storici e non sono stati riscritti.
 
 **Step 3 · Riassunto della cronologia: fatto** (sezione seguente). Prossimo: Step 4 · Resource
 `utente://preferenze` (traccia in [`lezione6.md`](lezione6.md)), da avviare con un nuovo
-brainstorming. Il push dei commit dello Step 3 si fa solo su richiesta dell'utente.
+brainstorming. I commit dello Step 3 sono pubblicati su `origin/dev` e `origin/main`.
 
 ## Lezione 6, Step 3 — riassunto (2026-11-13)
 
