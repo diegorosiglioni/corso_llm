@@ -18,6 +18,7 @@ from assistant.config import ConfigError, load_config
 from assistant.graph import build_graph
 from assistant.mcp_client import McpClient, create_mcp_tools, server_command
 from assistant.model import create_model, create_reviewer_model, create_router_model
+from assistant.reviewer import is_feedback
 from assistant.session import Session
 from assistant.tools import create_current_time_tool
 
@@ -33,13 +34,17 @@ def config():
 
 
 @contextmanager
-def open_session(config, db):
-    """Session with the eight tools on the notes store `db`; the MCP server closes on exit."""
+def open_session(config, db, wrap_agent=None):
+    """Session with the eight tools on the notes store `db`; the MCP server closes on exit.
+
+    `wrap_agent`, if given, wraps the agent's model; router and reviewer stay real.
+    """
     command, args, cwd = server_command(db, "WARNING")
     with McpClient(command, args, cwd=cwd) as client:
         tools = [create_current_time_tool(), *create_mcp_tools(client)]
+        model = create_model(config, tools)
         graph = build_graph(
-            create_model(config, tools),
+            wrap_agent(model) if wrap_agent else model,
             tools,
             config.max_steps,
             router_model=create_router_model(config),
@@ -201,3 +206,63 @@ def test_router_greeting_is_conversation(real_session, caplog):
     caplog.set_level(logging.INFO, logger="assistant.graph")
     real_session.send("Ciao!")
     assert any("category=conversation" in line for line in router_lines(caplog)), caplog.text
+
+
+# --- lesson 6, step 2: reviewer (CA-36) ---
+
+TWO_PARTS = "Che ore sono a Tokyo e quanto fa 17 * 23?"
+PARTIAL = "A Tokyo sono le 10:00."  # answers only the first part; the time is not checked
+
+
+class PartialFirstAnswer:
+    """The agent's first call returns a fixed partial answer; later calls use the real model."""
+
+    def __init__(self, model, text: str):
+        self._model = model
+        self._text = text
+        self.calls = 0
+
+    def invoke(self, messages):
+        self.calls += 1
+        if self.calls == 1:
+            return AIMessage(self._text)
+        return self._model.invoke(messages)
+
+
+def reviewer_lines(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.getMessage().startswith("node=reviewer")]
+
+
+def tokyo_times(messages) -> list[str]:
+    """Tokyo times returned by get_current_time, as HH:MM and H:MM."""
+    times = []
+    for r in results(messages, "get_current_time"):
+        if r.get("timezone") == "Asia/Tokyo":
+            t = datetime.fromisoformat(r["datetime"])
+            times += [f"{t.hour:02d}:{t.minute:02d}", f"{t.hour}:{t.minute:02d}"]
+    return times
+
+
+def test_reviewer_rejects_an_imposed_partial_answer(config, tmp_path, caplog):
+    # The agent's FIRST answer is imposed (PartialFirstAnswer); reviewer and rewrite are real.
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    wrap = lambda model: PartialFirstAnswer(model, PARTIAL)  # noqa: E731
+    with open_session(config, tmp_path / "notes.sqlite3", wrap_agent=wrap) as (session, _):
+        reply = session.send(TWO_PARTS)
+        messages = session.messages
+    lines = reviewer_lines(caplog)
+    assert lines and "coherent=false" in lines[0] and 'reason=""' not in lines[0], lines
+    assert any("coherent=true" in line for line in lines[1:]), lines
+    assert len(lines) <= config.max_reviews, lines
+    assert any(is_feedback(m) for m in messages), messages
+    assert re.search(r"step=2/\d+ node=llm", caplog.text), caplog.text  # the real agent rewrote
+    assert "391" in reply, reply
+
+
+def test_two_part_question_fully_real(config, real_session, caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    reply = real_session.send(TWO_PARTS)
+    messages = real_session.messages
+    assert "391" in reply, (reply, messages)
+    assert any(t in reply for t in tokyo_times(messages)), (reply, messages)
+    assert 1 <= len(reviewer_lines(caplog)) <= config.max_reviews, caplog.text
