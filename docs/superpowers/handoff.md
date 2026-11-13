@@ -1,8 +1,8 @@
 # Handoff — Assistente del laboratorio
 
 Data: 2026-11-13
-Stato: **lezione 6, Step 2 (revisore): implementato e verificato su `dev`, non ancora
-pubblicato.** Anche lo Step 1 (router) è solo su `dev`.
+Stato: **lezione 6, Step 1 (router) e Step 2 (revisore): implementati, verificati e pubblicati.**
+Il 2026-11-13 `origin/dev` e `origin/main` sono stati portati a `f53b67a` (avanzamento rapido).
 Step 2: specifica [`specs/2026-11-11-revisore-design.md`](specs/2026-11-11-revisore-design.md),
 piano [`plans/2026-11-11-revisore.md`](plans/2026-11-11-revisore.md), requisiti §10 (RF-28…RF-33,
 CA-30…CA-37). Step 1: specifica
@@ -22,10 +22,15 @@ storici e non sono stati riscritti.
 
 ## Lezione 6 — prossimo passo (2026-11-13)
 
-**Prossimo: Step 3 · Riassunto**, da avviare con un nuovo brainstorming
-(`superpowers:brainstorming`): requisiti, specifica, piano, come per gli Step 1 e 2. Il prompt
-[`prossimo-prompt.txt`](prossimo-prompt.txt) si riferisce ancora al piano dello Step 2: va
-riscritto per lo Step 3. Traccia completa: [`lezione6.md`](lezione6.md); lo schema del grafo dei tre
+**Prossimo: Step 3 · Riassunto della cronologia**, da avviare con un nuovo brainstorming
+(`superpowers:brainstorming`): requisiti, specifica, piano, come per gli Step 1 e 2. Prompt per la
+nuova chat: [`prossimo-prompt.txt`](prossimo-prompt.txt).
+
+**Decisione dell'utente (2026-11-13): si fa solo ciò che chiede la traccia di `LLM_Lez_6.pdf`.**
+Non si fanno i punti che stanno fuori dalla traccia: le correzioni minori rimandate degli Step 1 e
+2, le prove manuali mai ripetute delle lezioni precedenti (CA-5, Ctrl+Z), i minori aperti della
+lezione 5 e la prova mirata di una riscrittura dopo `add_note`. Restano annotati più sotto solo
+come memoria. Traccia completa: [`lezione6.md`](lezione6.md); lo schema del grafo dei tre
 step è la slide 3 di `LLM_Lez_6.pdf` (non tracciato). In questa macchina manca `pdftoppm`: le slide
 si leggono come immagini con PyMuPDF installato nella scratchpad (`pip install --target`), non nel
 progetto.

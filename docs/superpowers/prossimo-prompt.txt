@@ -1,7 +1,12 @@
-Leggi il CLAUDE.md e poi docs/superpowers/handoff.md (sezioni «Lezione 6 — prossimo passo» e «Step 2 — brainstorming concluso»). Controlla lo stato della repository.
+Leggi il CLAUDE.md e poi docs/superpowers/handoff.md (sezione «Lezione 6 — prossimo passo») e docs/superpowers/lezione6.md (Step 3). Controlla lo stato della repository.
 
-Stiamo realizzando lo Step 2 · Revisore della lezione 6 con il ciclo Superpowers completo. Brainstorming e specifica sono conclusi: la specifica approvata è docs/superpowers/specs/2026-11-11-revisore-design.md (requisiti §10 in docs/superpowers/requisiti.md).
+Vogliamo realizzare lo Step 3 · Riassunto della cronologia della lezione 6 (LLM_Lez_6.pdf), con il ciclo Superpowers completo: brainstorming, requisiti, specifica, piano. Obiettivo: conversazione utilizzabile su molti turni senza perdere informazioni importanti, perché il contesto del modello locale è limitato (google/gemma-4-e2b, 8192 token). Requisiti della traccia:
+1. soglia configurabile (numero di messaggi o stima dei token) oltre la quale si riassume;
+2. nodo riassunto all'inizio del turno, prima del router (slide 3: START → Riassunto → Router): comprime i messaggi vecchi e conserva gli ultimi N;
+3. il riassunto è un campo dello stato che viene aggiornato, non accumulato;
+4. il taglio non separa mai una richiesta di tool dal relativo ToolMessage.
+Evidenze: log con il numero di messaggi prima e dopo il riassunto; un'informazione del primo turno (per esempio il nome dell'utente) è usata dopo la compressione; sotto la soglia il nodo non chiama il modello. Evidenza minima: informazione del primo turno ancora usata dopo la compressione.
 
-Prossimo passo: scrivi il piano di implementazione con la skill writing-plans, partendo dalla specifica approvata, e salvalo in docs/superpowers/plans/2026-11-11-revisore.md. Segui gli incrementi del §12 della specifica e i punti «Da tenere presente nel piano» dell'handoff. Poi fermati: non iniziare l'implementazione prima che io abbia approvato il piano e scelto il modo di esecuzione.
+Il progetto funziona fino allo Step 2 (router e revisore, pubblicati): estendilo senza riscriverlo e non anticipare gli step successivi (resource e prompt MCP, HTTP, back-end, front-end, Compose a più container). Da tenere presente: oggi la cronologia della sessione contiene anche le bozze rifiutate e le indicazioni del revisore (HumanMessage con name="reviewer"), che router_messages scarta; le prove reali durano già circa 32 minuti.
 
-Estendi il progetto senza riscriverlo e non anticipare gli step successivi (riassunto, resource, prompt, HTTP, ecc.). Distingui i test con il modello simulato dalle prove reali con LM Studio; le evidenze richieste devono essere verificabili nei log o nei test.
+Facciamo solo ciò che chiede la traccia: i punti annotati nell'handoff che stanno fuori dalla traccia non si fanno. Chiariscimi le decisioni mancanti una alla volta e proponi una soluzione semplice. Distingui i test con il modello simulato dalle prove reali con LM Studio; le evidenze richieste devono essere verificabili nei log o nei test. Non scrivere codice prima che io abbia approvato la specifica e poi il piano.
