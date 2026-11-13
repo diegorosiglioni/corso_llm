@@ -18,6 +18,7 @@ class Config:
     notes_db: str = DEFAULT_NOTES_DB  # NOTES_DB    (path of the SQLite file)
     scope_file: str = DEFAULT_SCOPE_FILE  # SCOPE_FILE  (text file with the scope)
     scope: str = ""  # text read from scope_file
+    max_reviews: int = 2  # MAX_REVIEWS (integer >= 1): reviewer calls per turn
 
 
 class ConfigError(Exception):
@@ -53,6 +54,16 @@ def load_config(env: Mapping[str, str]) -> Config:
         if max_steps < 1:
             problems.append(f"MAX_STEPS deve essere un intero ≥ 1, ricevuto '{steps_text}'.")
 
+    max_reviews = 2
+    reviews_text = read("MAX_REVIEWS")
+    if reviews_text:
+        try:
+            max_reviews = int(reviews_text)
+        except ValueError:
+            max_reviews = 0
+        if max_reviews < 1:
+            problems.append(f"MAX_REVIEWS deve essere un intero ≥ 1, ricevuto '{reviews_text}'.")
+
     log_level = read("LOG_LEVEL").upper() or "INFO"
     if log_level not in LOG_LEVELS:
         problems.append(
@@ -75,4 +86,6 @@ def load_config(env: Mapping[str, str]) -> Config:
 
     if problems:
         raise ConfigError(" ".join(problems))
-    return Config(base_url, model, max_steps, log_level, notes_db, scope_file, scope)
+    return Config(
+        base_url, model, max_steps, log_level, notes_db, scope_file, scope, max_reviews
+    )

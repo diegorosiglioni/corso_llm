@@ -129,3 +129,25 @@ def test_scope_problem_listed_with_the_others(tmp_path):
     missing = tmp_path / "manca.txt"
     message = error({"LMSTUDIO_BASE_URL": "http://h/v1", "SCOPE_FILE": str(missing)})
     assert message.startswith("Manca LMSTUDIO_MODEL. SCOPE_FILE non leggibile: ")
+
+
+# --- reviewer (lesson 6, step 2) ---
+
+def test_max_reviews_default_and_override():
+    assert load_config(VALID).max_reviews == 2
+    assert load_config({**VALID, "MAX_REVIEWS": " 3 "}).max_reviews == 3
+    assert load_config({**VALID, "MAX_REVIEWS": "  "}).max_reviews == 2
+
+
+@pytest.mark.parametrize("value", ["abc", "0", "-1", "2.5"])
+def test_invalid_max_reviews(value):
+    assert error({**VALID, "MAX_REVIEWS": value}) == (
+        f"MAX_REVIEWS deve essere un intero ≥ 1, ricevuto '{value}'."
+    )
+
+
+def test_max_reviews_problem_listed_with_the_others():
+    assert error({"MAX_REVIEWS": "0"}) == (
+        "Manca LMSTUDIO_BASE_URL. Manca LMSTUDIO_MODEL. "
+        "MAX_REVIEWS deve essere un intero ≥ 1, ricevuto '0'."
+    )
