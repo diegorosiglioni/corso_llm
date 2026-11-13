@@ -3,6 +3,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from pydantic import ValidationError
 
 from assistant.mcp_client import ALLOWED_MCP_TOOLS
+from assistant.reviewer import feedback_message
 from assistant.router import ROUTER_PROMPT, RouteDecision, refusal_text, router_messages
 from conftest import tool_call
 
@@ -65,3 +66,22 @@ def test_router_messages_keep_alternation_after_an_empty_answer():
     # send two user messages in a row, which some chat templates reject.
     history = [HumanMessage("Ciao"), AIMessage(""), HumanMessage("Che ore sono?")]
     assert router_messages(history) == history
+
+
+# --- reviewer (lesson 6, step 2) ---
+
+def test_router_messages_drop_rejected_drafts_and_feedback():
+    q, answer, q2 = HumanMessage("q"), AIMessage("risposta"), HumanMessage("q2")
+    assert router_messages(
+        [q, AIMessage("bozza"), feedback_message("manca"), answer, q2]
+    ) == [q, answer, q2]
+
+
+def test_router_messages_drop_a_draft_written_after_tools():
+    q, answer = HumanMessage("q"), AIMessage("risposta")
+    history = [
+        q, tool_call(), ToolMessage("{}", tool_call_id="c1"), AIMessage("bozza"),
+        feedback_message("manca"), tool_call(id="c2"), ToolMessage("{}", tool_call_id="c2"),
+        answer,
+    ]
+    assert router_messages(history) == [q, answer]

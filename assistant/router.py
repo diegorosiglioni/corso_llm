@@ -9,6 +9,8 @@ from typing import Literal
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from pydantic import BaseModel, Field
 
+from assistant.reviewer import is_feedback
+
 ROUTER_PROMPT = """\
 Sei il router dell'assistente del laboratorio. Non rispondi all'utente: decidi soltanto se il suo
 ultimo messaggio rientra nell'ambito dell'assistente.
@@ -42,17 +44,20 @@ def router_messages(history: list[AnyMessage]) -> list[AnyMessage]:
     """User questions and final answers of the assistant, without tool requests or results.
 
     Final answers are kept even when empty, so user and assistant messages still alternate.
+    The reviewer's indications are dropped together with the rejected draft before each one.
     """
-    return [
-        message
-        for message in history
-        if isinstance(message, HumanMessage)
-        or (
+    kept: list[AnyMessage] = []
+    for message in history:
+        if is_feedback(message):
+            if kept and isinstance(kept[-1], AIMessage):
+                kept.pop()  # the rejected draft
+        elif isinstance(message, HumanMessage) or (
             isinstance(message, AIMessage)
             and not message.tool_calls
             and not message.invalid_tool_calls
-        )
-    ]
+        ):
+            kept.append(message)
+    return kept
 
 
 def refusal_text(reason: str) -> str:
