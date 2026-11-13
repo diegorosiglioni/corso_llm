@@ -58,3 +58,8 @@ def create_reviewer_model(config: Config) -> Runnable:
     """Same model as the agent, without tools, constrained to the ReviewDecision schema."""
     structured = _chat(config).with_structured_output(ReviewDecision, method="json_schema")
     return guard_structured_output(structured, ReviewerOutputError)
+
+
+def create_summary_model(config: Config) -> Runnable:
+    """Same model as the agent, without tools: free text."""
+    return _chat(config)

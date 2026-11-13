@@ -1,11 +1,17 @@
 import openai
 import pytest
+from langchain_openai import ChatOpenAI
 from langchain_openai.chat_models.base import OpenAIRefusalError
 from openai.types.chat import ChatCompletion
 from pydantic import ValidationError
 
 from assistant.config import load_config
-from assistant.model import create_reviewer_model, create_router_model, guard_structured_output
+from assistant.model import (
+    create_reviewer_model,
+    create_router_model,
+    create_summary_model,
+    guard_structured_output,
+)
 from assistant.reviewer import ReviewDecision, ReviewerOutputError
 from assistant.router import RouteDecision, RouterOutputError
 from conftest import FakeModel, lm_studio_error
@@ -59,3 +65,8 @@ def test_create_router_model_needs_no_server():
 
 def test_create_reviewer_model_needs_no_server():
     assert hasattr(create_reviewer_model(load_config(VALID)), "invoke")
+
+
+def test_create_summary_model_needs_no_server():
+    model = create_summary_model(load_config(VALID))
+    assert isinstance(model, ChatOpenAI) and model.model_name == "google/gemma-4-e2b"
