@@ -7,6 +7,7 @@ from langchain_openai import ChatOpenAI
 from langchain_openai.chat_models.base import OpenAIRefusalError
 
 from assistant.config import Config
+from assistant.reviewer import ReviewDecision, ReviewerOutputError
 from assistant.router import RouteDecision, RouterOutputError
 
 # Errors of langchain-openai 1.7.2 with method="json_schema" when the reply does not fit the
@@ -35,19 +36,25 @@ def create_model(config: Config, tools: list[BaseTool]) -> Runnable:
     return _chat(config).bind_tools(tools)
 
 
-def guard_router_output(structured: Runnable) -> Runnable:
-    """Same interface as `structured`; an invalid reply becomes RouterOutputError."""
+def guard_structured_output(structured: Runnable, error_type: type[Exception]) -> Runnable:
+    """Same interface as `structured`; an invalid reply becomes `error_type`."""
 
-    def classify(messages):
+    def decide(messages):
         try:
             return structured.invoke(messages)
         except INVALID_OUTPUT_ERRORS as error:
-            raise RouterOutputError(str(error)) from error
+            raise error_type(str(error)) from error
 
-    return RunnableLambda(classify)
+    return RunnableLambda(decide)
 
 
 def create_router_model(config: Config) -> Runnable:
     """Same model as the agent, without tools, constrained to the RouteDecision schema."""
     structured = _chat(config).with_structured_output(RouteDecision, method="json_schema")
-    return guard_router_output(structured)
+    return guard_structured_output(structured, RouterOutputError)
+
+
+def create_reviewer_model(config: Config) -> Runnable:
+    """Same model as the agent, without tools, constrained to the ReviewDecision schema."""
+    structured = _chat(config).with_structured_output(ReviewDecision, method="json_schema")
+    return guard_structured_output(structured, ReviewerOutputError)
