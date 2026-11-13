@@ -172,7 +172,9 @@ llm ── risposta finale ──→ reviewer ─┬─ coerente ─────
   Scrivi una nuova risposta completa…») e l'agente riscrive. Bozza e indicazione restano nella
   cronologia della sessione; il router non le vede.
 - Il rifiuto del router e l'avviso del limite dei passaggi non vengono rivisti.
-- Le riscritture consumano passaggi dell'agente (`MAX_STEPS` non si azzera); il revisore no.
+- Le riscritture consumano passaggi dell'agente (`MAX_STEPS` non si azzera); il revisore no. Se
+  la risposta rifiutata arriva all'ultimo passaggio, il turno termina con quella risposta (WARNING
+  `step_limit_reached`): l'agente non è mai chiamato più di `MAX_STEPS` volte.
 - Se il revisore risponde con un output non valido, la risposta passa e il log mostra un WARNING;
   un errore di collegamento con LM Studio arriva al terminale come per l'agente.
 
@@ -207,6 +209,7 @@ non osservate con il modello reale):
 
 ```
 WARNING assistant.graph: node=reviewer review=2/2 coherent=false reason="incompleta" review_limit_reached next_node=end
+WARNING assistant.graph: node=reviewer review=1/2 coherent=false reason="incompleta" step_limit_reached next_node=end
 WARNING assistant.graph: node=reviewer review=1/2 fallback=invalid_output error="JSON troncato" coherent=true next_node=end
 ```
 

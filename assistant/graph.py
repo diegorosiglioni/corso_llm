@@ -7,7 +7,8 @@ START → [router] ─ conversation ─→ [llm] ──route──┬─ no tool
            │                         │
            │                         │   [reviewer] ──route_after_reviewer──┬─ coherent ────────────────────→ END
            │                         └──────────────────────────────────────┼─ not coherent, reviews < max ─→ [llm]
-           │                                                                └─ not coherent, reviews ≥ max ─→ END
+           │                                                                └─ not coherent, reviews ≥ max
+           │                                                                   or steps ≥ max_steps ────────→ END
            └─ out_of_scope ─→ [refusal] → END
 """
 
@@ -89,9 +90,14 @@ def route_after_router(state: State) -> Literal["llm", "refusal"]:
     return "llm" if state["category"] == "conversation" else "refusal"
 
 
-def route_after_reviewer(state: State, max_reviews: int) -> Literal["llm", "end"]:
-    """Ends the turn on a coherent answer or at the review limit; otherwise back to the agent."""
-    if state["coherent"] or state["reviews"] >= max_reviews:
+def route_after_reviewer(
+    state: State, max_reviews: int, max_steps: int
+) -> Literal["llm", "end"]:
+    """Back to the agent only for a rejected answer with reviews and agent steps left.
+
+    MAX_STEPS stays the total limit of agent calls in the turn, rewrites included.
+    """
+    if state["coherent"] or state["reviews"] >= max_reviews or state["steps"] >= max_steps:
         return "end"
     return "llm"
 
@@ -173,14 +179,15 @@ def build_graph(
         reason = json.dumps(decision.reason, ensure_ascii=False)
         if decision.coherent:
             log.info("node=reviewer %s coherent=true reason=%s next_node=end", counter, reason)
-        elif route_after_reviewer(update, max_reviews) == "llm":
+        elif review >= max_reviews or state["steps"] >= max_steps:
+            limit = "review_limit_reached" if review >= max_reviews else "step_limit_reached"
+            log.warning(
+                "node=reviewer %s coherent=false reason=%s %s next_node=end",
+                counter, reason, limit,
+            )
+        else:
             log.info("node=reviewer %s coherent=false reason=%s next_node=llm", counter, reason)
             update["messages"] = [feedback_message(decision.reason)]
-        else:
-            log.warning(
-                "node=reviewer %s coherent=false reason=%s review_limit_reached next_node=end",
-                counter, reason,
-            )
         return update
 
     def run_tool(call: dict, invalid: list[dict]) -> tuple[dict, str]:
@@ -260,7 +267,7 @@ def build_graph(
     )
     graph.add_conditional_edges(
         "reviewer",
-        lambda state: route_after_reviewer(state, max_reviews),
+        lambda state: route_after_reviewer(state, max_reviews, max_steps),
         {"llm": "llm", "end": END},
     )
     graph.add_edge("tools", "llm")

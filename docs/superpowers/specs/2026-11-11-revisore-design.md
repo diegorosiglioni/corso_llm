@@ -185,12 +185,16 @@ parametri esistenti restano dove sono; i nuovi sono obbligatori e per nome.
 3. Secondo l'esito:
    - **coerente** → `INFO node=reviewer review=<n>/<max> coherent=true reason=<motivo>
      next_node=end`;
-   - **non coerente e `review < max_reviews`** → `INFO node=reviewer review=<n>/<max>
-     coherent=false reason=<motivo> next_node=llm` e aggiunge `feedback_message(motivo)` ai
-     messaggi;
+   - **non coerente, `review < max_reviews` e `steps < max_steps`** → `INFO node=reviewer
+     review=<n>/<max> coherent=false reason=<motivo> next_node=llm` e aggiunge
+     `feedback_message(motivo)` ai messaggi;
    - **non coerente e `review ≥ max_reviews`** → `WARNING node=reviewer review=<n>/<max>
      coherent=false reason=<motivo> review_limit_reached next_node=end`; nessuna indicazione
      aggiunta; la risposta restituita è l'ultima dell'agente;
+   - **non coerente, `review < max_reviews` ma `steps ≥ max_steps`** (aggiunto dopo la revisione
+     finale del 2026-11-13: senza, una riscrittura chiamava l'agente oltre `MAX_STEPS`) →
+     `WARNING node=reviewer review=<n>/<max> coherent=false reason=<motivo> step_limit_reached
+     next_node=end`; come il caso precedente, nessuna indicazione e l'ultima risposta;
    - **output non valido** (`ReviewerOutputError` oppure risultato che non è una
      `ReviewDecision`, per esempio `None`) → `WARNING node=reviewer review=<n>/<max>
      fallback=invalid_output error=<errore> coherent=true next_node=end`; la risposta passa.
@@ -205,8 +209,10 @@ router.
 
 - `route(state, max_steps) -> Literal["tools", "limit", "reviewer"]`: senza tool_call restituisce
   `"reviewer"` (prima `"end"`); gli altri casi non cambiano.
-- `route_after_reviewer(state, max_reviews) -> Literal["llm", "end"]`: `"end"` se
-  `state["coherent"]` oppure `state["reviews"] ≥ max_reviews`; altrimenti `"llm"`.
+- `route_after_reviewer(state, max_reviews, max_steps) -> Literal["llm", "end"]`: `"end"` se
+  `state["coherent"]`, oppure `state["reviews"] ≥ max_reviews`, oppure `state["steps"] ≥
+  max_steps`; altrimenti `"llm"`. Così `MAX_STEPS` resta il limite totale delle chiamate
+  all'agente nel turno, riscritture comprese.
 - Archi: `llm → tools | limit | reviewer` (condizionale); `reviewer → llm | END` (condizionale).
   Gli altri archi non cambiano.
 

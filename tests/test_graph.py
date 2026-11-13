@@ -464,9 +464,37 @@ def test_empty_answer_reaches_the_reviewer_as_empty():
 
 
 def test_route_after_reviewer_cases():
-    assert route_after_reviewer({"coherent": True, "reviews": 1}, 2) == "end"
-    assert route_after_reviewer({"coherent": False, "reviews": 1}, 2) == "llm"
-    assert route_after_reviewer({"coherent": False, "reviews": 2}, 2) == "end"
+    def after(coherent, reviews, steps=1):
+        state = {"coherent": coherent, "reviews": reviews, "steps": steps}
+        return route_after_reviewer(state, max_reviews=2, max_steps=5)
+
+    assert after(True, 1) == "end"
+    assert after(False, 1) == "llm"
+    assert after(False, 2) == "end"
+    assert after(False, 1, steps=5) == "end"  # no agent call beyond MAX_STEPS
+
+
+def test_rejection_at_the_last_step_ends_the_turn(caplog):
+    # MAX_STEPS stays the total limit of agent calls in the turn, rewrites included (RF-31).
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    model = FakeModel([AIMessage("bozza")])
+    reviewer = FakeModel([verdict(False)])
+    result = reviewed_turn(reviewer, model, max_steps=1)
+    assert len(model.calls) == 1 and len(reviewer.calls) == 1
+    assert result["messages"][-1].content == "bozza"
+    assert not any(is_feedback(m) for m in result["messages"])
+    assert reviewer_lines(caplog, logging.WARNING) == [
+        'node=reviewer review=1/2 coherent=false reason="incompleta" '
+        "step_limit_reached next_node=end"
+    ]
+
+
+def test_rewrite_never_exceeds_max_steps(caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    model = FakeModel([tool_call(id=f"c{i}") for i in range(4)] + [AIMessage("bozza")])
+    result = reviewed_turn(FakeModel([verdict(False)]), model, max_steps=5)
+    assert len(model.calls) == 5 and result["steps"] == 5
+    assert "step=6/5" not in caplog.text
 
 
 def test_graph_has_reviewer_node():

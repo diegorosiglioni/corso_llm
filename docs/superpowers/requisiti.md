@@ -293,7 +293,8 @@ verificati il 2026-11-13 (comandi ed esiti in `handoff.md`).
 - **RF-31** *Limite delle revisioni* — `MAX_REVIEWS` (intero ≥ 1, default 2) fissa le chiamate al
   revisore in un turno; il contatore sta nello stato. Al limite si restituisce l'ultima risposta
   dell'agente e il log lo segnala con un WARNING. Il revisore non consuma i passaggi di RF-9, che
-  restano il limite totale delle chiamate all'agente nel turno. Un valore non valido impedisce
+  restano il limite totale delle chiamate all'agente nel turno, riscritture comprese: un rifiuto
+  all'ultimo passaggio chiude il turno con l'ultima risposta e un WARNING. Un valore non valido impedisce
   l'avvio con un messaggio comprensibile (come RF-14).
 - **RF-32** *Errori del revisore* — Se l'output del revisore non è valido, la risposta passa come
   coerente e il log lo segnala con un WARNING. Gli errori di collegamento con LM Studio sono

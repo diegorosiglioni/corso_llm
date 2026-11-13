@@ -60,7 +60,7 @@ Prove reali con LM Studio, `google/gemma-4-e2b`, contesto 8192, `MAX_REVIEWS` no
 | CA-33 | `pytest tests/test_graph.py` (`max_reviews` 1, 2, 3) | ✅ agente e revisore chiamati `max_reviews` volte, `max_reviews - 1` indicazioni, ultima bozza restituita, WARNING `review_limit_reached` |
 | CA-34 | `pytest tests/test_graph.py tests/test_session.py` | ✅ `ReviewerOutputError` e `None` → `fallback=invalid_output … coherent=true`; `APIConnectionError` del revisore → cronologia invariata |
 | CA-35 | `pytest tests/test_graph.py` | ✅ rifiuto e avviso di `limit` non rivisti; `steps` invariato dal revisore; limite dei passaggi durante una riscrittura → `limit` |
-| — | `pytest` | ✅ 247 passed, 14 deselected |
+| — | `pytest` | ✅ 247 passed, 14 deselected; dopo la correzione della revisione finale 249 passed, 14 deselected |
 | — | LM Studio non raggiungibile (`LMSTUDIO_BASE_URL=http://localhost:9/v1`) | ✅ `scope_file=… max_reviews=2`, «Errore: LM Studio non ha risposto correttamente (Connection error.). Riprova.», «Arrivederci!», exit 0 |
 | CA-36 | `pytest -m real -v -k imposed_partial` (prima risposta dell'agente **imposta**) | ✅ 1 passed in 263 s: `review=1/2 coherent=false reason="La risposta proposta ignora la richiesta di calcolare 17 * 23…"`, poi l'agente reale chiama `get_current_time` e `calculate`, `review=2/2 coherent=true`; risposta con «391». Il campo `name` del messaggio utente è accettato da LM Studio |
 | CA-36, CA-37 | `pytest -m real -v` | ✅ 14 passed in 1940 s (32 min). 17 righe `node=reviewer`: 16 `coherent=true` al primo passaggio, l'unico `coherent=false` è quello sulla risposta imposta. Nessun falso rifiuto; CA-17 con una sola `add_note` |
@@ -77,6 +77,35 @@ revisioni né il ripiego: sono verificati solo con il revisore simulato.
   del repository.
 - **LM Studio e Docker Desktop** sono stati avviati durante la sessione (`lms server start`,
   `lms load google/gemma-4-e2b --context-length 8192 -y`, Docker Desktop dal menu Start).
+
+### Revisione indipendente finale (2026-11-13)
+
+Un revisore con contesto pulito ha esaminato `595c59a..e518505`. Esito: «With fixes», nessun
+problema critico; i cinque punti della Review Focus hanno test precisi.
+
+Corretto (problema importante, lacuna della specifica e del piano, non dell'esecuzione), con test
+che prima fallivano: una risposta rifiutata all'ultimo passaggio rimandava il turno all'agente
+oltre `MAX_STEPS` (con `MAX_STEPS=1` il log mostrava `step=2/1 node=llm`; nel caso peggiore
+`max_steps + max_reviews - 1` chiamate), contro RF-31. Ora `route_after_reviewer(state,
+max_reviews, max_steps)` chiude il turno anche quando `steps ≥ max_steps`, con WARNING
+`step_limit_reached` e l'ultima risposta (`test_rejection_at_the_last_step_ends_the_turn`,
+`test_rewrite_never_exceeds_max_steps`, nuovo caso di `test_route_after_reviewer_cases`).
+Specifica §8, RF-31 e README allineati. Le prove reali non sono state ripetute: il percorso
+corretto non compare in nessuna di esse (nessun rifiuto all'ultimo passaggio).
+
+Rimandati (minori):
+- `graph.py`, nodo `reviewer`: `state["reviews"]` dà `KeyError` se il grafo è invocato senza
+  `reviews` (solo `Session` lo invoca e lo passa sempre; `steps` segue lo stesso schema);
+- `tests/test_main.py`: l'import di `langchain_core.messages` sta dopo quelli di `assistant.*`;
+- `CLAUDE.md`, riga sui finti di `conftest.py`: più lunga delle altre.
+
+Messi da parte dal revisore, con la decisione presa: falsi rifiuti su domande brevi di
+continuazione (rischio accettato dalla specifica §14, documentato nel README); contesto occupato da
+bozze e indicazioni (Step 3); possibili azioni ripetute in una riscrittura dopo `add_note` (affidate
+al testo dell'indicazione; mai osservate, perché nessuna prova reale ha prodotto un rifiuto dopo uno
+strumento con effetti: da controllare in una prova futura); `error="None"` nel ripiego (come da
+specifica); esattezza dei dati non giudicata (RF-28); eccezioni diverse da quelle previste che
+arrivano al terminale (come per il router).
 
 ### Punti aperti (Step 2)
 
@@ -185,7 +214,7 @@ Da sapere:
   `.venv/Scripts/python.exe` (o `py -3.13`).
 - **`LLM_Lez_5.pdf`** e **`LLM_Lez_6.pdf`** non sono tracciati: non aggiungerli a Git senza
   chiedere.
-- Suite predefinita: `pytest` → `247 passed, 14 deselected` (Step 2 della lezione 6), in circa 45–85 s. I test MCP avviano il
+- Suite predefinita: `pytest` → `249 passed, 14 deselected` (Step 2 della lezione 6), in circa 45–85 s. I test MCP avviano il
   server come sottoprocesso, circa 1 s ciascuno.
 
 ## Che cosa c'è oggi (lezione 5)
@@ -366,7 +395,7 @@ Da PowerShell nella radice della repository:
 & "$HOME\.lmstudio\bin\lms.exe" load google/gemma-4-e2b --context-length 8192 -y
 $env:LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
 $env:LMSTUDIO_MODEL = "google/gemma-4-e2b"
-.\.venv\Scripts\python.exe -m pytest            # senza modello: 247 passed, 14 deselected
+.\.venv\Scripts\python.exe -m pytest            # senza modello: 249 passed, 14 deselected
 .\.venv\Scripts\python.exe -m pytest -m real -v # 14 prove reali, circa 32 minuti
 .\.venv\Scripts\python.exe -m assistant
 docker compose build
