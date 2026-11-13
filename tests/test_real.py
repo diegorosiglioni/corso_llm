@@ -3,6 +3,7 @@
 Each test opens a real MCP server (stdio) with the notes store in tmp_path.
 """
 
+import dataclasses
 import json
 import logging
 import os
@@ -25,6 +26,7 @@ from assistant.model import (
 )
 from assistant.reviewer import is_feedback
 from assistant.session import Session
+from assistant.summary import is_user_question
 from assistant.tools import create_current_time_tool
 
 pytestmark = pytest.mark.real
@@ -274,3 +276,34 @@ def test_two_part_question_fully_real(config, real_session, caplog):
     assert "391" in reply, (reply, messages)
     assert any(t in reply for t in tokyo_times(messages)), (reply, messages)
     assert 1 <= len(reviewer_lines(caplog)) <= config.max_reviews, caplog.text
+
+
+# --- lesson 6, step 3: summary (CA-43) ---
+
+COMPRESSION = re.compile(
+    r"node=summary messages_before=(\d+) messages_after=(\d+) removed=\d+ next_node=router"
+)
+
+
+def summary_lines(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.getMessage().startswith("node=summary")]
+
+
+def test_first_turn_information_survives_compression(config, tmp_path, caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    small = dataclasses.replace(config, summary_max_messages=4, summary_keep_messages=2)
+    with open_session(small, tmp_path / "notes.sqlite3") as (session, _):
+        session.send("Mi chiamo Paolo")
+        first = summary_lines(caplog)
+        session.send("Che ore sono a Tokyo?")
+        reply = session.send("Come mi chiamo?")
+        messages, summary = session.messages, session.summary
+    lines = summary_lines(caplog)
+    assert first == ["node=summary messages=1/4 skipped=below_threshold next_node=router"], first
+    sizes = [tuple(map(int, m.groups())) for m in map(COMPRESSION.fullmatch, lines) if m]
+    assert sizes and all(before > after for before, after in sizes), lines
+    last = max(i for i, m in enumerate(messages) if is_user_question(m))
+    # the name can reach the agent only through the summary
+    assert not any("Paolo" in m.text for m in messages[:last]), messages
+    assert "Paolo" in summary, (summary, lines)
+    assert "Paolo" in reply, (reply, summary, lines)
