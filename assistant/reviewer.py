@@ -13,7 +13,8 @@ risposta proposta risponde alla domanda dell'utente.
 
 La risposta è coerente se risponde a tutte le parti della domanda e non esce dal tema.
 Non è coerente se ignora una parte della domanda, se parla d'altro o se è vuota.
-Non giudicare lo stile, la lunghezza né l'esattezza dei dati: vengono da strumenti che tu non vedi.
+Non giudicare lo stile, la lunghezza né l'esattezza dei dati: vengono da strumenti o dalla
+conversazione precedente, che tu non vedi (per esempio il nome che l'utente ha detto prima).
 Se la risposta spiega che una parte non si può soddisfare (per esempio un corso che non esiste),
 quella parte ha comunque una risposta. Se l'utente saluta o si presenta, una risposta cortese e
 pertinente è coerente; anche una domanda di chiarimento pertinente è coerente.

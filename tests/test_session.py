@@ -2,7 +2,13 @@ import openai
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from assistant.reviewer import ReviewDecision, feedback_message, is_feedback, review_messages
+from assistant.reviewer import (
+    REVIEWER_PROMPT,
+    ReviewDecision,
+    feedback_message,
+    is_feedback,
+    review_messages,
+)
 from assistant.graph import SYSTEM_PROMPT
 from assistant.router import ROUTER_PROMPT, RouteDecision, refusal_text
 from assistant.session import Session
@@ -198,7 +204,7 @@ def test_summary_carries_over_between_turns():
     assert model.calls[-1][0] == SystemMessage(with_summary(SYSTEM_PROMPT, "S2"))
 
 
-def test_router_sees_the_summary_and_reviewer_does_not():  # Review Focus 1
+def test_router_and_reviewer_see_the_summary():  # Review Focus 1
     router, reviewer = ConversationRouter(), ApprovingReviewer()
     model = FakeModel([AIMessage(t) for t in ("r1", "r2", "r3")])
     s = small_session(model, FakeModel([AIMessage("S1")]), router=router, reviewer=reviewer)
@@ -210,7 +216,10 @@ def test_router_sees_the_summary_and_reviewer_does_not():  # Review Focus 1
         with_summary(ROUTER_PROMPT.format(scope=TEST_SCOPE), "S1")
     )
     assert contents(sent[1:]) == ["d2", "r2", "d3"]  # kept messages only
-    assert reviewer.calls[-1] == review_messages("d3", "r3")
+    assert reviewer.calls[1] == review_messages("d2", "r2")
+    assert reviewer.calls[-1] == [
+        SystemMessage(with_summary(REVIEWER_PROMPT, "S1")), review_messages("d3", "r3")[1]
+    ]
     assert model.calls[-1][0] == SystemMessage(with_summary(SYSTEM_PROMPT, "S1"))
 
 

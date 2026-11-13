@@ -201,8 +201,10 @@ def build_graph(
         counter = f"review={review}/{max_reviews}"
         question = user_question(state["messages"])
         answer = state["messages"][-1].text
+        prompt, request = review_messages(question, answer)
+        system = SystemMessage(with_summary(prompt.text, state.get("summary", "")))
         try:
-            decision = reviewer_model.invoke(review_messages(question, answer))
+            decision = reviewer_model.invoke([system, request])
         except ReviewerOutputError as error:
             decision = error
         if not isinstance(decision, ReviewDecision):

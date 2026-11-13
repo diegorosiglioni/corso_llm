@@ -68,3 +68,8 @@ def test_review_decision_schema():
 def test_reviewer_prompt_names_no_tools():
     for name in ["get_current_time", *ALLOWED_MCP_TOOLS]:
         assert name not in REVIEWER_PROMPT
+
+
+def test_reviewer_prompt_does_not_judge_data_from_the_conversation():
+    # After a compression the reviewer still sees only question and answer (lesson 6, step 3).
+    assert "conversazione precedente, che tu non vedi" in REVIEWER_PROMPT
