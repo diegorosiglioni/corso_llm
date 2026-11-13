@@ -198,15 +198,18 @@ def test_summary_carries_over_between_turns():
     assert model.calls[-1][0] == SystemMessage(with_summary(SYSTEM_PROMPT, "S2"))
 
 
-def test_router_and_reviewer_never_see_the_summary():  # Review Focus 1
+def test_router_sees_the_summary_and_reviewer_does_not():  # Review Focus 1
     router, reviewer = ConversationRouter(), ApprovingReviewer()
     model = FakeModel([AIMessage(t) for t in ("r1", "r2", "r3")])
     s = small_session(model, FakeModel([AIMessage("S1")]), router=router, reviewer=reviewer)
     for text in ("d1", "d2", "d3"):
         s.send(text)
+    assert router.calls[1][0] == SystemMessage(ROUTER_PROMPT.format(scope=TEST_SCOPE))
     sent = router.calls[-1]
-    assert sent[0] == SystemMessage(ROUTER_PROMPT.format(scope=TEST_SCOPE))
-    assert contents(sent[1:]) == ["d2", "r2", "d3"]  # kept messages only, no summary
+    assert sent[0] == SystemMessage(
+        with_summary(ROUTER_PROMPT.format(scope=TEST_SCOPE), "S1")
+    )
+    assert contents(sent[1:]) == ["d2", "r2", "d3"]  # kept messages only
     assert reviewer.calls[-1] == review_messages("d3", "r3")
     assert model.calls[-1][0] == SystemMessage(with_summary(SYSTEM_PROMPT, "S1"))
 

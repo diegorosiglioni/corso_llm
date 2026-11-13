@@ -13,7 +13,8 @@ router. Quando la cronologia supera una soglia, il nodo chiede al modello di agg
 riassunto (un campo dello stato) e toglie dalla cronologia i messaggi vecchi, conservando gli
 ultimi. Scopo: conversazione utilizzabile su molti turni senza perdere le informazioni importanti,
 perché il contesto del modello locale è limitato (`google/gemma-4-e2b`, 8192 token).
-Router, revisore, strumenti, MCP, terminale e Docker non cambiano. Dove non dice altro, valgono le
+Il router riceve il riassunto in fondo al suo prompt di sistema, come l'agente (decisione dell'utente
+del 2026-11-13 dopo la prova reale, §16); revisore, strumenti, MCP, terminale e Docker non cambiano. Dove non dice altro, valgono le
 specifiche precedenti.
 
 ## 1. Decisioni
@@ -28,7 +29,7 @@ progettista».
 | Che cosa legge chi riassume | Il riassunto precedente e i soli messaggi vecchi filtrati da `router_messages`: domande dell'utente e risposte finali, senza strumenti, bozze rifiutate né indicazioni del revisore | Testo corto e pulito, filtro già scritto e testato; rischio accettato: un dato presente solo nel risultato di uno strumento e mai ripetuto nella risposta si perde |
 | Riassunto nello stato | Campo `summary: str`, **sostituito** a ogni compressione (il nuovo riassunto ingloba il precedente); la sessione lo conserva tra i turni | Requisito 3 della traccia |
 | Rimozione dei messaggi | `RemoveMessage(id=…)` restituiti dal nodo, applicati dal reducer `add_messages` già in uso | Nessuna riscrittura della cronologia fuori dal grafo |
-| Chi legge il riassunto | Solo l'agente, in fondo all'unico messaggio di sistema; router e revisore invariati | Alcuni template di chat (Gemma compreso) rifiutano un secondo `SystemMessage`; il router vede ancora i messaggi conservati, sufficienti per le domande brevi di continuazione |
+| Chi legge il riassunto | L'agente e il router, in fondo al loro unico messaggio di sistema; il revisore no (**cambiata il 2026-11-13** dopo la prova reale, §16: prima era «solo l'agente») | Alcuni template di chat (Gemma compreso) rifiutano un secondo `SystemMessage`; senza il riassunto il router rifiutava le domande su un turno riassunto («Come mi chiamo?»); il revisore giudica solo domanda e risposta |
 | Modello | Lo stesso di LM Studio, senza strumenti, testo libero (nessuno schema JSON) | Slide 3: stesso modello, prompt diversi; un riassunto è testo |
 | Risposta vuota | Nessuna compressione, WARNING, il turno prosegue | Non si buttano messaggi senza un riassunto che li sostituisca |
 | Errori di LM Studio | Non intercettati: arrivano al terminale; cronologia **e** riassunto invariati | Comportamento esistente per agente, router e revisore |
@@ -67,7 +68,7 @@ assistant/
 └── __main__.py      # + modello del riassunto e soglie passati al grafo; log delle soglie
 ```
 
-`router.py`, `reviewer.py`, `terminal.py`, `tools.py`, i moduli MCP, `scope.txt` e `compose.yaml`
+`router.py` (il testo del prompt), `reviewer.py`, `terminal.py`, `tools.py`, i moduli MCP, `scope.txt` e `compose.yaml`
 non cambiano.
 
 ## 4. Configurazione (`config.py`)
@@ -194,6 +195,12 @@ usano `state.get("summary", "")`, e `Session` lo passa sempre.
 `llm_node` invoca il modello con
 `[SystemMessage(with_summary(SYSTEM_PROMPT, state.get("summary", "")))] + state["messages"]`.
 Senza riassunto il messaggio di sistema è identico a oggi.
+
+### Router
+
+`router_node` invoca il modello del router con
+`[SystemMessage(with_summary(ROUTER_PROMPT.format(scope=scope), state.get("summary", "")))] +
+router_messages(state["messages"])`. Senza riassunto il messaggio di sistema è identico a oggi.
 
 ### Archi
 
@@ -338,14 +345,25 @@ Ognuno verificato con `pytest` prima del commit.
   trascrizione; lo limitano il prompt e la trascrizione in un unico messaggio.
 - **Latenza**: una chiamata in più nei turni in cui si supera la soglia; con 20 e 6, dopo una
   compressione ne restano circa 6, quindi la successiva arriva dopo alcuni turni.
-- **Router dopo la compressione**: vede solo i messaggi conservati, non il riassunto; una domanda
-  breve che si riferisce a un turno riassunto potrebbe essere classificata peggio. Con almeno 6
-  messaggi conservati il turno precedente c'è sempre.
+- **Router dopo la compressione**: vede i messaggi conservati e il riassunto (§16). Se il
+  riassunto tralascia un fatto, una domanda su quel fatto può ancora essere rifiutata.
 
 ## 15. Fuori ambito
 
 Resource e prompt MCP (step 4–5), servizio HTTP, back-end, front-end e Compose a più container
-(step 6–9), streaming. Soglia in token; riassunto passato a router o revisore; risultati degli
+(step 6–9), streaming. Soglia in token; riassunto passato al revisore; risultati degli
 strumenti passati a chi riassume; un modello diverso per il riassunto; persistenza del riassunto
 oltre la sessione; le correzioni minori rimandate degli Step 1 e 2 e gli altri punti annotati
 nell'handoff fuori dalla traccia.
+
+## 16. Modifica dopo la prova reale (2026-11-13)
+
+La prima esecuzione di CA-43 (Task 5 del piano) ha mostrato la compressione corretta
+(`messages_before=7 messages_after=5 removed=2`) e il riassunto «L'utente si è presentato come
+Paolo.», ma il router, che allora non riceveva il riassunto, ha classificato «Come mi chiamo?»
+`out_of_scope` («informazioni personali che l'assistente non può fornire»). Una frase aggiunta a
+`ROUTER_PROMPT` non è bastata (rifiuto in 3 esecuzioni su 4). In una prova diretta sugli stessi
+messaggi conservati, 4 chiamate per variante: router senza riassunto `out_of_scope` 4 su 4, con
+il riassunto in fondo al prompt `conversation` 4 su 4; l'agente con il riassunto risponde «Ti
+chiami Paolo.» 4 su 4. Decisione dell'utente: il router riceve il riassunto come l'agente
+(`with_summary`), la frase aggiunta a `ROUTER_PROMPT` è tolta, il revisore resta invariato.

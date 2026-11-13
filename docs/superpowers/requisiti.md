@@ -333,8 +333,9 @@ Riferimento: `LLM_Lez_6.pdf`, slide 3 e 6 (riassunto in `lezione6.md`). Stato: a
   il nodo non chiama il modello.
 - **RF-36** *Riassunto nello stato* — Il riassunto è un campo dello stato che a ogni compressione
   viene sostituito da uno nuovo, comprensivo del precedente; la sessione lo conserva tra i turni
-  (non oltre la sessione, come la cronologia). L'agente lo riceve in fondo al prompt di sistema;
-  router e revisore non lo ricevono.
+  (non oltre la sessione, come la cronologia). L'agente e il router lo ricevono in fondo al loro
+  prompt di sistema; il revisore non lo riceve (il router dal 2026-11-13, dopo la prova reale:
+  specifica §16).
 - **RF-37** *Errori del riassunto* — Un riassunto vuoto non comprime nulla: il turno prosegue con
   la cronologia intatta e il log lo segnala con un WARNING. Gli errori di collegamento con LM
   Studio sono trattati come per l'agente: cronologia e riassunto restano invariati.

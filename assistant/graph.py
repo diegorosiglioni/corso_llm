@@ -133,7 +133,7 @@ def build_graph(
 ):
     """Returns the compiled graph: summary, router, refusal, llm, tools, limit and reviewer."""
     by_name = {tool.name: tool for tool in tools}
-    router_prompt = SystemMessage(ROUTER_PROMPT.format(scope=scope))
+    router_prompt = ROUTER_PROMPT.format(scope=scope)
 
     def summary_node(state: State) -> dict:
         """Once per turn, before the router: compresses the old turns over the threshold."""
@@ -162,7 +162,8 @@ def build_graph(
 
     def router_node(state: State) -> dict:
         try:
-            decision = router_model.invoke([router_prompt] + router_messages(state["messages"]))
+            system = SystemMessage(with_summary(router_prompt, state.get("summary", "")))
+            decision = router_model.invoke([system] + router_messages(state["messages"]))
         except RouterOutputError as error:
             decision = error
         if not isinstance(decision, RouteDecision):

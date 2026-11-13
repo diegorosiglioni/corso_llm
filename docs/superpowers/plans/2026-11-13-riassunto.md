@@ -41,8 +41,8 @@ requisiti in [`../requisiti.md`](../requisiti.md) §11 (RF-34…RF-38, CA-38…C
   - `INFO node=summary messages_before=<n> messages_after=<n - cut> removed=<cut> next_node=router`
   - `DEBUG node=summary summary=<json>`
   - all'avvio: `scope_file=<percorso> max_reviews=<n> summary_max_messages=<n> summary_keep_messages=<n>`.
-- Il nodo non consuma `steps`; viene eseguito una volta per turno. Router e revisore non ricevono
-  il riassunto. `openai.APIError` di chi riassume non viene intercettato: arriva al terminale,
+- Il nodo non consuma `steps`; viene eseguito una volta per turno. Il revisore non riceve il
+  riassunto; il router sì, dal Task 5 (specifica §16). `openai.APIError` di chi riassume non viene intercettato: arriva al terminale,
   cronologia e riassunto invariati.
 - Non anticipare gli step successivi (resource e prompt MCP, HTTP, back-end, front-end, Compose a
   più container) né i punti dell'handoff fuori dalla traccia.
@@ -70,9 +70,10 @@ requisiti in [`../requisiti.md`](../requisiti.md) §11 (RF-34…RF-38, CA-38…C
 
 ## Review Focus
 
-1. Turno successivo a una compressione: il router vede solo i messaggi conservati e il suo prompt
-   non contiene il riassunto; il revisore riceve ancora `review_messages(domanda, risposta)`;
-   l'agente riceve il riassunto → `test_router_and_reviewer_never_see_the_summary` (Task 4).
+1. Turno successivo a una compressione: il router vede solo i messaggi conservati (dal Task 5
+   anche il riassunto, specifica §16); il revisore riceve ancora `review_messages(domanda,
+   risposta)`; l'agente riceve il riassunto → `test_router_and_reviewer_never_see_the_summary`
+   (Task 4), poi `test_router_sees_the_summary_and_reviewer_does_not` (Task 5).
 2. L'agente fallisce nello stesso turno dopo una compressione: cronologia e riassunto della
    sessione invariati; al turno ripetuto chi riassume viene richiamato →
    `test_agent_error_after_compression_keeps_history_and_summary` (Task 4).
