@@ -125,6 +125,7 @@ def test_missing_scope_file_exits_1(capsys, monkeypatch, tmp_path):
     monkeypatch.setattr(entry, "create_model", _must_not_call)
     monkeypatch.setattr(entry, "create_router_model", _must_not_call)
     monkeypatch.setattr(entry, "create_reviewer_model", _must_not_call)
+    monkeypatch.setattr(entry, "create_summary_model", _must_not_call)
     monkeypatch.setattr(entry, "run", _must_not_call)
     assert main({**VALID, "SCOPE_FILE": str(tmp_path / "manca.txt")}) == 1
     assert "Configurazione non valida: SCOPE_FILE non leggibile:" in capsys.readouterr().err
@@ -164,3 +165,48 @@ def test_max_reviews_is_logged(monkeypatch, caplog):
     monkeypatch.setattr(entry, "run", lambda session: None)
     main(VALID)
     assert f"scope_file={DEFAULT_SCOPE_FILE} max_reviews=2" in caplog.text
+
+
+# --- summary (lesson 6, step 3) ---
+
+@pytest.mark.parametrize(("env", "maximum", "keep"), [
+    ({}, 20, 6),
+    ({"SUMMARY_MAX_MESSAGES": "8", "SUMMARY_KEEP_MESSAGES": "3"}, 8, 3),
+])
+def test_summary_model_and_thresholds_reach_the_graph(monkeypatch, env, maximum, keep):
+    summarizer = object()
+    received = []
+    monkeypatch.setattr(entry, "create_summary_model", lambda config: summarizer)
+    monkeypatch.setattr(
+        entry, "build_graph", lambda *args, **kwargs: received.append(kwargs) or "graph"
+    )
+    monkeypatch.setattr(entry, "run", lambda session: None)
+    assert main({**VALID, **env}) == 0
+    assert received[0]["summary_model"] is summarizer
+    assert received[0]["summary_max_messages"] == maximum
+    assert received[0]["summary_keep_messages"] == keep
+
+
+def test_graph_built_by_main_goes_through_the_summary_node(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    replies = []
+    monkeypatch.setattr(
+        entry, "create_model", lambda config, tools: FakeModel([AIMessage("Ciao!")])
+    )
+    monkeypatch.setattr(entry, "create_router_model", lambda config: ConversationRouter())
+    monkeypatch.setattr(entry, "create_reviewer_model", lambda config: ApprovingReviewer())
+    monkeypatch.setattr(entry, "create_summary_model", lambda config: FakeModel([]))
+    monkeypatch.setattr(entry, "run", lambda session: replies.append(session.send("Ciao")))
+    assert main(VALID) == 0
+    assert replies == ["Ciao!"]
+    assert "node=summary messages=1/20 skipped=below_threshold next_node=router" in caplog.text
+
+
+def test_summary_thresholds_are_logged(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    monkeypatch.setattr(entry, "run", lambda session: None)
+    main(VALID)
+    assert (
+        f"scope_file={DEFAULT_SCOPE_FILE} max_reviews=2 "
+        "summary_max_messages=20 summary_keep_messages=6"
+    ) in caplog.text

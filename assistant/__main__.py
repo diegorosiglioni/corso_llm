@@ -1,5 +1,5 @@
-"""Startup: configuration → logging → MCP client → models (agent, router, reviewer) → graph →
-session → terminal."""
+"""Startup: configuration → logging → MCP client → models (agent, router, reviewer, summary) →
+graph → session → terminal."""
 
 import logging
 import os
@@ -17,7 +17,12 @@ from assistant.mcp_client import (
     create_mcp_tools,
     server_command,
 )
-from assistant.model import create_model, create_reviewer_model, create_router_model
+from assistant.model import (
+    create_model,
+    create_reviewer_model,
+    create_router_model,
+    create_summary_model,
+)
 from assistant.session import Session
 from assistant.terminal import run
 from assistant.tools import ToolUnavailableError, create_current_time_tool
@@ -73,7 +78,11 @@ def _converse(config, client) -> int:
         ", ".join(f"{t.name} ({(t.metadata or {}).get('variant', 'local')})" for t in tools),
     )
 
-    log.info("scope_file=%s max_reviews=%d", config.scope_file, config.max_reviews)
+    log.info(
+        "scope_file=%s max_reviews=%d summary_max_messages=%d summary_keep_messages=%d",
+        config.scope_file, config.max_reviews,
+        config.summary_max_messages, config.summary_keep_messages,
+    )
 
     model = create_model(config, tools)
     graph = build_graph(
@@ -84,6 +93,9 @@ def _converse(config, client) -> int:
         scope=config.scope,
         reviewer_model=create_reviewer_model(config),
         max_reviews=config.max_reviews,
+        summary_model=create_summary_model(config),
+        summary_max_messages=config.summary_max_messages,
+        summary_keep_messages=config.summary_keep_messages,
     )
     session = Session(graph)
     print(

@@ -21,6 +21,7 @@ from assistant.router import (
     refusal_text,
     router_messages,
 )
+from assistant.summary import summary_input, with_summary
 from assistant.tools import ToolUnavailableError
 from conftest import (
     TEST_SCOPE,
@@ -306,7 +307,7 @@ def test_router_without_decision_falls_back(caplog):
 def test_router_reason_is_logged_on_one_line(caplog):
     caplog.set_level(logging.INFO, logger="assistant.graph")
     routed_turn(FakeModel([decision("out_of_scope", 'riga 1\n"riga 2"')]), FakeModel([]))
-    line = next(r.getMessage() for r in caplog.records if "node=router" in r.getMessage())
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("node=router"))
     assert "\n" not in line
     assert r'reason="riga 1\n\"riga 2\""' in line
 
@@ -499,3 +500,131 @@ def test_rewrite_never_exceeds_max_steps(caplog):
 
 def test_graph_has_reviewer_node():
     assert "reviewer" in set(fake_graph(FakeModel([])).get_graph().nodes)
+
+
+# --- summary (lesson 6, step 3) ---
+
+def summarized_turn(summarizer, history, summary="", model=None, max_messages=4, keep=2, **kw):
+    model = model or FakeModel([AIMessage("risposta")])
+    graph = fake_graph(
+        model, summary_model=summarizer, summary_max_messages=max_messages,
+        summary_keep_messages=keep, **kw,
+    )
+    return graph.invoke({"messages": history, "summary": summary, "steps": 0, "reviews": 0})
+
+
+def summary_lines(caplog, level=None):
+    return [
+        r.getMessage() for r in caplog.records
+        if r.getMessage().startswith("node=summary") and (level is None or r.levelno == level)
+    ]
+
+
+def contents(messages):
+    return [m.content for m in messages]
+
+
+def five():
+    """[D1, R1, D2, R2, D3]: with keep=2 the cut is 2."""
+    return [
+        HumanMessage("d1"), AIMessage("r1"), HumanMessage("d2"), AIMessage("r2"),
+        HumanMessage("d3"),
+    ]
+
+
+def seven():
+    """Two turns, the second with a tool, and a new question: with keep=2 the cut is 2."""
+    return [
+        HumanMessage("Mi chiamo Paolo"), AIMessage("Piacere, Paolo."),
+        HumanMessage("Che ore sono a Tokyo?"), tool_call(),
+        ToolMessage('{"datetime": "…"}', tool_call_id="c1", name="get_current_time"),
+        AIMessage("Sono le 10."), HumanMessage("Come mi chiamo?"),
+    ]
+
+
+@pytest.mark.parametrize(("max_messages", "calls"), [(5, 0), (4, 1)])
+def test_threshold_boundary(caplog, max_messages, calls):  # CA-39, Review Focus 3
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    summarizer = FakeModel([AIMessage("S")])
+    result = summarized_turn(summarizer, five(), max_messages=max_messages)
+    assert len(summarizer.calls) == calls
+    if calls == 0:
+        assert summary_lines(caplog) == [
+            "node=summary messages=5/5 skipped=below_threshold next_node=router"
+        ]
+        assert contents(result["messages"])[:5] == contents(five())
+        assert result["summary"] == ""
+
+
+def test_compression_over_the_threshold(caplog):  # CA-40
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    history, summarizer = seven(), FakeModel([AIMessage("L'utente si chiama Paolo.")])
+    model = FakeModel([AIMessage("Ti chiami Paolo.")])
+    result = summarized_turn(summarizer, history, model=model)
+    assert summarizer.calls == [summary_input("", seven()[:2])]
+    assert summary_lines(caplog, logging.INFO) == [
+        "node=summary messages_before=7 messages_after=5 removed=2 next_node=router"
+    ]
+    assert contents(result["messages"]) == contents(seven()[2:]) + ["Ti chiami Paolo."]
+    assert result["summary"] == "L'utente si chiama Paolo."
+    assert model.calls[0][0] == SystemMessage(
+        with_summary(SYSTEM_PROMPT, "L'utente si chiama Paolo.")
+    )
+
+
+def test_second_summary_replaces_the_first():  # CA-40
+    summarizer = FakeModel([AIMessage("Nuovo.")])
+    result = summarized_turn(summarizer, five(), summary="Vecchio.")
+    assert summarizer.calls[0][1].content.startswith("Riassunto precedente:\nVecchio.\n\n")
+    assert result["summary"] == "Nuovo."
+
+
+def test_one_long_turn_has_nothing_to_compress(caplog):  # CA-41
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    history = [
+        HumanMessage("d1"), tool_call(),
+        ToolMessage("{}", tool_call_id="c1", name="get_current_time"),
+        AIMessage("r1"), HumanMessage("d2"),
+    ]
+    summarizer = FakeModel([])
+    summarized_turn(summarizer, history)
+    assert summarizer.calls == []
+    assert summary_lines(caplog) == [
+        "node=summary messages=5/4 skipped=nothing_to_compress next_node=router"
+    ]
+
+
+@pytest.mark.parametrize("text", ["", "  \n "])
+def test_empty_summary_compresses_nothing(caplog, text):  # CA-42, Review Focus 4
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    model = FakeModel([AIMessage("risposta")])
+    result = summarized_turn(FakeModel([AIMessage(text)]), five(), model=model)
+    assert summary_lines(caplog, logging.WARNING) == [
+        "node=summary messages=5/4 fallback=empty_summary next_node=router"
+    ]
+    assert contents(result["messages"]) == contents(five()) + ["risposta"]
+    assert result["summary"] == ""
+    assert model.calls[0][0] == SystemMessage(SYSTEM_PROMPT)
+
+
+def test_summary_is_logged_on_one_line_at_debug(caplog):  # Review Focus 4
+    caplog.set_level(logging.DEBUG, logger="assistant.graph")
+    text = 'Si chiama "Paolo".\nVuole le ore.'
+    summarized_turn(FakeModel([AIMessage(text)]), five())
+    assert f"node=summary summary={json.dumps(text, ensure_ascii=False)}" in summary_lines(
+        caplog, logging.DEBUG
+    )
+
+
+def test_summary_does_not_consume_steps(caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    result = summarized_turn(FakeModel([AIMessage("S")]), five(), max_steps=1)
+    assert result["steps"] == 1 and "step=1/1 node=llm" in caplog.text
+
+
+def test_graph_starts_with_the_summary_node():
+    drawn = fake_graph(FakeModel([])).get_graph()
+    assert "summary" in drawn.nodes
+    assert {(e.source, e.target) for e in drawn.edges} >= {
+        ("__start__", "summary"), ("summary", "router")
+    }

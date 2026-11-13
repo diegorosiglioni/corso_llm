@@ -1,11 +1,21 @@
 import openai
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from assistant.reviewer import ReviewDecision, feedback_message, is_feedback, review_messages
-from assistant.router import RouteDecision, refusal_text
+from assistant.graph import SYSTEM_PROMPT
+from assistant.router import ROUTER_PROMPT, RouteDecision, refusal_text
 from assistant.session import Session
-from conftest import ConversationRouter, FakeModel, fake_graph, lm_studio_error, tool_call
+from assistant.summary import with_summary
+from conftest import (
+    TEST_SCOPE,
+    ApprovingReviewer,
+    ConversationRouter,
+    FakeModel,
+    fake_graph,
+    lm_studio_error,
+    tool_call,
+)
 
 
 def contents(messages):
@@ -26,11 +36,16 @@ class RecordingGraph:
     def __init__(self):
         self.incoming_steps = []
         self.incoming_reviews = []
+        self.incoming_summaries = []
 
     def invoke(self, state):
         self.incoming_steps.append(state["steps"])
         self.incoming_reviews.append(state["reviews"])
-        return {"messages": state["messages"] + [AIMessage("ok")], "steps": 1}
+        self.incoming_summaries.append(state["summary"])
+        return {
+            "messages": state["messages"] + [AIMessage("ok")], "steps": 1,
+            "summary": state["summary"],
+        }
 
 
 def test_steps_restart_from_zero():
@@ -159,3 +174,69 @@ def test_next_turn_after_a_rewrite():
         "E a Roma?",
     ]
     assert reviewer.calls[2] == review_messages("E a Roma?", "Sono le 3.")
+
+
+# --- summary (lesson 6, step 3) ---
+
+def small_session(model, summarizer, **kw):
+    """Thresholds 4 and 3: compression at the third turn and again at the fourth."""
+    return Session(fake_graph(
+        model, summary_model=summarizer, summary_max_messages=4, summary_keep_messages=3, **kw
+    ))
+
+
+def test_summary_carries_over_between_turns():
+    model = FakeModel([AIMessage(t) for t in ("r1", "r2", "r3", "r4")])
+    summarizer = FakeModel([AIMessage("S1"), AIMessage("S2")])
+    s = small_session(model, summarizer)
+    for text in ("d1", "d2", "d3"):
+        s.send(text)
+    assert s.summary == "S1" and contents(s.messages) == ["d2", "r2", "d3", "r3"]
+    s.send("d4")
+    assert summarizer.calls[1][1].content.startswith("Riassunto precedente:\nS1\n\n")
+    assert s.summary == "S2"
+    assert model.calls[-1][0] == SystemMessage(with_summary(SYSTEM_PROMPT, "S2"))
+
+
+def test_router_and_reviewer_never_see_the_summary():  # Review Focus 1
+    router, reviewer = ConversationRouter(), ApprovingReviewer()
+    model = FakeModel([AIMessage(t) for t in ("r1", "r2", "r3")])
+    s = small_session(model, FakeModel([AIMessage("S1")]), router=router, reviewer=reviewer)
+    for text in ("d1", "d2", "d3"):
+        s.send(text)
+    sent = router.calls[-1]
+    assert sent[0] == SystemMessage(ROUTER_PROMPT.format(scope=TEST_SCOPE))
+    assert contents(sent[1:]) == ["d2", "r2", "d3"]  # kept messages only, no summary
+    assert reviewer.calls[-1] == review_messages("d3", "r3")
+    assert model.calls[-1][0] == SystemMessage(with_summary(SYSTEM_PROMPT, "S1"))
+
+
+def test_summary_error_leaves_history_and_summary_untouched():  # CA-42
+    s = small_session(
+        FakeModel([AIMessage("r1"), AIMessage("r2")]), FakeModel([lm_studio_error()])
+    )
+    s.send("d1")
+    s.send("d2")
+    with pytest.raises(openai.APIConnectionError):
+        s.send("d3")
+    assert contents(s.messages) == ["d1", "r1", "d2", "r2"] and s.summary == ""
+
+
+def test_agent_error_after_compression_keeps_history_and_summary():  # Review Focus 2
+    model = FakeModel([AIMessage("r1"), AIMessage("r2"), lm_studio_error(), AIMessage("r3")])
+    summarizer = FakeModel([AIMessage("S1"), AIMessage("S1 bis")])
+    s = small_session(model, summarizer)
+    s.send("d1")
+    s.send("d2")
+    with pytest.raises(openai.APIConnectionError):
+        s.send("d3")
+    assert contents(s.messages) == ["d1", "r1", "d2", "r2"] and s.summary == ""
+    s.send("d3")
+    assert len(summarizer.calls) == 2 and s.summary == "S1 bis"
+
+
+def test_summary_restarts_empty():
+    graph = RecordingGraph()
+    s = Session(graph)
+    s.send("uno")
+    assert graph.incoming_summaries == [""]

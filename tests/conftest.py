@@ -54,8 +54,10 @@ class ApprovingReviewer:
 
 
 def fake_graph(
-    model, tools=None, max_steps=5, router=None, scope=TEST_SCOPE, reviewer=None, max_reviews=2
+    model, tools=None, max_steps=5, router=None, scope=TEST_SCOPE, reviewer=None, max_reviews=2,
+    summary_model=None, summary_max_messages=20, summary_keep_messages=6,
 ):
+    """Graph with fake models; the default summary model fails if it is ever called."""
     if tools is None:
         tools = [create_current_time_tool(lambda: FIXED_NOW)]
     if router is None:
@@ -65,6 +67,8 @@ def fake_graph(
     return build_graph(
         model, list(tools), max_steps,
         router_model=router, scope=scope, reviewer_model=reviewer, max_reviews=max_reviews,
+        summary_model=FakeModel([]) if summary_model is None else summary_model,
+        summary_max_messages=summary_max_messages, summary_keep_messages=summary_keep_messages,
     )
 
 

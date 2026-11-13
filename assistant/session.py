@@ -9,15 +9,24 @@ class Session:
     def __init__(self, graph):
         self._graph = graph
         self._messages: list[AnyMessage] = []
+        self._summary = ""  # summary of the messages removed from the history
 
     @property
     def messages(self) -> list[AnyMessage]:
         return list(self._messages)
 
+    @property
+    def summary(self) -> str:
+        return self._summary
+
     def send(self, text: str) -> str:
-        """Runs one turn; the history changes only if the turn succeeds."""
-        result = self._graph.invoke(
-            {"messages": self._messages + [HumanMessage(text)], "steps": 0, "reviews": 0}
-        )
+        """Runs one turn; history and summary change only if the turn succeeds."""
+        result = self._graph.invoke({
+            "messages": self._messages + [HumanMessage(text)],
+            "summary": self._summary,
+            "steps": 0,
+            "reviews": 0,
+        })
         self._messages = result["messages"]
+        self._summary = result["summary"]
         return self._messages[-1].text.strip() or EMPTY_REPLY
