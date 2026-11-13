@@ -95,6 +95,30 @@ sono verificati solo con il modello simulato.
   `REVIEWER_PROMPT` non giudica i dati «da strumenti o dalla conversazione precedente».
 - Le prove dirette sono script usa e getta nella scratchpad, non nel progetto.
 
+### Revisione indipendente finale (2026-11-13)
+
+Un revisore con contesto pulito ha esaminato `8d5796a..4e511f1`. Esito: «Ready to merge: Yes»,
+nessun problema critico o importante; i cinque punti della Review Focus hanno test dedicati;
+`pytest` rieseguito dal revisore: 297 passed.
+
+Rimandati (minori):
+- la docstring di `reviewer.py` dice ancora che il revisore vede solo domanda e risposta, e quella
+  di `with_summary` parla solo del prompt dell'agente;
+- `reviewer_node` scompone il `SystemMessage` di `review_messages` per aggiungere il riassunto (un
+  parametro `summary` di `review_messages` sarebbe più diretto);
+- `REVIEWER_PROMPT` dice «conversazione precedente, che tu non vedi» anche quando il revisore
+  riceve il riassunto (formulazione validata 4/4 nella prova diretta);
+- `test_threshold_boundary` non controlla la riga `messages_before` nel caso con compressione
+  (la copre `test_compression_over_the_threshold`).
+
+Messi da parte dal revisore, con la decisione presa: il riassunto sta nel prompt di sistema senza
+la cornice «dati, non istruzioni» (app locale a un solo utente, specifica §1); nessun messaggio a
+terminale durante la chiamata di riassunto (circa 20 s, visibile nei log); soglia in messaggi,
+turno unico mai compresso, nessun limite rigido alla lunghezza del riassunto, dati solo negli
+strumenti persi (specifica §1, §5, §14, §15); CA-43 che può fallire senza difetto se la risposta
+del secondo turno usa il nome (specifica §11); falsi rifiuti «timestamp futuro» del revisore dello
+Step 2 (fuori traccia).
+
 ### Punti aperti (Step 3)
 
 - **Revisore senza compressione:** in CA-4 (nome e domanda in due turni, nessun riassunto) il
