@@ -1,7 +1,8 @@
 # Handoff — Assistente del laboratorio
 
 Data: 2026-11-13
-Stato: **lezione 6, Step 1 (router) e Step 2 (revisore): implementati, verificati e pubblicati.**
+Stato: **lezione 6, Step 1 (router) e Step 2 (revisore): implementati, verificati e pubblicati.
+Step 3 (riassunto): specifica e requisiti §11 approvati; piano da scrivere e approvare.**
 Il 2026-11-13 `origin/dev` e `origin/main` sono stati portati a `f53b67a` (avanzamento rapido).
 Step 2: specifica [`specs/2026-11-11-revisore-design.md`](specs/2026-11-11-revisore-design.md),
 piano [`plans/2026-11-11-revisore.md`](plans/2026-11-11-revisore.md), requisiti §10 (RF-28…RF-33,
@@ -22,9 +23,55 @@ storici e non sono stati riscritti.
 
 ## Lezione 6 — prossimo passo (2026-11-13)
 
-**Prossimo: Step 3 · Riassunto della cronologia**, da avviare con un nuovo brainstorming
-(`superpowers:brainstorming`): requisiti, specifica, piano, come per gli Step 1 e 2. Prompt per la
-nuova chat: [`prossimo-prompt.txt`](prossimo-prompt.txt).
+**In corso: Step 3 · Riassunto della cronologia.** La specifica
+[`specs/2026-11-13-riassunto-design.md`](specs/2026-11-13-riassunto-design.md) e i requisiti §11
+(RF-34…RF-38, CA-38…CA-45) di [`requisiti.md`](requisiti.md) sono **approvati** (2026-11-13).
+La bozza è stata riletta come da chi deve pianificarla (lettura propria, con verifica sul codice e
+sulle librerie): nessuna domanda per l'utente; i punti minori sono segnati nella specifica come
+«scelta del progettista» (prova reale CA-43 resa robusta a un rifiuto del revisore e al nome
+ripetuto nella risposta del secondo turno, `RecordingGraph` che restituisce `summary`).
+
+**Prossimo passo:** `superpowers:writing-plans` → `plans/2026-11-13-riassunto.md`, da far
+approvare prima del codice.
+
+**Decisioni prese con l'utente nel brainstorming (2026-11-13):**
+- **Soglia in numero di messaggi.** `SUMMARY_MAX_MESSAGES` (default 20) conta tutti i messaggi
+  della cronologia, compresa la domanda appena arrivata; si riassume quando il conteggio la
+  supera. La stima dei token è stata scartata.
+- **Messaggi conservati.** `SUMMARY_KEEP_MESSAGES` (default 6, intero ≥ 1 e minore della soglia):
+  si tengono almeno gli ultimi N messaggi, e il taglio arretra fino alla domanda dell'utente che
+  apre il turno. Così non separa mai una tool_call dal suo `ToolMessage` né una bozza dalla sua
+  indicazione. Se arretra fino all'inizio, non si comprime e non si chiama il modello
+  (`skipped=nothing_to_compress`). L'alternativa «N turni» è stata scartata.
+- **Che cosa legge chi riassume.** Il riassunto precedente più i soli messaggi vecchi filtrati con
+  `router_messages`: domande e risposte finali, senza strumenti, bozze né indicazioni. Rischio
+  accettato: un dato che compare solo in un risultato di strumento si perde.
+- **Scelte proposte e approvate dall'utente** («va bene così»):
+  - il riassunto va in fondo all'unico messaggio di sistema dell'agente; router e revisore non
+    cambiano;
+  - `Session` conserva `summary` tra i turni; se il turno fallisce, cronologia e riassunto restano
+    invariati;
+  - stesso modello, senza strumenti, testo libero;
+  - riassunto vuoto → nessuna compressione e WARNING `fallback=empty_summary`;
+  - log `node=summary messages_before=… messages_after=… removed=…`, oppure
+    `messages=n/max skipped=below_threshold`; riga di avvio con le due soglie;
+  - test con il modello simulato, più una prova reale nuova con soglie 4 e 2 («Mi chiamo
+    Paolo», «Che ore sono a Tokyo?», «Come mi chiamo?»);
+  - prova da terminale in locale e con Docker, con `-e SUMMARY_MAX_MESSAGES=4 -e
+    SUMMARY_KEEP_MESSAGES=2`.
+- **Approccio approvato:** nodo `summary` nel grafo (`START → summary → router`), campo `summary`
+  dello stato sostituito a ogni compressione, rimozione con `RemoveMessage`, modulo nuovo
+  `summary.py`. Scartati: compressione in `Session` fuori dal grafo, vista ridotta con la
+  cronologia intatta, `langmem` o `trim_messages`.
+- **Scelte del progettista nella bozza, da far controllare all'utente insieme alla specifica:**
+  - i messaggi vecchi arrivano a chi riassume come trascrizione in un solo messaggio utente
+    («Utente: … / Assistente: …»), perché un modello piccolo non risponda all'ultima domanda;
+  - il testo del riassunto è nel log solo a DEBUG;
+  - il default di `fake_graph` per il modello del riassunto è `FakeModel([])`, che fallisce se
+    viene chiamato.
+- **Verificato (2026-11-13, `langgraph` 1.2.17, `langchain-core` 1.7.0):** i messaggi in ingresso
+  al grafo ricevono un `id` dal reducer `add_messages` e `RemoveMessage` li toglie; un campo
+  `summary` non passato in ingresso manca anche nel risultato (specifica §7).
 
 **Decisione dell'utente (2026-11-13): si fa solo ciò che chiede la traccia di `LLM_Lez_6.pdf`.**
 Non si fanno i punti che stanno fuori dalla traccia: le correzioni minori rimandate degli Step 1 e

@@ -313,3 +313,42 @@ verificati il 2026-11-13 (comandi ed esiti in `handoff.md`).
 | CA-35 | Rifiuto del router e avviso di `limit` non rivisti; il revisore non consuma passaggi; limite dei passaggi durante una riscrittura → `limit`. | automatica |
 | CA-36 | Con LM Studio: prima risposta parziale imposta → rifiuto motivato del revisore reale e risposta completa dell'agente reale entro il limite; la stessa domanda interamente reale → risposta completa e righe `node=reviewer` nei log. | reale |
 | CA-37 | Le prove reali precedenti (CA-2…CA-4, CA-16…CA-21, CA-27) passano con il revisore attivo; da terminale, in locale e con Docker Compose, la domanda in due parti mostra le righe `node=reviewer`. | reale, manuale |
+
+## 11. Lezione 6, Step 3 — riassunto della cronologia (2026-11-13)
+
+Riferimento: `LLM_Lez_6.pdf`, slide 3 e 6 (riassunto in `lezione6.md`). Stato: approvati il
+2026-11-13 insieme alla specifica `specs/2026-11-13-riassunto-design.md`.
+
+- **RF-34** *Soglia configurabile* — `SUMMARY_MAX_MESSAGES` (intero ≥ 1, default 20) è il numero
+  di messaggi della cronologia, domanda appena arrivata compresa, oltre il quale si riassume.
+  `SUMMARY_KEEP_MESSAGES` (intero ≥ 1, default 6, minore di `SUMMARY_MAX_MESSAGES`) è il numero
+  minimo di messaggi recenti conservati. Valori non validi impediscono l'avvio con un messaggio
+  comprensibile (come RF-14).
+- **RF-35** *Nodo riassunto* — All'inizio di ogni turno, prima del router, un nodo LLM (stesso
+  modello, prompt di sistema diverso, nessuno strumento) comprime i messaggi vecchi e conserva
+  almeno gli ultimi `SUMMARY_KEEP_MESSAGES`. Il taglio cade sempre su una domanda dell'utente che
+  apre un turno: non separa mai una richiesta di strumento dal relativo risultato, né una bozza
+  rifiutata dall'indicazione del revisore. Chi riassume riceve il riassunto precedente e le sole
+  domande e risposte finali dei messaggi tolti. Sotto la soglia, o se non c'è nulla da togliere,
+  il nodo non chiama il modello.
+- **RF-36** *Riassunto nello stato* — Il riassunto è un campo dello stato che a ogni compressione
+  viene sostituito da uno nuovo, comprensivo del precedente; la sessione lo conserva tra i turni
+  (non oltre la sessione, come la cronologia). L'agente lo riceve in fondo al prompt di sistema;
+  router e revisore non lo ricevono.
+- **RF-37** *Errori del riassunto* — Un riassunto vuoto non comprime nulla: il turno prosegue con
+  la cronologia intatta e il log lo segnala con un WARNING. Gli errori di collegamento con LM
+  Studio sono trattati come per l'agente: cronologia e riassunto restano invariati.
+- **RF-38** *Log* — Per ogni turno il nodo scrive una riga: con la compressione il numero di
+  messaggi prima e dopo e quanti ne ha tolti; senza, il conteggio rispetto alla soglia e il motivo
+  (`below_threshold`, `nothing_to_compress`). All'avvio il log riporta le due soglie.
+
+| ID | Verifica | Come |
+|----|----------|------|
+| CA-38 | Soglie predefinite 20 e 6; valori non interi o < 1, oppure `SUMMARY_KEEP_MESSAGES ≥ SUMMARY_MAX_MESSAGES` → «Configurazione non valida: …», exit 1. | automatica |
+| CA-39 | Cronologia non oltre la soglia → il modello del riassunto non viene chiamato; log `skipped=below_threshold`. | automatica |
+| CA-40 | Cronologia oltre la soglia → una chiamata; log `messages_before=… messages_after=… removed=…` con i numeri attesi; messaggi vecchi tolti; `summary` sostituito (al secondo riassunto chi riassume riceve il precedente); l'agente riceve il riassunto nel prompt di sistema. | automatica |
+| CA-41 | Il taglio non separa mai tool_call e `ToolMessage` né bozza e indicazione; un turno unico troppo lungo → nessuna chiamata, log `skipped=nothing_to_compress`. | automatica |
+| CA-42 | Riassunto vuoto → WARNING `fallback=empty_summary`, cronologia intatta; errore di LM Studio nel riassunto → cronologia e riassunto invariati. | automatica |
+| CA-43 | Con LM Studio e soglie 4 e 2: «Mi chiamo Paolo», «Che ore sono a Tokyo?», «Come mi chiamo?» → entro il terzo turno riga con i messaggi prima e dopo; nessun messaggio conservato prima dell'ultima domanda contiene «Paolo»; risposta con «Paolo». | reale |
+| CA-44 | Le prove reali precedenti (CA-2…CA-4, CA-16…CA-21, CA-27, CA-36) passano con il nodo riassunto attivo. | reale |
+| CA-45 | Da terminale, in locale e con Docker Compose, la sequenza di CA-43 con soglie 4 e 2 mostra le righe `node=summary` e la risposta con «Paolo». | reale, manuale |
