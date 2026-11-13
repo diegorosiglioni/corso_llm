@@ -7,6 +7,9 @@ dei corsi e note persistenti. Prima dell'agente un router LLM controlla che la d
 nell'ambito dell'assistente: le domande fuori ambito ricevono un rifiuto senza raggiungere l'agente.
 Dopo l'agente un revisore LLM controlla che la risposta sia coerente con la domanda; se non lo è,
 il motivo torna all'agente, che riscrive la risposta (al più `MAX_REVIEWS` revisioni per turno).
+All'inizio di ogni turno, quando la cronologia supera `SUMMARY_MAX_MESSAGES` messaggi, un nodo
+riassunto comprime i turni vecchi in un riassunto che agente, router e revisore ricevono nel prompt
+di sistema.
 
 Requisiti e specifica: [`docs/superpowers/`](docs/superpowers/).
 
@@ -50,7 +53,7 @@ ripetere le verifiche e rigenerarlo.
 Non richiedono LM Studio né la rete: il modello è sostituito da un modello finto con risposte
 programmate (anche per router e revisore). I test del server MCP lo avviano davvero come
 sottoprocesso stdio, con l'archivio delle note in una cartella temporanea (circa 1 s per test).
-Esito al 2026-11-13: `247 passed, 14 deselected` (le 14 deselezionate sono le prove reali).
+Esito al 2026-11-13: `297 passed, 15 deselected` (le 15 deselezionate sono le prove reali).
 
 ## Configurazione
 
@@ -62,6 +65,8 @@ L'applicazione legge variabili d'ambiente e il file con l'ambito dell'assistente
 | `LMSTUDIO_MODEL` | sì | — | identificativo del modello restituito da `GET /v1/models` |
 | `MAX_STEPS` | no | `5` | chiamate massime al modello dell'agente in un turno (intero ≥ 1), riscritture comprese; router e revisore non contano |
 | `MAX_REVIEWS` | no | `2` | chiamate massime al revisore in un turno (intero ≥ 1); con `2` l'agente riscrive al più una volta |
+| `SUMMARY_MAX_MESSAGES` | no | `20` | messaggi della cronologia (domanda appena arrivata compresa) oltre i quali si riassume (intero ≥ 1) |
+| `SUMMARY_KEEP_MESSAGES` | no | `6` | messaggi recenti conservati come minimo dopo un riassunto (intero ≥ 1, minore di `SUMMARY_MAX_MESSAGES`) |
 | `LOG_LEVEL` | no | `INFO` | `DEBUG`, `INFO`, `WARNING` o `ERROR` |
 | `NOTES_DB` | no | `data/notes.sqlite3` | file SQLite delle note, relativo alla cartella di avvio |
 | `SCOPE_FILE` | no | `assistant/data/scope.txt` del pacchetto | file di testo (UTF-8) con l'ambito dell'assistente; un percorso relativo vale dalla cartella di avvio |
@@ -113,14 +118,16 @@ Per una prova non interattiva si possono passare le domande in ingresso:
 
 ## Router: domande in ambito e fuori ambito
 
-Ogni turno parte dal nodo `router`: lo stesso modello, con un prompt di sistema diverso e senza
+Dopo il nodo `summary` (sezione «Riassunto della cronologia») ogni turno passa dal nodo `router`:
+lo stesso modello, con un prompt di sistema diverso e senza
 strumenti, classifica l'ultimo messaggio come `conversation` o `out_of_scope`, con un motivo
 (output strutturato `json_schema`). Il router legge l'ambito e la cronologia senza le chiamate agli
-strumenti; se servono strumenti lo decide poi l'agente.
+strumenti; se servono strumenti lo decide poi l'agente. Se c'è un riassunto dei turni vecchi, il
+router lo riceve in fondo al suo prompt di sistema.
 
 ```
-START → router ─ conversation ─→ llm ⇄ tools (o limit → END) → reviewer → END (o di nuovo llm)
-          └──── out_of_scope ─→ refusal → END
+START → summary → router ─ conversation ─→ llm ⇄ tools (o limit → END) → reviewer → END (o di nuovo llm)
+                     └──── out_of_scope ─→ refusal → END
 ```
 
 - `conversation`: il turno prosegue verso l'agente e poi verso il revisore (sezione seguente).
@@ -156,9 +163,10 @@ riga `node=llm`.
 
 Quando l'agente dà una risposta finale (senza chiedere strumenti), il nodo `reviewer` la controlla:
 stesso modello, prompt di sistema diverso, nessuno strumento, output strutturato con un motivo e un
-verdetto (`coherent`). Il revisore vede **solo** la domanda dell'utente e la risposta proposta: non
-la cronologia né i risultati degli strumenti. Giudica se la risposta tocca tutte le parti della
-domanda senza uscire dal tema; non giudica stile, lunghezza né esattezza dei dati.
+verdetto (`coherent`). Il revisore vede **solo** la domanda dell'utente e la risposta proposta (più
+il riassunto dei turni vecchi, se c'è): non la cronologia né i risultati degli strumenti. Giudica se
+la risposta tocca tutte le parti della domanda senza uscire dal tema; non giudica stile, lunghezza
+né esattezza dei dati, che vengono da strumenti o dalla conversazione precedente.
 
 ```
 llm ── risposta finale ──→ reviewer ─┬─ coerente ─────────────────────────────→ END
@@ -211,6 +219,59 @@ non osservate con il modello reale):
 WARNING assistant.graph: node=reviewer review=2/2 coherent=false reason="incompleta" review_limit_reached next_node=end
 WARNING assistant.graph: node=reviewer review=1/2 coherent=false reason="incompleta" step_limit_reached next_node=end
 WARNING assistant.graph: node=reviewer review=1/2 fallback=invalid_output error="JSON troncato" coherent=true next_node=end
+```
+
+## Riassunto della cronologia
+
+Il contesto del modello locale è limitato (8192 token per `google/gemma-4-e2b`). All'inizio di
+ogni turno, prima del router, il nodo `summary` conta i messaggi della cronologia, compresa la
+domanda appena arrivata:
+
+- fino a `SUMMARY_MAX_MESSAGES` (default 20) non fa nulla e non chiama il modello
+  (`skipped=below_threshold`);
+- oltre la soglia conserva almeno gli ultimi `SUMMARY_KEEP_MESSAGES` (default 6) e arretra il
+  taglio fino alla domanda dell'utente che apre il turno: una richiesta di strumento non resta mai
+  senza il suo risultato, né una bozza rifiutata senza l'indicazione del revisore. Se il taglio
+  arriva all'inizio, non c'è nulla da comprimere (`skipped=nothing_to_compress`);
+- altrimenti lo stesso modello, senza strumenti, scrive un riassunto aggiornato a partire dal
+  riassunto precedente e dalle sole domande e risposte finali dei messaggi tolti; il riassunto
+  **sostituisce** il precedente e i messaggi vecchi escono dalla cronologia.
+
+Agente, router e revisore ricevono il riassunto in fondo al loro prompt di sistema. Il riassunto
+dura quanto la sessione, come la cronologia. Un dato che compare solo nel risultato di uno
+strumento, e che la risposta non ha ripetuto, non entra nel riassunto. Se il modello restituisce
+un riassunto vuoto, la cronologia resta intatta e il log mostra un WARNING; un errore di LM Studio
+arriva al terminale e cronologia e riassunto restano quelli di prima.
+
+Log della prova del 2026-11-13 con soglie piccole (`$env:SUMMARY_MAX_MESSAGES = "4";
+$env:SUMMARY_KEEP_MESSAGES = "2"`, poi `"Mi chiamo Paolo", "Che ore sono a Tokyo?", "Come mi
+chiamo?", "esci" | .\.venv\Scripts\python.exe -m assistant`):
+
+```
+INFO __main__: scope_file=…\assistant\data\scope.txt max_reviews=2 summary_max_messages=4 summary_keep_messages=2
+INFO assistant.graph: node=summary messages=1/4 skipped=below_threshold next_node=router
+...
+Tu> Assistente> Ciao Paolo.
+INFO assistant.graph: node=summary messages=3/4 skipped=below_threshold next_node=router
+...
+Tu> Assistente> L'ora attuale a Tokyo è 04:05:54 del 14 novembre 2026.
+INFO assistant.graph: node=summary messages_before=11 messages_after=9 removed=2 next_node=router
+INFO assistant.graph: node=router category=conversation reason="La domanda riguarda un'informazione fornita dall'utente precedentemente." next_node=llm
+INFO assistant.graph: node=reviewer review=1/2 coherent=true reason="La risposta risponde alla domanda basandosi sul contesto fornito." next_node=end
+Tu> Assistente> Ti chiami Paolo.
+```
+
+Il primo turno («Mi chiamo Paolo», «Ciao Paolo.») è uscito dalla cronologia: il nome arriva
+all'agente solo dal riassunto. Il testo del riassunto compare nel log solo con `LOG_LEVEL=DEBUG`
+(`node=summary summary="…"`). Con Docker la stessa prova si fa con
+`docker compose run --rm -T -e SUMMARY_MAX_MESSAGES=4 -e SUMMARY_KEEP_MESSAGES=2 assistant`.
+
+Righe senza compressione e di ripiego, nel formato verificato dai test automatici (non osservate
+con il modello reale):
+
+```
+INFO assistant.graph: node=summary messages=5/4 skipped=nothing_to_compress next_node=router
+WARNING assistant.graph: node=summary messages=5/4 fallback=empty_summary next_node=router
 ```
 
 ## Prove reali con LM Studio
@@ -288,15 +349,16 @@ INFO assistant.graph: step=2/5 node=llm
 Tu> Assistente> Nota aggiunta: Ricordati di comprare il latte.
 ```
 
-Le prove reali (`pytest -m real`, 14 prove, circa 32 minuti il 2026-11-13) passano tutte da router
-e revisore e verificano con il modello locale: l'orario a Tokyo e poi a Roma; un nome ricordato senza strumenti;
+Le prove reali (`pytest -m real`, 15 prove, circa 30 minuti il 2026-11-13) passano tutte da
+riassunto, router e revisore e verificano con il modello locale: l'orario a Tokyo e poi a Roma; un nome ricordato senza strumenti;
 `calculate` e `convert_units`; una sola `add_note` per una richiesta di ricordare; `delete_note` su
 un id inesistente che non elimina nulla; le note ritrovate dopo il riavvio del server;
 `search_catalog` seguito da `get_item`; una ricerca senza risultati; i log correlati dallo stesso
 `call_id`; il router che manda all'agente «Che ore sono a Tokyo?» e «Ciao!» e rifiuta «Chi ha
 vinto i Mondiali del 2006?» senza eseguire l'agente; il revisore che rifiuta una prima risposta
 parziale imposta dalla prova e approva la riscrittura dell'agente reale, e la stessa domanda in due
-parti interamente reale («391» e l'ora di Tokyo nella risposta).
+parti interamente reale («391» e l'ora di Tokyo nella risposta); con soglie 4 e 2, il nome
+detto nel primo turno ritrovato dopo la compressione solo attraverso il riassunto.
 
 ## Docker
 

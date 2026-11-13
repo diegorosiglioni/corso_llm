@@ -317,7 +317,8 @@ verificati il 2026-11-13 (comandi ed esiti in `handoff.md`).
 ## 11. Lezione 6, Step 3 — riassunto della cronologia (2026-11-13)
 
 Riferimento: `LLM_Lez_6.pdf`, slide 3 e 6 (riassunto in `lezione6.md`). Stato: approvati il
-2026-11-13 insieme alla specifica `specs/2026-11-13-riassunto-design.md`.
+2026-11-13 insieme alla specifica `specs/2026-11-13-riassunto-design.md`; CA-38…CA-45 verificati il
+2026-11-13 (comandi ed esiti in `handoff.md`).
 
 - **RF-34** *Soglia configurabile* — `SUMMARY_MAX_MESSAGES` (intero ≥ 1, default 20) è il numero
   di messaggi della cronologia, domanda appena arrivata compresa, oltre il quale si riassume.

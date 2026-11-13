@@ -1,10 +1,12 @@
 # Handoff — Assistente del laboratorio
 
 Data: 2026-11-13
-Stato: **lezione 6, Step 1 (router) e Step 2 (revisore): implementati, verificati e pubblicati.
-Step 3 (riassunto): specifica e requisiti §11 approvati; piano da scrivere e approvare.**
+Stato: **lezione 6, Step 1 (router), Step 2 (revisore) e Step 3 (riassunto): implementati e
+verificati. Step 1 e 2 pubblicati; Step 3 solo in locale su `dev` (push su richiesta).**
 Il 2026-11-13 `origin/dev` e `origin/main` sono stati portati a `f53b67a` (avanzamento rapido).
-Step 2: specifica [`specs/2026-11-11-revisore-design.md`](specs/2026-11-11-revisore-design.md),
+Step 3: specifica [`specs/2026-11-13-riassunto-design.md`](specs/2026-11-13-riassunto-design.md),
+piano [`plans/2026-11-13-riassunto.md`](plans/2026-11-13-riassunto.md), requisiti §11 (RF-34…RF-38,
+CA-38…CA-45). Step 2: specifica [`specs/2026-11-11-revisore-design.md`](specs/2026-11-11-revisore-design.md),
 piano [`plans/2026-11-11-revisore.md`](plans/2026-11-11-revisore.md), requisiti §10 (RF-28…RF-33,
 CA-30…CA-37). Step 1: specifica
 [`specs/2026-11-11-router-design.md`](specs/2026-11-11-router-design.md), piano
@@ -23,55 +25,88 @@ storici e non sono stati riscritti.
 
 ## Lezione 6 — prossimo passo (2026-11-13)
 
-**In corso: Step 3 · Riassunto della cronologia.** La specifica
-[`specs/2026-11-13-riassunto-design.md`](specs/2026-11-13-riassunto-design.md) e i requisiti §11
-(RF-34…RF-38, CA-38…CA-45) di [`requisiti.md`](requisiti.md) sono **approvati** (2026-11-13).
-La bozza è stata riletta come da chi deve pianificarla (lettura propria, con verifica sul codice e
-sulle librerie): nessuna domanda per l'utente; i punti minori sono segnati nella specifica come
-«scelta del progettista» (prova reale CA-43 resa robusta a un rifiuto del revisore e al nome
-ripetuto nella risposta del secondo turno, `RecordingGraph` che restituisce `summary`).
+**Step 3 · Riassunto della cronologia: fatto** (sezione seguente). Prossimo: Step 4 · Resource
+`utente://preferenze` (traccia in [`lezione6.md`](lezione6.md)), da avviare con un nuovo
+brainstorming. Il push dei commit dello Step 3 si fa solo su richiesta dell'utente.
 
-**Prossimo passo:** `superpowers:writing-plans` → `plans/2026-11-13-riassunto.md`, da far
-approvare prima del codice.
+## Lezione 6, Step 3 — riassunto (2026-11-13)
 
-**Decisioni prese con l'utente nel brainstorming (2026-11-13):**
-- **Soglia in numero di messaggi.** `SUMMARY_MAX_MESSAGES` (default 20) conta tutti i messaggi
-  della cronologia, compresa la domanda appena arrivata; si riassume quando il conteggio la
-  supera. La stima dei token è stata scartata.
-- **Messaggi conservati.** `SUMMARY_KEEP_MESSAGES` (default 6, intero ≥ 1 e minore della soglia):
-  si tengono almeno gli ultimi N messaggi, e il taglio arretra fino alla domanda dell'utente che
-  apre il turno. Così non separa mai una tool_call dal suo `ToolMessage` né una bozza dalla sua
-  indicazione. Se arretra fino all'inizio, non si comprime e non si chiama il modello
-  (`skipped=nothing_to_compress`). L'alternativa «N turni» è stata scartata.
-- **Che cosa legge chi riassume.** Il riassunto precedente più i soli messaggi vecchi filtrati con
-  `router_messages`: domande e risposte finali, senza strumenti, bozze né indicazioni. Rischio
-  accettato: un dato che compare solo in un risultato di strumento si perde.
-- **Scelte proposte e approvate dall'utente** («va bene così»):
-  - il riassunto va in fondo all'unico messaggio di sistema dell'agente; router e revisore non
-    cambiano;
-  - `Session` conserva `summary` tra i turni; se il turno fallisce, cronologia e riassunto restano
-    invariati;
-  - stesso modello, senza strumenti, testo libero;
-  - riassunto vuoto → nessuna compressione e WARNING `fallback=empty_summary`;
-  - log `node=summary messages_before=… messages_after=… removed=…`, oppure
-    `messages=n/max skipped=below_threshold`; riga di avvio con le due soglie;
-  - test con il modello simulato, più una prova reale nuova con soglie 4 e 2 («Mi chiamo
-    Paolo», «Che ore sono a Tokyo?», «Come mi chiamo?»);
-  - prova da terminale in locale e con Docker, con `-e SUMMARY_MAX_MESSAGES=4 -e
-    SUMMARY_KEEP_MESSAGES=2`.
-- **Approccio approvato:** nodo `summary` nel grafo (`START → summary → router`), campo `summary`
-  dello stato sostituito a ogni compressione, rimozione con `RemoveMessage`, modulo nuovo
-  `summary.py`. Scartati: compressione in `Session` fuori dal grafo, vista ridotta con la
-  cronologia intatta, `langmem` o `trim_messages`.
-- **Scelte del progettista nella bozza, da far controllare all'utente insieme alla specifica:**
-  - i messaggi vecchi arrivano a chi riassume come trascrizione in un solo messaggio utente
-    («Utente: … / Assistente: …»), perché un modello piccolo non risponda all'ultima domanda;
-  - il testo del riassunto è nel log solo a DEBUG;
-  - il default di `fake_graph` per il modello del riassunto è `FakeModel([])`, che fallisce se
-    viene chiamato.
-- **Verificato (2026-11-13, `langgraph` 1.2.17, `langchain-core` 1.7.0):** i messaggi in ingresso
-  al grafo ricevono un `id` dal reducer `add_messages` e `RemoveMessage` li toglie; un campo
-  `summary` non passato in ingresso manca anche nel risultato (specifica §7).
+All'inizio di ogni turno il nodo `summary` (prima del router) conta i messaggi della cronologia,
+domanda appena arrivata compresa. Fino a `SUMMARY_MAX_MESSAGES` (default 20) non chiama il modello
+(`skipped=below_threshold`). Oltre, `cut_index` conserva almeno gli ultimi
+`SUMMARY_KEEP_MESSAGES` (default 6) e arretra fino alla domanda che apre il turno; se arriva a 0,
+`skipped=nothing_to_compress`. Altrimenti lo stesso modello, senza strumenti, riceve il riassunto
+precedente e la trascrizione «Utente: … / Assistente: …» dei messaggi tolti (filtrati con
+`router_messages`); il testo **sostituisce** il campo `summary` e i messaggi vecchi escono con
+`RemoveMessage` (log `messages_before=… messages_after=… removed=…`). Riassunto vuoto → WARNING
+`fallback=empty_summary`, nulla compresso. Agente, router e revisore ricevono il riassunto in fondo
+al loro prompt di sistema (`with_summary`); `Session` lo conserva tra i turni e non cambia nulla se
+il turno fallisce. Riga di avvio: `scope_file=… max_reviews=… summary_max_messages=…
+summary_keep_messages=…`.
+
+Commit: `32bdf67` (specifica e requisiti), `8d5796a` (piano), `c09ec34` (Task 1, soglie),
+`f85242e` (Task 2, `summary.py`), `01062db` (Task 3, modello), `bf84c55` (Task 4: grafo, sessione,
+avvio, `conftest.py`, fixture reale), `b85f9d9` (router con il riassunto), `4277c9e` (revisore con
+il riassunto e frase in `REVIEWER_PROMPT`), `bde496a` (Task 5, prova reale), poi la
+documentazione (Task 6).
+
+### Verifiche (2026-11-13)
+
+Prove reali con LM Studio, `google/gemma-4-e2b`, contesto 8192, soglie non impostate (20 e 6) salvo
+dove indicato.
+
+| CA | Comando | Esito |
+|----|---------|-------|
+| CA-38 | `pytest tests/test_config.py` | ✅ default 20 e 6; `abc`, `0`, `-1`, `2.5` rifiutati per entrambe; `keep ≥ max` rifiutato anche con un default; tutti nel messaggio unico |
+| CA-39 | `pytest tests/test_graph.py tests/test_main.py` | ✅ con `n = max` nessuna chiamata e `messages=5/5 skipped=below_threshold`; con `n = max + 1` una chiamata; da `main`: `messages=1/20 skipped=below_threshold` |
+| CA-40 | `pytest tests/test_graph.py tests/test_session.py` | ✅ `messages_before=7 messages_after=5 removed=2`, chi riassume riceve esattamente `summary_input("", messages[:2])`, `summary` sostituito; al quarto turno chi riassume riceve il riassunto del terzo; agente, router e revisore lo ricevono |
+| CA-41 | `pytest tests/test_summary.py tests/test_graph.py` | ✅ taglio su tool_call, `ToolMessage`, bozza, indicazione e risposta → arretra alla domanda; turno unico → `skipped=nothing_to_compress`, nessuna chiamata |
+| CA-42 | `pytest tests/test_graph.py tests/test_session.py` | ✅ riassunto `""` e di soli spazi → WARNING `fallback=empty_summary`; `APIConnectionError` di chi riassume, e dell'agente dopo una compressione → cronologia e riassunto invariati |
+| — | `pytest` | ✅ 297 passed, 15 deselected |
+| CA-43 | `pytest -m real -v -k survives_compression` (soglie 4 e 2 nel test) | prime 4 esecuzioni ❌ (vedi «Decisioni prese durante l'esecuzione»); dopo le due modifiche ✅ 1 passed in 270 s |
+| CA-43, CA-44 | `pytest -m real -v -o log_cli=true --log-cli-level=INFO` | ✅ 15 passed in 1756 s (29 min). CA-43: `messages_before=11 messages_after=9 removed=2`, risposta con «Paolo» dopo una riscrittura chiesta dal revisore. Nelle altre prove solo `skipped=below_threshold` |
+| CA-45 | `"Mi chiamo Paolo", "Che ore sono a Tokyo?", "Come mi chiamo?", "esci"` in pipe verso `python -m assistant` con `SUMMARY_MAX_MESSAGES=4`, `SUMMARY_KEEP_MESSAGES=2` e `NOTES_DB` temporaneo | ✅ `summary_max_messages=4 summary_keep_messages=2`, due `skipped=below_threshold`, poi `messages_before=11 messages_after=9 removed=2`, router `conversation`, revisore `coherent=true`, «Ti chiami Paolo.», exit 0 |
+| CA-45 | la stessa pipe verso `docker compose run --rm -T -e SUMMARY_MAX_MESSAGES=4 -e SUMMARY_KEEP_MESSAGES=2 assistant` (dopo `docker compose build`) | ✅ stesse righe, `scope_file=/app/assistant/data/scope.txt`, «Ti chiami Paolo.», exit 0 |
+
+Limite: dopo le modifiche, una sola esecuzione della suite reale e una prova da terminale per
+ambiente. Dimostrano il comportamento con quelle domande, non che il modello riassuma e giudichi
+sempre così. Con il modello reale non si sono visti `nothing_to_compress` né `empty_summary`:
+sono verificati solo con il modello simulato.
+
+### Decisioni prese durante l'esecuzione
+
+- **Worktree:** nessuno (`CLAUDE.md`); lavoro direttamente su `dev`. LM Studio e Docker Desktop
+  avviati durante la sessione.
+- **Lettura delle soglie** con un aiuto locale `read_positive` in `config.py` (stessa logica e
+  stessi messaggi di `MAX_STEPS`, che non è stato toccato).
+- **Selettore di un test del router:** `test_router_reason_is_logged_on_one_line` sceglieva la
+  prima riga che contiene `node=router`, e ora anche la riga del riassunto contiene
+  `next_node=router`; il test usa `startswith("node=router")`.
+- **CA-43 fallita, router (decisione dell'utente).** La compressione e il riassunto («L'utente si
+  è presentato come Paolo.») erano corretti, ma il router, senza riassunto, rifiutava «Come mi
+  chiamo?» («informazioni personali»). Una frase in `ROUTER_PROMPT` non è bastata (3 rifiuti su
+  4). Prova diretta, 4 chiamate per variante: senza riassunto `out_of_scope` 4/4, con il riassunto
+  `conversation` 4/4. Ora il router riceve il riassunto; la frase è stata tolta. Specifica §16,
+  RF-36.
+- **CA-43 fallita, revisore (decisione dell'utente).** Con il router corretto, il revisore (solo
+  domanda e risposta) bocciava «Ti chiami Paolo.» («l'utente non ha fornito il proprio nome») e
+  l'agente riscriveva «Non mi hai fornito il tuo nome.». Prova diretta: revisore attuale 0/4,
+  frase nel prompt 3/4, riassunto 4/4, entrambi 4/4. Ora il revisore riceve il riassunto e
+  `REVIEWER_PROMPT` non giudica i dati «da strumenti o dalla conversazione precedente».
+- Le prove dirette sono script usa e getta nella scratchpad, non nel progetto.
+
+### Punti aperti (Step 3)
+
+- **Revisore senza compressione:** in CA-4 (nome e domanda in due turni, nessun riassunto) il
+  revisore ha bocciato due volte la risposta con il nome (`review_limit_reached`); la prova è
+  passata perché anche l'ultima risposta conteneva «Paolo». La frase nel prompt riduce il problema
+  (3/4 nella prova diretta), non lo elimina.
+- **Falsi rifiuti sull'ora di Tokyo** («timestamp futuro», quando a Tokyo è già il giorno dopo):
+  3 nella suite reale e 1 per prova da terminale; la riscrittura viene poi approvata. È del
+  revisore dello Step 2, fuori dalla traccia dello Step 3: non toccato.
+- **Durata delle prove reali:** 15 prove in circa 29 minuti; la CA-43 da sola 3–5 minuti.
+- Dati presenti solo nei risultati degli strumenti e non ripetuti nella risposta non entrano nel
+  riassunto (rischio accettato, specifica §14).
 
 **Decisione dell'utente (2026-11-13): si fa solo ciò che chiede la traccia di `LLM_Lez_6.pdf`.**
 Non si fanno i punti che stanno fuori dalla traccia: le correzioni minori rimandate degli Step 1 e
@@ -266,7 +301,7 @@ Da sapere:
   `.venv/Scripts/python.exe` (o `py -3.13`).
 - **`LLM_Lez_5.pdf`** e **`LLM_Lez_6.pdf`** non sono tracciati: non aggiungerli a Git senza
   chiedere.
-- Suite predefinita: `pytest` → `249 passed, 14 deselected` (Step 2 della lezione 6), in circa 45–85 s. I test MCP avviano il
+- Suite predefinita: `pytest` → `297 passed, 15 deselected` (Step 3 della lezione 6), in circa 20–50 s. I test MCP avviano il
   server come sottoprocesso, circa 1 s ciascuno.
 
 ## Che cosa c'è oggi (lezione 5)
@@ -447,8 +482,8 @@ Da PowerShell nella radice della repository:
 & "$HOME\.lmstudio\bin\lms.exe" load google/gemma-4-e2b --context-length 8192 -y
 $env:LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
 $env:LMSTUDIO_MODEL = "google/gemma-4-e2b"
-.\.venv\Scripts\python.exe -m pytest            # senza modello: 249 passed, 14 deselected
-.\.venv\Scripts\python.exe -m pytest -m real -v # 14 prove reali, circa 32 minuti
+.\.venv\Scripts\python.exe -m pytest            # senza modello: 297 passed, 15 deselected
+.\.venv\Scripts\python.exe -m pytest -m real -v # 15 prove reali, circa 30 minuti
 .\.venv\Scripts\python.exe -m assistant
 docker compose build
 "Quanto fa 17 * 23?", "esci" | docker compose run --rm -T assistant

@@ -8,7 +8,7 @@ Stato corrente e prossimo passo: `docs/superpowers/handoff.md` (leggerlo per pri
 
 ## Struttura e comandi
 - Codice in `assistant/`: `config.py`, `model.py`, `tools.py`, `router.py`, `reviewer.py`,
-  `graph.py`, `session.py`, `terminal.py`; ambito del router in `assistant/data/scope.txt`
+  `summary.py`, `graph.py`, `session.py`, `terminal.py`; ambito del router in `assistant/data/scope.txt`
   (sostituibile con `SCOPE_FILE`); logica pura degli strumenti MCP in `units.py`,
   `calculator.py`, `catalog.py` (dati in `assistant/data/catalog.json`), `notes.py`; server
   FastMCP in `mcp_server.py`, client sincrono e adattatore in `mcp_client.py`. Solo
@@ -34,6 +34,9 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
   domande fuori ambito a un nodo di rifiuto senza eseguire l'agente;
 - (lezione 6, Step 2) un revisore LLM dopo la risposta finale dell'agente controlla che sia
   coerente con la domanda e, se non lo è, rimanda all'agente il motivo, fino a `MAX_REVIEWS`;
+- (lezione 6, Step 3) un nodo riassunto all'inizio del turno, oltre `SUMMARY_MAX_MESSAGES`,
+  sostituisce i turni vecchi con un riassunto nello stato (letto da agente, router e revisore) e
+  conserva almeno gli ultimi `SUMMARY_KEEP_MESSAGES`, tagliando sempre all'inizio di un turno;
 - usa un modello servito da LM Studio, che resta sul computer host;
 - conserva la cronologia della conversazione per la durata della sessione (la cronologia non è persistente);
 - offre uno strumento orologio con fuso orario esplicito, richiesto dal modello tramite tool calling
@@ -44,8 +47,8 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
 
 ## Confini
 - Implementare solo i requisiti concordati. MCP e i quattro strumenti della lezione 5 e gli
-  Step 1 (router) e 2 (revisore) della lezione 6 sono concordati e implementati; gli step
-  successivi della lezione 6 (riassunto, resource e prompt MCP, servizio HTTP, back-end,
+  Step 1 (router), 2 (revisore) e 3 (riassunto) della lezione 6 sono concordati e implementati;
+  gli step successivi della lezione 6 (resource e prompt MCP, servizio HTTP, back-end,
   front-end, Compose a più container),
   altri strumenti, altri server MCP, workflow e RAG non vanno anticipati: ognuno avrà il proprio
   ciclo di specifica e piano.

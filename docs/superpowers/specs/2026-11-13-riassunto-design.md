@@ -3,6 +3,8 @@
 Data: 2026-11-13
 Stato: approvata dall'utente il 2026-11-13
 Requisiti: [`../requisiti.md`](../requisiti.md), §11 (RF-34…RF-38, CA-38…CA-45).
+Piano: [`../plans/2026-11-13-riassunto.md`](../plans/2026-11-13-riassunto.md); implementata e
+verificata il 2026-11-13, con le modifiche di §16 (esiti in [`../handoff.md`](../handoff.md)).
 Specifiche precedenti: [`2026-11-11-revisore-design.md`](2026-11-11-revisore-design.md) (Step 2),
 [`2026-11-11-router-design.md`](2026-11-11-router-design.md) (Step 1) e quelle che richiamano.
 Fonte didattica: `LLM_Lez_6.pdf`, slide 3 («Il grafo dopo i primi tre step») e slide 6 (Step 3);
