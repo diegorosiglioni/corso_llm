@@ -17,7 +17,7 @@ class Session:
     def send(self, text: str) -> str:
         """Runs one turn; the history changes only if the turn succeeds."""
         result = self._graph.invoke(
-            {"messages": self._messages + [HumanMessage(text)], "steps": 0}
+            {"messages": self._messages + [HumanMessage(text)], "steps": 0, "reviews": 0}
         )
         self._messages = result["messages"]
         return self._messages[-1].text.strip() or EMPTY_REPLY

@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 
 from assistant.graph import build_graph
 from assistant.mcp_client import McpStartupError, ToolSpec
+from assistant.reviewer import ReviewDecision
 from assistant.router import RouteDecision
 from assistant.tools import create_current_time_tool
 
@@ -41,12 +42,30 @@ class ConversationRouter:
         return RouteDecision(category="conversation", reason="test")
 
 
-def fake_graph(model, tools=None, max_steps=5, router=None, scope=TEST_SCOPE):
+class ApprovingReviewer:
+    """Reviewer that always approves the answer; records the messages it receives."""
+
+    def __init__(self):
+        self.calls: list[list[BaseMessage]] = []
+
+    def invoke(self, messages) -> ReviewDecision:
+        self.calls.append(list(messages))
+        return ReviewDecision(reason="test", coherent=True)
+
+
+def fake_graph(
+    model, tools=None, max_steps=5, router=None, scope=TEST_SCOPE, reviewer=None, max_reviews=2
+):
     if tools is None:
         tools = [create_current_time_tool(lambda: FIXED_NOW)]
     if router is None:
         router = ConversationRouter()
-    return build_graph(model, list(tools), max_steps, router_model=router, scope=scope)
+    if reviewer is None:
+        reviewer = ApprovingReviewer()
+    return build_graph(
+        model, list(tools), max_steps,
+        router_model=router, scope=scope, reviewer_model=reviewer, max_reviews=max_reviews,
+    )
 
 
 def tool_call(

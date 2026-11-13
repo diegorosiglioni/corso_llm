@@ -17,7 +17,7 @@ from assistant.catalog import DEFAULT_CATALOG_PATH
 from assistant.config import ConfigError, load_config
 from assistant.graph import build_graph
 from assistant.mcp_client import McpClient, create_mcp_tools, server_command
-from assistant.model import create_model, create_router_model
+from assistant.model import create_model, create_reviewer_model, create_router_model
 from assistant.session import Session
 from assistant.tools import create_current_time_tool
 
@@ -44,6 +44,8 @@ def open_session(config, db):
             config.max_steps,
             router_model=create_router_model(config),
             scope=config.scope,
+            reviewer_model=create_reviewer_model(config),
+            max_reviews=config.max_reviews,
         )
         yield Session(graph), client
 

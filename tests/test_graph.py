@@ -1,11 +1,19 @@
 import json
 import logging
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 
-from assistant.graph import SYSTEM_PROMPT, route, route_after_router
+from assistant.graph import SYSTEM_PROMPT, route, route_after_reviewer, route_after_router
 from assistant.mcp_client import ALLOWED_MCP_TOOLS
+from assistant.reviewer import (
+    ReviewDecision,
+    ReviewerOutputError,
+    feedback_message,
+    is_feedback,
+    review_messages,
+)
 from assistant.router import (
     ROUTER_PROMPT,
     RouteDecision,
@@ -14,11 +22,20 @@ from assistant.router import (
     router_messages,
 )
 from assistant.tools import ToolUnavailableError
-from conftest import TEST_SCOPE, ConversationRouter, FakeModel, fake_graph, tool_call
+from conftest import (
+    TEST_SCOPE,
+    ApprovingReviewer,
+    ConversationRouter,
+    FakeModel,
+    fake_graph,
+    tool_call,
+)
 
 
 def start_turn(model, text="salve", **kwargs):
-    return fake_graph(model, **kwargs).invoke({"messages": [HumanMessage(text)], "steps": 0})
+    return fake_graph(model, **kwargs).invoke(
+        {"messages": [HumanMessage(text)], "steps": 0, "reviews": 0}
+    )
 
 
 def test_fixed_reply_in_one_step():
@@ -58,7 +75,7 @@ def test_route_cases():
         "type": "invalid_tool_call",
     }])
     cases = [
-        (AIMessage("ok"), 1, "end"),
+        (AIMessage("ok"), 1, "reviewer"),
         (tool_call(), 1, "tools"),
         (tool_call(), 4, "tools"),
         (tool_call(), 5, "limit"),
@@ -213,7 +230,9 @@ def test_limit_also_answers_unparsable_arguments():
 
 def routed_turn(router, model, history=None, **kwargs):
     messages = history if history is not None else [HumanMessage("domanda")]
-    return fake_graph(model, router=router, **kwargs).invoke({"messages": messages, "steps": 0})
+    return fake_graph(model, router=router, **kwargs).invoke(
+        {"messages": messages, "steps": 0, "reviews": 0}
+    )
 
 
 def decision(category, reason):
@@ -307,3 +326,148 @@ def test_graph_has_router_and_refusal_nodes():
 def test_route_after_router_cases():
     assert route_after_router({"category": "conversation"}) == "llm"
     assert route_after_router({"category": "out_of_scope"}) == "refusal"
+
+
+# --- reviewer (lesson 6, step 2) ---
+
+QUESTION = "Che ore sono a Tokyo e quanto fa 17 * 23?"
+
+
+def reviewed_turn(reviewer, model, text="domanda", **kwargs):
+    return fake_graph(model, reviewer=reviewer, **kwargs).invoke(
+        {"messages": [HumanMessage(text)], "steps": 0, "reviews": 0}
+    )
+
+
+def verdict(coherent, reason="incompleta"):
+    return ReviewDecision(reason=reason, coherent=coherent)
+
+
+def reviewer_lines(caplog, level=None):
+    return [
+        r.getMessage() for r in caplog.records
+        if r.getMessage().startswith("node=reviewer") and (level is None or r.levelno == level)
+    ]
+
+
+def test_approved_answer_is_reviewed_once(caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    model, reviewer = FakeModel([AIMessage("Sono le 10.")]), ApprovingReviewer()
+    result = reviewed_turn(reviewer, model)
+    assert len(model.calls) == 1 and len(reviewer.calls) == 1
+    assert (result["reviews"], result["coherent"], result["review_reason"]) == (1, True, "test")
+    assert reviewer_lines(caplog) == [
+        'node=reviewer review=1/2 coherent=true reason="test" next_node=end'
+    ]
+    assert not any(is_feedback(m) for m in result["messages"])
+
+
+def test_partial_answer_is_rewritten(caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    partial, complete = "A Tokyo sono le 00:47.", "A Tokyo sono le 00:47 e 17 * 23 = 391."
+    model = FakeModel([tool_call(), AIMessage(partial), AIMessage(complete)])
+    reviewer = FakeModel([
+        verdict(False, "Manca il risultato di 17 * 23."),
+        verdict(True, "Risponde a entrambe le parti."),
+    ])
+    result = reviewed_turn(reviewer, model, QUESTION)
+    sent = model.calls[2][-1]
+    assert is_feedback(sent)
+    assert sent.content == feedback_message("Manca il risultato di 17 * 23.").content
+    assert result["messages"][-1].content == complete
+    assert (result["reviews"], result["steps"]) == (2, 3)
+    # Only question and answer reach the reviewer, after the tools and at the second review too.
+    assert reviewer.calls == [
+        review_messages(QUESTION, partial), review_messages(QUESTION, complete)
+    ]
+    assert reviewer_lines(caplog) == [
+        'node=reviewer review=1/2 coherent=false reason="Manca il risultato di 17 * 23." '
+        "next_node=llm",
+        'node=reviewer review=2/2 coherent=true reason="Risponde a entrambe le parti." '
+        "next_node=end",
+    ]
+
+
+@pytest.mark.parametrize("max_reviews", [1, 2, 3])
+def test_reviewer_that_always_rejects_stops_at_the_limit(caplog, max_reviews):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    model = FakeModel([AIMessage(f"bozza {i}") for i in range(max_reviews)])
+    reviewer = FakeModel([verdict(False)] * max_reviews)
+    result = reviewed_turn(reviewer, model, max_reviews=max_reviews)
+    assert len(model.calls) == len(reviewer.calls) == max_reviews
+    assert sum(is_feedback(m) for m in result["messages"]) == max_reviews - 1
+    assert result["messages"][-1].content == f"bozza {max_reviews - 1}"
+    assert reviewer_lines(caplog, logging.WARNING) == [
+        f'node=reviewer review={max_reviews}/{max_reviews} coherent=false reason="incompleta" '
+        "review_limit_reached next_node=end"
+    ]
+
+
+@pytest.mark.parametrize("output", [ReviewerOutputError("JSON troncato"), None])
+def test_invalid_reviewer_output_approves_the_answer(caplog, output):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    model = FakeModel([AIMessage("Risposta.")])
+    result = reviewed_turn(FakeModel([output]), model)
+    assert result["messages"][-1].content == "Risposta." and len(model.calls) == 1
+    assert (result["reviews"], result["coherent"], result["review_reason"]) == (1, True, "")
+    error = json.dumps(str(output), ensure_ascii=False)
+    assert reviewer_lines(caplog, logging.WARNING) == [
+        f"node=reviewer review=1/2 fallback=invalid_output error={error} coherent=true "
+        "next_node=end"
+    ]
+
+
+def test_refusal_and_limit_notice_are_not_reviewed():
+    reviewer = ApprovingReviewer()
+    router = FakeModel([decision("out_of_scope", "calcio")])
+    fake_graph(FakeModel([]), router=router, reviewer=reviewer).invoke(
+        {"messages": [HumanMessage("Chi ha vinto?")], "steps": 0, "reviews": 0}
+    )
+    result = reviewed_turn(reviewer, FakeModel([tool_call(id=f"c{i}") for i in range(5)]))
+    assert result["messages"][-1].content.startswith("Ho raggiunto il limite di 5 passaggi")
+    assert reviewer.calls == []
+
+
+def test_reviewer_does_not_consume_steps(caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    model = FakeModel([AIMessage("bozza"), AIMessage("finale")])
+    result = reviewed_turn(FakeModel([verdict(False), verdict(True)]), model, max_steps=2)
+    assert result["steps"] == 2
+    assert result["messages"][-1].content == "finale"
+    assert "limit_reached" not in caplog.text
+
+
+def test_step_limit_during_a_rewrite_goes_to_limit(caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    reviewer = FakeModel([verdict(False)])
+    result = reviewed_turn(reviewer, FakeModel([AIMessage("bozza"), tool_call()]), max_steps=2)
+    assert result["messages"][-1].content == (
+        "Ho raggiunto il limite di 2 passaggi senza una risposta finale."
+    )
+    assert len(reviewer.calls) == 1
+    assert "step=2/2 limit_reached" in caplog.text
+
+
+def test_reviewer_reason_is_logged_on_one_line(caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+    reviewed_turn(FakeModel([verdict(True, 'riga 1\n"riga 2"')]), FakeModel([AIMessage("ok")]))
+    [line] = reviewer_lines(caplog)
+    assert "\n" not in line
+    assert r'reason="riga 1\n\"riga 2\""' in line
+
+
+def test_empty_answer_reaches_the_reviewer_as_empty():
+    reviewer = ApprovingReviewer()
+    reviewed_turn(reviewer, FakeModel([AIMessage("")]))
+    assert reviewer.calls[0] == review_messages("domanda", "")
+    assert reviewer.calls[0][1].content.endswith("(vuota)")
+
+
+def test_route_after_reviewer_cases():
+    assert route_after_reviewer({"coherent": True, "reviews": 1}, 2) == "end"
+    assert route_after_reviewer({"coherent": False, "reviews": 1}, 2) == "llm"
+    assert route_after_reviewer({"coherent": False, "reviews": 2}, 2) == "end"
+
+
+def test_graph_has_reviewer_node():
+    assert "reviewer" in set(fake_graph(FakeModel([])).get_graph().nodes)

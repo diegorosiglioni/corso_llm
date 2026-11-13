@@ -8,7 +8,9 @@ from assistant.config import DEFAULT_SCOPE_FILE, load_config
 from assistant.mcp_client import ALLOWED_MCP_TOOLS, ToolSpec
 from assistant.session import Session
 from assistant.tools import ToolUnavailableError
-from conftest import MCP_SPECS, FakeMcpClient
+from langchain_core.messages import AIMessage
+
+from conftest import MCP_SPECS, ApprovingReviewer, ConversationRouter, FakeMcpClient, FakeModel
 
 VALID = {"LMSTUDIO_BASE_URL": "http://localhost:1234/v1", "LMSTUDIO_MODEL": "google/gemma-4-e2b"}
 
@@ -122,6 +124,43 @@ def test_scope_file_is_logged(monkeypatch, caplog):
 def test_missing_scope_file_exits_1(capsys, monkeypatch, tmp_path):
     monkeypatch.setattr(entry, "create_model", _must_not_call)
     monkeypatch.setattr(entry, "create_router_model", _must_not_call)
+    monkeypatch.setattr(entry, "create_reviewer_model", _must_not_call)
     monkeypatch.setattr(entry, "run", _must_not_call)
     assert main({**VALID, "SCOPE_FILE": str(tmp_path / "manca.txt")}) == 1
     assert "Configurazione non valida: SCOPE_FILE non leggibile:" in capsys.readouterr().err
+
+
+# --- reviewer (lesson 6, step 2) ---
+
+@pytest.mark.parametrize(("env", "expected"), [({}, 2), ({"MAX_REVIEWS": "3"}, 3)])
+def test_reviewer_model_and_max_reviews_reach_the_graph(monkeypatch, env, expected):
+    reviewer = object()
+    received = []
+    monkeypatch.setattr(entry, "create_reviewer_model", lambda config: reviewer)
+    monkeypatch.setattr(
+        entry, "build_graph", lambda *args, **kwargs: received.append(kwargs) or "graph"
+    )
+    monkeypatch.setattr(entry, "run", lambda session: None)
+    assert main({**VALID, **env}) == 0
+    assert received[0]["reviewer_model"] is reviewer
+    assert received[0]["max_reviews"] == expected
+
+
+def test_graph_built_by_main_goes_through_the_reviewer(monkeypatch):
+    reviewer, replies = ApprovingReviewer(), []
+    monkeypatch.setattr(
+        entry, "create_model", lambda config, tools: FakeModel([AIMessage("Ciao!")])
+    )
+    monkeypatch.setattr(entry, "create_router_model", lambda config: ConversationRouter())
+    monkeypatch.setattr(entry, "create_reviewer_model", lambda config: reviewer)
+    monkeypatch.setattr(entry, "run", lambda session: replies.append(session.send("Ciao")))
+    assert main(VALID) == 0
+    assert replies == ["Ciao!"]
+    assert len(reviewer.calls) == 1
+
+
+def test_max_reviews_is_logged(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    monkeypatch.setattr(entry, "run", lambda session: None)
+    main(VALID)
+    assert f"scope_file={DEFAULT_SCOPE_FILE} max_reviews=2" in caplog.text

@@ -1,9 +1,13 @@
 """LangGraph graph of the assistant: explicit state, nodes and routing.
 
-START → [router] ─ conversation ─→ [llm] ──route──┬─ no tool_call ─────────────────────→ END
+START → [router] ─ conversation ─→ [llm] ──route──┬─ no tool_call ─────────────────────→ [reviewer]
            │                         ▲             ├─ tool_call and steps < max_steps ──→ [tools] ─┐
-           │                         └─────────────┼───────────────────────────────────────────────┘
-           │                                       └─ tool_call and steps ≥ max_steps ──→ [limit] → END
+           │                         ├─────────────┼───────────────────────────────────────────────┘
+           │                         │             └─ tool_call and steps ≥ max_steps ──→ [limit] → END
+           │                         │
+           │                         │   [reviewer] ──route_after_reviewer──┬─ coherent ────────────────────→ END
+           │                         └──────────────────────────────────────┼─ not coherent, reviews < max ─→ [llm]
+           │                                                                └─ not coherent, reviews ≥ max ─→ END
            └─ out_of_scope ─→ [refusal] → END
 """
 
@@ -17,6 +21,13 @@ from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
+from assistant.reviewer import (
+    ReviewDecision,
+    ReviewerOutputError,
+    feedback_message,
+    review_messages,
+    user_question,
+)
 from assistant.router import (
     ROUTER_PROMPT,
     RouteDecision,
@@ -46,6 +57,9 @@ class State(TypedDict):
     steps: int  # calls of the agent's model in the turn (the router does not count)
     category: str  # router decision for the turn: conversation or out_of_scope
     reason: str  # router's reason
+    reviews: int  # reviewer calls in the turn (they do not count as steps)
+    coherent: bool  # last decision of the reviewer
+    review_reason: str  # reviewer's reason
 
 
 def _calls(message) -> tuple[list[dict], list[dict]]:
@@ -60,11 +74,11 @@ def _calls(message) -> tuple[list[dict], list[dict]]:
     )
 
 
-def route(state: State, max_steps: int) -> Literal["tools", "limit", "end"]:
+def route(state: State, max_steps: int) -> Literal["tools", "limit", "reviewer"]:
     """Chooses the next step from the model's last message."""
     valid, invalid = _calls(state["messages"][-1])
     if not valid and not invalid:
-        return "end"
+        return "reviewer"
     if state["steps"] < max_steps:
         return "tools"
     return "limit"
@@ -73,6 +87,13 @@ def route(state: State, max_steps: int) -> Literal["tools", "limit", "end"]:
 def route_after_router(state: State) -> Literal["llm", "refusal"]:
     """Sends the turn to the agent or to the refusal node."""
     return "llm" if state["category"] == "conversation" else "refusal"
+
+
+def route_after_reviewer(state: State, max_reviews: int) -> Literal["llm", "end"]:
+    """Ends the turn on a coherent answer or at the review limit; otherwise back to the agent."""
+    if state["coherent"] or state["reviews"] >= max_reviews:
+        return "end"
+    return "llm"
 
 
 def _tool_message(call: dict, result: dict) -> ToolMessage:
@@ -90,8 +111,10 @@ def build_graph(
     *,
     router_model: Runnable,
     scope: str,
+    reviewer_model: Runnable,
+    max_reviews: int,
 ):
-    """Returns the compiled graph with the router, refusal, llm, tools and limit nodes."""
+    """Returns the compiled graph: router, refusal, llm, tools, limit and reviewer nodes."""
     by_name = {tool.name: tool for tool in tools}
     router_prompt = SystemMessage(ROUTER_PROMPT.format(scope=scope))
 
@@ -128,6 +151,37 @@ def build_graph(
                 "step=%d/%d invalid_tool_calls=%s", step, max_steps, reply.invalid_tool_calls
             )
         return {"messages": [reply], "steps": step}
+
+    def reviewer_node(state: State) -> dict:
+        review = state["reviews"] + 1
+        counter = f"review={review}/{max_reviews}"
+        question = user_question(state["messages"])
+        answer = state["messages"][-1].text
+        try:
+            decision = reviewer_model.invoke(review_messages(question, answer))
+        except ReviewerOutputError as error:
+            decision = error
+        if not isinstance(decision, ReviewDecision):
+            log.warning(
+                "node=reviewer %s fallback=invalid_output error=%s coherent=true next_node=end",
+                counter, json.dumps(str(decision), ensure_ascii=False),
+            )
+            return {"reviews": review, "coherent": True, "review_reason": ""}
+        update = {
+            "reviews": review, "coherent": decision.coherent, "review_reason": decision.reason
+        }
+        reason = json.dumps(decision.reason, ensure_ascii=False)
+        if decision.coherent:
+            log.info("node=reviewer %s coherent=true reason=%s next_node=end", counter, reason)
+        elif route_after_reviewer(update, max_reviews) == "llm":
+            log.info("node=reviewer %s coherent=false reason=%s next_node=llm", counter, reason)
+            update["messages"] = [feedback_message(decision.reason)]
+        else:
+            log.warning(
+                "node=reviewer %s coherent=false reason=%s review_limit_reached next_node=end",
+                counter, reason,
+            )
+        return update
 
     def run_tool(call: dict, invalid: list[dict]) -> tuple[dict, str]:
         """Runs one call; returns the result and the outcome (ok, tool_error, transport_error)."""
@@ -193,6 +247,7 @@ def build_graph(
     graph.add_node("llm", llm_node)
     graph.add_node("tools", tools_node)
     graph.add_node("limit", limit_node)
+    graph.add_node("reviewer", reviewer_node)
     graph.add_edge(START, "router")
     graph.add_conditional_edges(
         "router", route_after_router, {"llm": "llm", "refusal": "refusal"}
@@ -201,7 +256,12 @@ def build_graph(
     graph.add_conditional_edges(
         "llm",
         lambda state: route(state, max_steps),
-        {"tools": "tools", "limit": "limit", "end": END},
+        {"tools": "tools", "limit": "limit", "reviewer": "reviewer"},
+    )
+    graph.add_conditional_edges(
+        "reviewer",
+        lambda state: route_after_reviewer(state, max_reviews),
+        {"llm": "llm", "end": END},
     )
     graph.add_edge("tools", "llm")
     graph.add_edge("limit", END)
