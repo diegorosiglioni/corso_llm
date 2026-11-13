@@ -1,10 +1,11 @@
 # Handoff — Assistente del laboratorio
 
-Data: 2026-11-11
-Stato: **lezione 6, Step 2 (revisore): specifica approvata, piano da scrivere.** Step 1 (router)
-implementato e verificato su `dev`, non ancora pubblicato.
+Data: 2026-11-13
+Stato: **lezione 6, Step 2 (revisore): implementato e verificato su `dev`, non ancora
+pubblicato.** Anche lo Step 1 (router) è solo su `dev`.
 Step 2: specifica [`specs/2026-11-11-revisore-design.md`](specs/2026-11-11-revisore-design.md),
-requisiti §10 (RF-28…RF-33, CA-30…CA-37). Step 1: specifica
+piano [`plans/2026-11-11-revisore.md`](plans/2026-11-11-revisore.md), requisiti §10 (RF-28…RF-33,
+CA-30…CA-37). Step 1: specifica
 [`specs/2026-11-11-router-design.md`](specs/2026-11-11-router-design.md), piano
 [`plans/2026-11-11-router.md`](plans/2026-11-11-router.md), requisiti §9 (RF-23…RF-27,
 CA-23…CA-29). Il push si fa solo su richiesta dell'utente (regola in `CLAUDE.md`, sezione «Git»).
@@ -19,49 +20,74 @@ La lezione 5 resta come descritta più sotto.
 `name: assistente-laboratorio`. I documenti precedenti citano ancora `assistente-laboratorio/`: sono
 storici e non sono stati riscritti.
 
-## Lezione 6 — prossimo passo (2026-11-11)
+## Lezione 6 — prossimo passo (2026-11-13)
 
-**Prossimo: piano dello Step 2 · Revisore** con la skill `superpowers:writing-plans`, partendo
-dalla specifica approvata [`specs/2026-11-11-revisore-design.md`](specs/2026-11-11-revisore-design.md)
-(salvare in `plans/2026-11-11-revisore.md`). Poi: revisione del piano da parte dell'utente e
-scelta del modo di esecuzione → implementazione TDD per incrementi (§12 della specifica) →
-verifica → commit. Prompt per riprendere: [`prossimo-prompt.txt`](prossimo-prompt.txt).
-Traccia completa: [`lezione6.md`](lezione6.md); lo schema del grafo dei tre step è la slide 3 di
-`LLM_Lez_6.pdf` (non tracciato). In questa macchina manca `pdftoppm`: le slide si leggono come
-immagini con PyMuPDF installato nella scratchpad (`pip install --target`), non nel progetto.
+**Prossimo: Step 3 · Riassunto**, da avviare con un nuovo brainstorming
+(`superpowers:brainstorming`): requisiti, specifica, piano, come per gli Step 1 e 2. Il prompt
+[`prossimo-prompt.txt`](prossimo-prompt.txt) si riferisce ancora al piano dello Step 2: va
+riscritto per lo Step 3. Traccia completa: [`lezione6.md`](lezione6.md); lo schema del grafo dei tre
+step è la slide 3 di `LLM_Lez_6.pdf` (non tracciato). In questa macchina manca `pdftoppm`: le slide
+si leggono come immagini con PyMuPDF installato nella scratchpad (`pip install --target`), non nel
+progetto.
 
-### Step 2 — brainstorming concluso (2026-11-11)
+## Lezione 6, Step 2 — revisore (2026-11-13)
 
-Decisioni prese con l'utente, una alla volta (dettagli e motivi nella specifica, §1):
-1. il motivo del revisore entra nella cronologia come `HumanMessage(name="reviewer")` e **resta**
-   nella sessione insieme alla bozza rifiutata; `router_messages` le scarta entrambe;
-2. il revisore vede **solo** la domanda dell'utente e la risposta proposta (niente cronologia,
-   niente strumenti);
-3. `MAX_REVIEWS` (default 2) conta le chiamate al revisore nel turno; `MAX_STEPS` **non** si
-   azzera dopo un rifiuto e il revisore non consuma passaggi;
-4. si rivedono solo le risposte finali dell'agente (non il rifiuto né l'avviso di `limit`);
-   output non valido → risposta approvata con WARNING `fallback=invalid_output`; `APIError` al
-   terminale;
-5. approccio: modulo `reviewer.py` gemello di `router.py`, nodo `reviewer` esplicito nel grafo,
-   `guard_router_output` → `guard_structured_output(structured, error_type)`;
-6. prova reale dell'evidenza minima con la **prima risposta dell'agente imposta**
-   (`PartialFirstAnswer`) e revisore e riscrittura reali, più una prova interamente reale.
+Dopo la risposta finale dell'agente (nessuna tool_call) il nodo `reviewer` (stesso modello, prompt
+`REVIEWER_PROMPT`, nessuno strumento, output `json_schema` con `reason` e `coherent`) riceve solo
+la domanda dell'utente e la risposta proposta. Coerente → END. Non coerente e `reviews <
+MAX_REVIEWS` → l'indicazione `HumanMessage(name="reviewer")` con il motivo entra nella cronologia e
+il turno torna a `llm`. Non coerente al limite → END con l'ultima risposta e WARNING
+`review_limit_reached`. Output non valido o `None` → risposta approvata con WARNING
+`fallback=invalid_output`. Rifiuto del router e avviso di `limit` non sono rivisti; il revisore non
+consuma `MAX_STEPS`, che non si azzera. `router_messages` scarta indicazioni e bozze rifiutate.
+`MAX_REVIEWS` (default 2) in `config.py` e `.env.example`; all'avvio il log scrive
+`scope_file=… max_reviews=…`.
 
-Da tenere presente nel piano:
-- l'unico test esistente che cambia attesa è il caso «nessuna tool_call» di `test_route_cases`
-  (`"end"` → `"reviewer"`); gli altri restano verdi grazie all'`ApprovingReviewer` predefinito
-  di `fake_graph`;
-- `start_turn` e `routed_turn` in `test_graph.py` invocano il grafo con `{"messages", "steps"}`:
-  vanno aggiunti `"reviews": 0` (come in `Session.send`);
-- la nuova firma di `build_graph` rompe `__main__.py`, `conftest.py` e `test_real.py` finché non
-  sono aggiornati: grafo, `Session`, avvio e `conftest` vanno in un solo commit (lezione dello
-  Step 1);
-- nelle prove reali cercare `step=N/M node=llm` per l'agente: `next_node=llm` compare anche nelle
-  righe di router e revisore;
-- rischio da verificare subito nella prova reale: come LM Studio tratta il campo `name` del
-  messaggio utente (specifica §14);
-- le prove reali durano già circa 10 minuti (12 prove); con il revisore saranno di più;
-- README non ancora toccato: va aggiornato solo con comandi verificati, a implementazione fatta.
+Commit: `8498085` (piano), `51e9216` (Task 1, `MAX_REVIEWS`), `5e46842` (Task 2, `reviewer.py` e
+`router_messages`), `1506282` (Task 3, `guard_structured_output` e `create_reviewer_model`),
+`0f54a2d` (Task 4: grafo, sessione, avvio, `conftest.py` e fixture reale in un solo commit),
+`6dfd2b9` (Task 5, prove reali), poi la documentazione (Task 6).
+
+### Verifiche (2026-11-13)
+
+Prove reali con LM Studio, `google/gemma-4-e2b`, contesto 8192, `MAX_REVIEWS` non impostata (2).
+
+| CA | Comando | Esito |
+|----|---------|-------|
+| CA-30 | `pytest tests/test_config.py tests/test_graph.py` | ✅ default 2; `abc`, `0`, `-1`, `2.5` rifiutati nel messaggio unico; il revisore riceve esattamente `review_messages(domanda, risposta)` dopo un ciclo di strumenti e alla seconda revisione |
+| CA-31 | `pytest tests/test_graph.py` | ✅ una chiamata all'agente e una al revisore; `review=1/2 coherent=true reason="test" next_node=end`; nessuna indicazione |
+| CA-32 | `pytest tests/test_graph.py` | ✅ bozza parziale → `coherent=false … next_node=llm`, indicazione all'agente, risposta completa → `review=2/2 coherent=true` |
+| CA-33 | `pytest tests/test_graph.py` (`max_reviews` 1, 2, 3) | ✅ agente e revisore chiamati `max_reviews` volte, `max_reviews - 1` indicazioni, ultima bozza restituita, WARNING `review_limit_reached` |
+| CA-34 | `pytest tests/test_graph.py tests/test_session.py` | ✅ `ReviewerOutputError` e `None` → `fallback=invalid_output … coherent=true`; `APIConnectionError` del revisore → cronologia invariata |
+| CA-35 | `pytest tests/test_graph.py` | ✅ rifiuto e avviso di `limit` non rivisti; `steps` invariato dal revisore; limite dei passaggi durante una riscrittura → `limit` |
+| — | `pytest` | ✅ 247 passed, 14 deselected |
+| — | LM Studio non raggiungibile (`LMSTUDIO_BASE_URL=http://localhost:9/v1`) | ✅ `scope_file=… max_reviews=2`, «Errore: LM Studio non ha risposto correttamente (Connection error.). Riprova.», «Arrivederci!», exit 0 |
+| CA-36 | `pytest -m real -v -k imposed_partial` (prima risposta dell'agente **imposta**) | ✅ 1 passed in 263 s: `review=1/2 coherent=false reason="La risposta proposta ignora la richiesta di calcolare 17 * 23…"`, poi l'agente reale chiama `get_current_time` e `calculate`, `review=2/2 coherent=true`; risposta con «391». Il campo `name` del messaggio utente è accettato da LM Studio |
+| CA-36, CA-37 | `pytest -m real -v` | ✅ 14 passed in 1940 s (32 min). 17 righe `node=reviewer`: 16 `coherent=true` al primo passaggio, l'unico `coherent=false` è quello sulla risposta imposta. Nessun falso rifiuto; CA-17 con una sola `add_note` |
+| CA-37 | `"Che ore sono a Tokyo e quanto fa 17 * 23?", "esci"` in pipe verso `python -m assistant` e verso `docker compose run --rm -T assistant` (dopo `docker compose build`) | ✅ in locale e in Docker: `get_current_time` e `calculate` nello stesso passaggio, `review=1/2 coherent=true`, risposta con l'ora e 391, exit 0; in Docker `scope_file=/app/assistant/data/scope.txt max_reviews=2` |
+
+Limite: una sola esecuzione delle prove reali. Dimostra il comportamento con quelle domande, non che
+il revisore giudichi sempre così. Con il modello reale non si sono visti né il limite delle
+revisioni né il ripiego: sono verificati solo con il revisore simulato.
+
+### Decisioni prese durante l'esecuzione
+
+- **Worktree:** nessuno, come chiede `CLAUDE.md`; lavoro direttamente su `dev`.
+- **Prove rapide da terminale con `NOTES_DB` in una cartella temporanea**, per non toccare `data/`
+  del repository.
+- **LM Studio e Docker Desktop** sono stati avviati durante la sessione (`lms server start`,
+  `lms load google/gemma-4-e2b --context-length 8192 -y`, Docker Desktop dal menu Start).
+
+### Punti aperti (Step 2)
+
+- **Durata delle prove reali:** da circa 10 a circa 32 minuti (ogni turno ha almeno una chiamata in
+  più; la prova con la risposta imposta da sola dura circa 4 minuti).
+- **Risposte con LaTeX:** l'agente scrive `$17 \times 23$` (visto in locale e in Docker); il
+  terminale lo mostra così com'è. Non riguarda il revisore, non toccato.
+- **Contesto:** bozze e indicazioni restano nella cronologia e occupano contesto (8192 token);
+  il riassunto è lo Step 3.
+- Con il modello reale non sono stati osservati il limite delle revisioni, il ripiego e i falsi
+  rifiuti su domande brevi di continuazione («E a Roma?» è stata approvata).
 
 ## Lezione 6, Step 1 — router (2026-11-11)
 
@@ -159,7 +185,7 @@ Da sapere:
   `.venv/Scripts/python.exe` (o `py -3.13`).
 - **`LLM_Lez_5.pdf`** e **`LLM_Lez_6.pdf`** non sono tracciati: non aggiungerli a Git senza
   chiedere.
-- Suite predefinita: `pytest` → `201 passed, 12 deselected` (Step 1 della lezione 6), in circa 25 s. I test MCP avviano il
+- Suite predefinita: `pytest` → `247 passed, 14 deselected` (Step 2 della lezione 6), in circa 45–85 s. I test MCP avviano il
   server come sottoprocesso, circa 1 s ciascuno.
 
 ## Che cosa c'è oggi (lezione 5)
@@ -340,8 +366,8 @@ Da PowerShell nella radice della repository:
 & "$HOME\.lmstudio\bin\lms.exe" load google/gemma-4-e2b --context-length 8192 -y
 $env:LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
 $env:LMSTUDIO_MODEL = "google/gemma-4-e2b"
-.\.venv\Scripts\python.exe -m pytest            # senza modello: 201 passed, 12 deselected
-.\.venv\Scripts\python.exe -m pytest -m real -v # 12 prove reali, circa 10 minuti
+.\.venv\Scripts\python.exe -m pytest            # senza modello: 247 passed, 14 deselected
+.\.venv\Scripts\python.exe -m pytest -m real -v # 14 prove reali, circa 32 minuti
 .\.venv\Scripts\python.exe -m assistant
 docker compose build
 "Quanto fa 17 * 23?", "esci" | docker compose run --rm -T assistant

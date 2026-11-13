@@ -5,6 +5,8 @@ organizzata in un grafo LangGraph esplicito. Il modello usa un orologio locale e
 offerti da un server MCP locale (FastMCP, stdio): convertitore di unità, calcolatrice, catalogo
 dei corsi e note persistenti. Prima dell'agente un router LLM controlla che la domanda rientri
 nell'ambito dell'assistente: le domande fuori ambito ricevono un rifiuto senza raggiungere l'agente.
+Dopo l'agente un revisore LLM controlla che la risposta sia coerente con la domanda; se non lo è,
+il motivo torna all'agente, che riscrive la risposta (al più `MAX_REVIEWS` revisioni per turno).
 
 Requisiti e specifica: [`docs/superpowers/`](docs/superpowers/).
 
@@ -46,8 +48,9 @@ ripetere le verifiche e rigenerarlo.
 ```
 
 Non richiedono LM Studio né la rete: il modello è sostituito da un modello finto con risposte
-programmate. I test del server MCP lo avviano davvero come sottoprocesso stdio, con l'archivio
-delle note in una cartella temporanea (circa 1 s per test).
+programmate (anche per router e revisore). I test del server MCP lo avviano davvero come
+sottoprocesso stdio, con l'archivio delle note in una cartella temporanea (circa 1 s per test).
+Esito al 2026-11-13: `247 passed, 14 deselected` (le 14 deselezionate sono le prove reali).
 
 ## Configurazione
 
@@ -57,7 +60,8 @@ L'applicazione legge variabili d'ambiente e il file con l'ambito dell'assistente
 |-----------|--------------|---------|-------------|
 | `LMSTUDIO_BASE_URL` | sì | — | indirizzo dell'API di LM Studio, es. `http://localhost:1234/v1` |
 | `LMSTUDIO_MODEL` | sì | — | identificativo del modello restituito da `GET /v1/models` |
-| `MAX_STEPS` | no | `5` | chiamate massime al modello dell'agente in un turno (intero ≥ 1); il router non conta |
+| `MAX_STEPS` | no | `5` | chiamate massime al modello dell'agente in un turno (intero ≥ 1), riscritture comprese; router e revisore non contano |
+| `MAX_REVIEWS` | no | `2` | chiamate massime al revisore in un turno (intero ≥ 1); con `2` l'agente riscrive al più una volta |
 | `LOG_LEVEL` | no | `INFO` | `DEBUG`, `INFO`, `WARNING` o `ERROR` |
 | `NOTES_DB` | no | `data/notes.sqlite3` | file SQLite delle note, relativo alla cartella di avvio |
 | `SCOPE_FILE` | no | `assistant/data/scope.txt` del pacchetto | file di testo (UTF-8) con l'ambito dell'assistente; un percorso relativo vale dalla cartella di avvio |
@@ -115,11 +119,11 @@ strumenti, classifica l'ultimo messaggio come `conversation` o `out_of_scope`, c
 strumenti; se servono strumenti lo decide poi l'agente.
 
 ```
-START → router ─ conversation ─→ llm ⇄ tools (o limit) → END
+START → router ─ conversation ─→ llm ⇄ tools (o limit → END) → reviewer → END (o di nuovo llm)
           └──── out_of_scope ─→ refusal → END
 ```
 
-- `conversation`: il turno prosegue verso l'agente come prima.
+- `conversation`: il turno prosegue verso l'agente e poi verso il revisore (sezione seguente).
 - `out_of_scope`: il nodo `refusal` risponde «Mi dispiace, questa domanda è fuori dal mio ambito:
   <motivo>. Chiedimi pure che cosa so fare.» e l'agente non viene eseguito. Il rifiuto resta nella
   cronologia e la sessione continua.
@@ -147,6 +151,64 @@ Tu> Assistente> Mi dispiace, questa domanda è fuori dal mio ambito: La richiest
 
 Per una domanda fuori ambito nel turno compaiono `next_node=refusal` e `node=refusal`, e nessuna
 riga `node=llm`.
+
+## Revisore: la risposta è coerente con la domanda?
+
+Quando l'agente dà una risposta finale (senza chiedere strumenti), il nodo `reviewer` la controlla:
+stesso modello, prompt di sistema diverso, nessuno strumento, output strutturato con un motivo e un
+verdetto (`coherent`). Il revisore vede **solo** la domanda dell'utente e la risposta proposta: non
+la cronologia né i risultati degli strumenti. Giudica se la risposta tocca tutte le parti della
+domanda senza uscire dal tema; non giudica stile, lunghezza né esattezza dei dati.
+
+```
+llm ── risposta finale ──→ reviewer ─┬─ coerente ─────────────────────────────→ END
+ ▲                                   ├─ non coerente, revisioni < MAX_REVIEWS ─→ llm (con il motivo)
+ └───────────────────────────────────┘
+                                     └─ non coerente, revisioni = MAX_REVIEWS ─→ END (ultima risposta)
+```
+
+- Se la risposta non è coerente, il motivo entra nella cronologia come messaggio utente marcato
+  `name="reviewer"` («Revisione: la risposta precedente non è coerente con la domanda: <motivo>.
+  Scrivi una nuova risposta completa…») e l'agente riscrive. Bozza e indicazione restano nella
+  cronologia della sessione; il router non le vede.
+- Il rifiuto del router e l'avviso del limite dei passaggi non vengono rivisti.
+- Le riscritture consumano passaggi dell'agente (`MAX_STEPS` non si azzera); il revisore no.
+- Se il revisore risponde con un output non valido, la risposta passa e il log mostra un WARNING;
+  un errore di collegamento con LM Studio arriva al terminale come per l'agente.
+
+Log della prova reale del 2026-11-13 `test_reviewer_rejects_an_imposed_partial_answer`, con la
+domanda «Che ore sono a Tokyo e quanto fa 17 * 23?». **La prima risposta dell'agente è imposta
+dalla prova** («A Tokyo sono le 10:00.», solo la prima parte); revisore e riscrittura sono reali:
+
+```
+INFO assistant.graph: step=1/5 node=llm
+INFO assistant.graph: node=reviewer review=1/2 coherent=false reason="La risposta proposta ignora la richiesta di calcolare 17 * 23 e fornisce solo un'informazione parziale sulla posizione oraria." next_node=llm
+INFO assistant.graph: step=2/5 node=llm
+INFO assistant.graph: step=2/5 variant=local tool=get_current_time call_id=ODxniM0Myrv7ALCMTTaUKcyUT5fOBoAk arguments={'timezone': 'Asia/Tokyo'}
+...
+INFO assistant.graph: step=2/5 variant=mcp tool=calculate call_id=1WvGnlIAo0oArH04bE9q85yI5DtZrtsR arguments={'expression': '17 * 23'}
+...
+INFO assistant.graph: step=3/5 node=llm
+INFO assistant.graph: node=reviewer review=2/2 coherent=true reason="La risposta fornisce le risposte a entrambe le domande poste dall'utente." next_node=end
+```
+
+La stessa domanda, interamente reale, con `docker compose run --rm -T assistant` (2026-11-13):
+
+```
+INFO __main__: scope_file=/app/assistant/data/scope.txt max_reviews=2
+...
+INFO assistant.graph: step=2/5 node=llm
+INFO assistant.graph: node=reviewer review=1/2 coherent=true reason="La risposta fornisce entrambe le informazioni richieste in modo corretto." next_node=end
+Tu> Assistente> A Tokyo sono le ore 00:19:49 (il 14 novembre 2026). $17 \times 23$ fa 391.
+```
+
+Righe di limite e di ripiego, nel formato verificato dai test automatici (con un revisore simulato,
+non osservate con il modello reale):
+
+```
+WARNING assistant.graph: node=reviewer review=2/2 coherent=false reason="incompleta" review_limit_reached next_node=end
+WARNING assistant.graph: node=reviewer review=1/2 fallback=invalid_output error="JSON troncato" coherent=true next_node=end
+```
 
 ## Prove reali con LM Studio
 
@@ -223,13 +285,15 @@ INFO assistant.graph: step=2/5 node=llm
 Tu> Assistente> Nota aggiunta: Ricordati di comprare il latte.
 ```
 
-Le prove reali (`pytest -m real`, 12 prove, circa 10 minuti) passano tutte dal router e
-verificano con il modello locale: l'orario a Tokyo e poi a Roma; un nome ricordato senza strumenti;
+Le prove reali (`pytest -m real`, 14 prove, circa 32 minuti il 2026-11-13) passano tutte da router
+e revisore e verificano con il modello locale: l'orario a Tokyo e poi a Roma; un nome ricordato senza strumenti;
 `calculate` e `convert_units`; una sola `add_note` per una richiesta di ricordare; `delete_note` su
 un id inesistente che non elimina nulla; le note ritrovate dopo il riavvio del server;
 `search_catalog` seguito da `get_item`; una ricerca senza risultati; i log correlati dallo stesso
 `call_id`; il router che manda all'agente «Che ore sono a Tokyo?» e «Ciao!» e rifiuta «Chi ha
-vinto i Mondiali del 2006?» senza eseguire l'agente.
+vinto i Mondiali del 2006?» senza eseguire l'agente; il revisore che rifiuta una prima risposta
+parziale imposta dalla prova e approva la riscrittura dell'agente reale, e la stessa domanda in due
+parti interamente reale («391» e l'ora di Tokyo nella risposta).
 
 ## Docker
 
@@ -290,6 +354,12 @@ riga `node=router … reason="…"`. Il router è un modello piccolo e classific
 argomenti. Nella prima prova del 2026-11-11 «Ricordami di comprare il latte» e «Ci sono corsi di
 astrologia?» erano rifiutate; con l'ambito attuale passano. Dopo una modifica si ripete
 `pytest -m real`.
+
+**Il revisore rifiuta una risposta giusta (o ne approva una incompleta).** Il motivo è nella riga
+`node=reviewer … reason="…"`. Il revisore vede solo la domanda e la risposta, quindi può sbagliare
+con domande brevi che continuano la conversazione («E a Roma?»). Un rifiuto in più costa al più
+`MAX_REVIEWS - 1` riscritture, poi passa l'ultima risposta; con `MAX_REVIEWS=1` il revisore controlla
+ma non fa mai riscrivere.
 
 **Più dettagli.** Con `$env:LOG_LEVEL = "DEBUG"` i log mostrano la traccia completa degli errori
 e le richieste HTTP verso LM Studio.

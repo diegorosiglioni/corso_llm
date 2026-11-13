@@ -7,14 +7,14 @@ Requisiti, specifica e piano: `docs/superpowers/`.
 Stato corrente e prossimo passo: `docs/superpowers/handoff.md` (leggerlo per primo).
 
 ## Struttura e comandi
-- Codice in `assistant/`: `config.py`, `model.py`, `tools.py`, `router.py`,
+- Codice in `assistant/`: `config.py`, `model.py`, `tools.py`, `router.py`, `reviewer.py`,
   `graph.py`, `session.py`, `terminal.py`; ambito del router in `assistant/data/scope.txt`
   (sostituibile con `SCOPE_FILE`); logica pura degli strumenti MCP in `units.py`,
   `calculator.py`, `catalog.py` (dati in `assistant/data/catalog.json`), `notes.py`; server
   FastMCP in `mcp_server.py`, client sincrono e adattatore in `mcp_client.py`. Solo
   `__main__.py` collega i moduli.
 - Test in `tests/`; il modello finto (`FakeModel`), il router finto (`ConversationRouter`), il
-  client MCP finto (`FakeMcpClient`) e gli aiuti comuni sono in `conftest.py`. I test MCP avviano il server
+  revisore finto (`ApprovingReviewer`), il client MCP finto (`FakeMcpClient`) e gli aiuti comuni sono in `conftest.py`. I test MCP avviano il server
   reale via stdio. Le prove con LM Studio stanno in `test_real.py` (marcatore `real`).
 - Note in SQLite: in locale `NOTES_DB` (default `data/notes.sqlite3`, ignorato da Git), in
   Docker il volume `notes-data`.
@@ -23,7 +23,7 @@ Stato corrente e prossimo passo: `docs/superpowers/handoff.md` (leggerlo per pri
 - Comandi da PowerShell nella radice della repository, senza attivare l'ambiente:
   - ambiente: `py -3.13 -m venv .venv` e `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`
   - test senza modello: `.\.venv\Scripts\python.exe -m pytest`
-  - prove reali (LM Studio attivo, variabili impostate): `.\.venv\Scripts\python.exe -m pytest -m real -v`
+  - prove reali (LM Studio attivo, variabili impostate; circa 30 minuti): `.\.venv\Scripts\python.exe -m pytest -m real -v`
   - avvio locale: `.\.venv\Scripts\python.exe -m assistant`
   - Docker: `docker compose build` e `docker compose run --rm assistant` (non `up`)
 
@@ -32,6 +32,8 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
 - organizza il flusso in un grafo LangGraph esplicito (stato, nodi, instradamento riconoscibili);
 - (lezione 6, Step 1) un router LLM prima dell'agente, con ambito in configurazione, manda le
   domande fuori ambito a un nodo di rifiuto senza eseguire l'agente;
+- (lezione 6, Step 2) un revisore LLM dopo la risposta finale dell'agente controlla che sia
+  coerente con la domanda e, se non lo è, rimanda all'agente il motivo, fino a `MAX_REVIEWS`;
 - usa un modello servito da LM Studio, che resta sul computer host;
 - conserva la cronologia della conversazione per la durata della sessione (la cronologia non è persistente);
 - offre uno strumento orologio con fuso orario esplicito, richiesto dal modello tramite tool calling
@@ -42,7 +44,7 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
 
 ## Confini
 - Implementare solo i requisiti concordati. MCP e i quattro strumenti della lezione 5 e gli
-  Step 1 (router) e 2 (revisore, specifica approvata) della lezione 6 sono concordati; gli step
+  Step 1 (router) e 2 (revisore) della lezione 6 sono concordati e implementati; gli step
   successivi della lezione 6 (riassunto, resource e prompt MCP, servizio HTTP, back-end,
   front-end, Compose a più container),
   altri strumenti, altri server MCP, workflow e RAG non vanno anticipati: ognuno avrà il proprio

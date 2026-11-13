@@ -276,7 +276,8 @@ insieme alla specifica `specs/2026-11-11-router-design.md`.
 ## 10. Lezione 6, Step 2 — revisore (2026-11-11)
 
 Riferimento: `LLM_Lez_6.pdf`, slide 3 e slide dello Step 2 (riassunto in `lezione6.md`). Stato:
-approvati il 2026-11-11, insieme alla specifica `specs/2026-11-11-revisore-design.md`.
+approvati il 2026-11-11, insieme alla specifica `specs/2026-11-11-revisore-design.md`; CA-30…CA-37
+verificati il 2026-11-13 (comandi ed esiti in `handoff.md`).
 
 - **RF-28** *Revisore* — Dopo la risposta finale dell'agente (nessuna richiesta di strumenti) un
   nodo LLM (stesso modello, prompt di sistema diverso, nessuno strumento) riceve solo la domanda

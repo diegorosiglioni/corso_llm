@@ -3,7 +3,8 @@
 Data: 2026-11-11
 Stato: approvata il 2026-11-11
 Requisiti: [`../requisiti.md`](../requisiti.md), §10 (RF-28…RF-33, CA-30…CA-37).
-Piano: da scrivere (`../plans/2026-11-11-revisore.md`), con la skill writing-plans.
+Piano: [`../plans/2026-11-11-revisore.md`](../plans/2026-11-11-revisore.md); implementata e
+verificata il 2026-11-13 (esiti in [`../handoff.md`](../handoff.md)).
 Specifiche precedenti: [`2026-11-11-router-design.md`](2026-11-11-router-design.md) (Step 1) e
 quelle che richiama.
 Fonte didattica: `LLM_Lez_6.pdf`, slide 3 («Il grafo dopo i primi tre step») e slide dello
