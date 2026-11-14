@@ -4,8 +4,9 @@ name: assistente-laboratorio
 services:
   # Servizio HTTP dell'agente: grafo, server MCP (sottoprocesso stdio) e note.
   agent:
-    build: .
-    command: ["python", "-m", "assistant.service"]
+    build:
+      context: .
+      dockerfile: docker/agent.Dockerfile  # comando predefinito: python -m assistant.service
     env_file: .env
     environment:
       # LM Studio sull'host; per un'altra porta o un altro host impostare LMSTUDIO_BASE_URL_DOCKER nel .env.
@@ -30,7 +31,10 @@ services:
 
   # CLI, client dell'agente: docker compose run --rm assistant (avvia anche agent).
   assistant:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/agent.Dockerfile  # stessa immagine dell'agente, con la CLI come comando
+    command: ["python", "-m", "assistant"]
     env_file: .env
     environment:
       AGENT_URL: http://agent:8000

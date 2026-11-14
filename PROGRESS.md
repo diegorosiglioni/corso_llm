@@ -1501,6 +1501,106 @@ Decisioni:
 - Problemi aperti: README e `CLAUDE.md` cambiano dal punto 2, quando c'è codice da descrivere;
   immagine del front-end e porta pubblicata del back-end restano allo Step 9 (specifica §11).
 
+## Step 9 · Docker Compose: un container per componente (2026-11-14)
+
+Specifica: [`docs/superpowers/specs/2026-11-14-compose-design.md`](docs/superpowers/specs/2026-11-14-compose-design.md);
+requisiti §17 (RF-76…RF-80, CA-88…CA-93). Questo piano sostituisce l'approvazione (modalità
+autonoma); i punti successivi dello step seguono la specifica.
+
+### Piano dello step (un punto di `TODO.md` per riga)
+
+1. Specifica e requisiti §17; `Dockerfile` → `docker/agent.Dockerfile` (`git mv`, comando = servizio
+   HTTP), nuovi `docker/backend.Dockerfile` e `docker/frontend.Dockerfile`; `compose.yaml` solo nei
+   percorsi dei Dockerfile (la CLI imposta `command: python -m assistant`). Test:
+   `tests/test_docker.py` (controlli statici dei tre Dockerfile, CA-88). Prove a mano CA-89: tre
+   immagini costruite e avviate una per una (agente con LM Studio, back-end col PostgreSQL del
+   container sulla 5433, front-end). README (paragrafo dell'immagine) e `CLAUDE.md` (struttura).
+2. `compose.yaml` a quattro servizi più la CLI nel profilo `cli`; `.env.example` con `POSTGRES_*`;
+   test con `docker compose config --format json` (CA-90).
+3. Prova reale con Compose (CA-91…CA-93, pagina in Edge con Playwright); README (sezione Docker,
+   diagnosi) e `CLAUDE.md` (comandi Docker); esiti in requisiti §17 e qui. Docker o LM Studio non
+   raggiungibili → `[!]`.
+
+### Decisioni (scelte del progettista, dettagli nella specifica §1)
+
+- Dockerfile in `docker/<servizio>.Dockerfile` con contesto la radice: back-end e front-end importano
+  `assistant`, e la convenzione `<nome>.Dockerfile` è riconosciuta da Docker.
+- Stessa base fissata e stesse prime istruzioni (`requirements.txt` con `constraints.txt`) nei tre
+  file: livello delle dipendenze costruito una volta e condiviso (decisione dello Step 7: stesse
+  dipendenze nel back-end).
+- `assistant/` copiato intero anche in back-end e front-end: è la libreria comune, più robusto che
+  elencarne i moduli.
+- Utente `app` con uid 1000 (come il vecchio `assistant`): il volume `notes-data` esistente resta
+  scrivibile.
+- `*_HOST=0.0.0.0` nell'immagine e anche in Compose (`environment` vince su un `.env` locale).
+- Back-end raggiunto dal browser sulla porta pubblicata `127.0.0.1:8001` (decisione dello Step 8,
+  niente proxy); agente e PostgreSQL senza porte.
+- CLI nel profilo `cli`: `docker compose up` avvia solo i quattro servizi, `docker compose run --rm
+  assistant` continua a funzionare.
+- Credenziali `POSTGRES_*` nel `.env`, `DATABASE_URL` costruita in Compose; password obbligatoria.
+- Prove Docker a mano con esiti nel diario, come nelle lezioni precedenti; test automatici solo
+  statici (e `docker compose config`, che non usa il demone).
+
+### Punto 1 · Dockerfile dei tre servizi — piano
+
+1. Specifica e requisiti §17 (fatti, vedi sopra).
+2. `git mv Dockerfile docker/agent.Dockerfile`; forma comune della specifica §3 (utente `app`,
+   `ENV AGENT_HOST=0.0.0.0`, `CMD python -m assistant.service`); `docker/backend.Dockerfile`
+   (`assistant/`, `backend/`, `BACKEND_HOST`, 8001, `python -m backend`);
+   `docker/frontend.Dockerfile` (`assistant/`, `frontend/`, `FRONTEND_HOST`, 8080,
+   `python -m frontend`).
+3. `compose.yaml`: `build` con `dockerfile: docker/agent.Dockerfile` per `agent` e `assistant`;
+   `agent` senza `command` (è il predefinito dell'immagine), `assistant` con
+   `command: ["python", "-m", "assistant"]`. Il resto al punto 2.
+4. `tests/test_docker.py` (CA-88): istruzioni lette dal testo dei Dockerfile; porte confrontate con
+   `DEFAULT_*_PORT`; moduli di `CMD` trovati con `importlib.util.find_spec`.
+5. Prove a mano (CA-89): `docker build -f docker/<servizio>.Dockerfile .` per i tre; agente con
+   `LMSTUDIO_BASE_URL=http://host.docker.internal:1234/v1` → `/status`; back-end con
+   `DATABASE_URL=postgresql://lab:…@host.docker.internal:5433/assistente` → `GET /chats`;
+   front-end → `/` e `/config.js`; `whoami` = `app`; `docker compose build` e `docker compose run
+   --rm -T assistant` ancora funzionanti.
+6. README (paragrafo dell'immagine nella sezione Docker), `CLAUDE.md` (struttura: `docker/`).
+
+### Punto 1 · Dockerfile dei tre servizi — fatto
+
+- Scritti la specifica e i requisiti §17 (intestazione di `requisiti.md` aggiornata).
+- `Dockerfile` → `docker/agent.Dockerfile` (`git mv`): utente `app` (uid 1000), `ENV
+  AGENT_HOST=0.0.0.0`, `CMD python -m assistant.service`. Nuovi `docker/backend.Dockerfile`
+  (`assistant/` e `backend/`, `BACKEND_HOST=0.0.0.0`, 8001, `python -m backend`) e
+  `docker/frontend.Dockerfile` (`assistant/` e `frontend/`, `FRONTEND_HOST=0.0.0.0`, 8080,
+  `python -m frontend`). `compose.yaml`: `build` con `dockerfile: docker/agent.Dockerfile` per
+  `agent` (senza `command`) e `assistant` (`command: python -m assistant`); il resto al punto 2.
+- Test nuovi: `tests/test_docker.py` (21: un Dockerfile per servizio e nessuno nella radice,
+  lettore delle istruzioni, prime sei istruzioni identiche nei tre file, base fissata per digest,
+  `-c constraints.txt` in `requirements.txt`, pacchetti copiati, `*_HOST=0.0.0.0` ed `EXPOSE` uguale a
+  `DEFAULT_*_PORT`, utente `app` e nulla dopo `USER` tranne `EXPOSE`/`CMD`, `CMD` col modulo del
+  servizio trovato da `find_spec`, cartella delle note prima di `USER`, `.dockerignore`). Mutazione
+  temporanea (`EXPOSE 8000` e `USER root` nel back-end) → 2 test falliti.
+
+| CA | Prova | Esito |
+|----|-------|-------|
+| CA-88 | `pytest tests/test_docker.py` | ✅ 21 passed |
+| CA-89 | `docker build -q -f docker/<servizio>.Dockerfile -t step9-<servizio>:prova .` per i tre | ✅ tre immagini da 486 MB; l'ottavo livello (dipendenze) ha lo stesso digest nelle tre: condiviso |
+| CA-89 | front-end: `docker run -p 127.0.0.1:8090:8080 step9-frontend:prova` | ✅ `/config.js` → `window.APP_CONFIG = {"backendUrl": "http://127.0.0.1:8001"};`, `/` `200 text/html`, `whoami` → `app`, riga d'avvio `frontend listening=http://0.0.0.0:8080` |
+| CA-89 | back-end: `DATABASE_URL=postgresql://lab:…@host.docker.internal:5433/assistente`, `PGOPTIONS=-csearch_path=prova_step9` (schema temporaneo), `AGENT_URL` su una porta chiusa | ✅ `POST /chats` `201`, `GET /chats` `200` con la chat, invio → `503 agent_unavailable` con la domanda salvata (1 riga in `chat_messages`); riga d'avvio con `lab:***`; `whoami` → `app`; schema eliminato, `\dn` mostra solo `public` |
+| CA-89 | agente: `LMSTUDIO_BASE_URL=http://host.docker.internal:1234/v1`, `LMSTUDIO_MODEL=google/gemma-4-e2b` | ✅ `/status` `200` (`mcp: 7 strumenti`, modello `ok`); processi del container: `python -m assistant.service` e il server `python -m assistant.mcp_server --notes-db /app/data/notes.sqlite3 …` (stdio nello stesso container); `/app/data` di `app`; `POST /chat` «Quanto fa 17 * 23?» → «17 * 23 fa 391.» con `calculate` (`variant=mcp tool=calculate` nel log, 74 s) |
+| — | `docker compose build`; `printf 'Quanto fa 2 + 2?\nesci\n' \| docker compose run --rm -T assistant`; `docker compose down` | ✅ CLI dalla nuova immagine: agente `(healthy)`, «2 + 2 fa 4.», «Arrivederci!» (volume `notes-data` esistente usato senza errori di permessi) |
+| — | `pytest` | ✅ 909 passed, 84 deselected |
+
+- Decisione presa durante l'esecuzione: nelle prove a mano da Git Bash un valore come
+  `-e NOTES_DB=/tmp/…` viene convertito in un percorso Windows (`/app/C:`, errore di permessi
+  all'avvio): la prova dell'agente usa il predefinito `data/notes.sqlite3` (`/app/data`), che è anche
+  il caso di Compose. Nessun cambiamento al codice.
+- Immagini di prova `step9-*:prova` eliminate dopo le prove; container `assistente-postgres`
+  lasciato attivo.
+- Documenti: README (paragrafo delle immagini nella sezione Docker, test di `test_docker.py`, conteggio
+  dei test), `CLAUDE.md` (struttura: `docker/` e `test_docker.py`), requisiti §17 (esiti di CA-88 e
+  CA-89).
+- Problemi aperti: `compose.yaml` a quattro servizi, credenziali di PostgreSQL in `.env` e test con
+  `docker compose config` al punto 2; il README descrive ancora Compose con due servizi (agente e CLI),
+  da riscrivere al punto 3 insieme alla prova reale. L'agente resta pubblicato su `127.0.0.1:8000`
+  fino al punto 2.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

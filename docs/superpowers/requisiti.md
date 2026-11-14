@@ -1,11 +1,12 @@
 # Requisiti — Assistente del laboratorio
 
-Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5) e integrati per la lezione 6 (§9–§16)
+Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5) e integrati per la lezione 6 (§9–§17)
 Stato: §1–§7 approvati il 2026-10-26; revisioni del 2026-11-09 e §8 approvate il 2026-11-09
 (insieme alla specifica `specs/2026-11-09-strumenti-mcp-design.md`); §9 (lezione 6, Step 1)
 e §10 (lezione 6, Step 2) approvate il 2026-11-11; §11 (lezione 6, Step 3) approvata il 2026-11-13;
 §12 (lezione 6, Step 4), §13 (lezione 6, Step 5), §14 (lezione 6, Step 6), §15 (lezione 6,
-Step 7) e §16 (lezione 6, Step 8) scritte il 2026-11-14 in modalità autonoma (piano in `PROGRESS.md`)
+Step 7), §16 (lezione 6, Step 8) e §17 (lezione 6, Step 9) scritte il 2026-11-14 in modalità
+autonoma (piano in `PROGRESS.md`)
 
 Questo documento fissa **che cosa** deve fare l'applicazione. Il **come** (architettura,
 moduli, dettagli del grafo) sarà descritto nella specifica, che rimanda a questi requisiti.
@@ -607,3 +608,42 @@ front-end come processi ed Edge senza finestra, dalla prova `test_frontend_chat_
 | CA-85 | Nel browser con back-end e agente finti: invio con stato d'attesa e strumenti mostrati, pagina usabile durante l'attesa, agente spento e back-end spento con il messaggio giusto, testo HTML mostrato come testo. | browser |
 | CA-86 | Con LM Studio, PostgreSQL, agente e back-end veri, dal browser: «Quanto fa 17 * 23?» → «391» con `calculate` mostrato e nel log dell'agente; dopo il riavvio del back-end e la ricarica la chat c'è ancora. | reale |
 | CA-87 | Con l'agente fermato, dal browser: messaggio d'errore mostrato, domanda salvata visibile, pagina ancora usabile (creazione di una chat). | reale |
+
+## 17. Lezione 6, Step 9 — Docker Compose: un container per componente (2026-11-14)
+
+Riferimento: `LLM_Lez_6.pdf`, Step 9 (riassunto in `lezione6.md`). Stato: scritti il 2026-11-14 in
+modalità autonoma insieme alla specifica `specs/2026-11-14-compose-design.md`; le scelte del
+progettista sono nella sua §1. Esiti delle verifiche in `PROGRESS.md`. CA-88 verificato con `pytest`;
+CA-89 il 2026-11-14 con Docker 29.9.1, LM Studio (`google/gemma-4-e2b`) e il PostgreSQL 18.6 del
+container dello Step 7.
+
+- **RF-76** *Immagini* — Agente (servizio HTTP), back-end e front-end hanno ciascuno il proprio
+  Dockerfile (`docker/agent.Dockerfile`, `docker/backend.Dockerfile`, `docker/frontend.Dockerfile`),
+  con la stessa immagine base fissata per digest e le stesse dipendenze di `requirements.txt` e
+  `constraints.txt`; ogni immagine esegue come utente non root, avvia il proprio servizio come
+  comando predefinito e ascolta su tutte le interfacce del container, sulla porta predefinita del
+  servizio. Il server MCP stdio parte come sottoprocesso nel container dell'agente.
+- **RF-77** *Quattro servizi* — `compose.yaml` definisce `frontend`, `backend`, `agent` (ognuno dal
+  proprio Dockerfile) e `postgres` (immagine ufficiale `postgres:18.6`); `docker compose up` avvia
+  questi quattro. La CLI resta disponibile con `docker compose run --rm assistant`, senza partire
+  con `up`.
+- **RF-78** *Rete ed esposizione* — Il front-end è raggiungibile dal browser su
+  `http://127.0.0.1:8080`, il back-end è pubblicato su `127.0.0.1:8001` (la pagina lo chiama
+  direttamente, con il CORS dello Step 8); agente e PostgreSQL non sono pubblicati e si raggiungono
+  solo sulla rete di Compose. L'agente raggiunge LM Studio sull'host con `host.docker.internal`.
+- **RF-79** *Dati, credenziali, avvio* — I dati di PostgreSQL stanno nel volume `postgres-data` (le
+  note dell'agente restano nel volume `notes-data`); utente, password e nome del database stanno solo
+  nel `.env` escluso da Git, con un esempio in `.env.example`; senza la password Compose si ferma con
+  un messaggio. Il back-end parte solo quando PostgreSQL è pronto.
+- **RF-80** *Verifiche* — Dockerfile e `compose.yaml` si controllano con `pytest` senza costruire
+  immagini (il controllo di `compose.yaml` richiede solo la CLI di Docker); le prove con le immagini e
+  con Compose avviato sono separate, a mano.
+
+| ID | Verifica | Come |
+|----|----------|------|
+| CA-88 | Dockerfile: stessa base fissata, dipendenze da `requirements.txt` con `constraints.txt`, pacchetti copiati, utente non root, porta esposta uguale alla predefinita del servizio, indirizzo `0.0.0.0`, comando col modulo del servizio. | automatica |
+| CA-89 | Le tre immagini costruite e avviate una per una: agente con LM Studio → `/status` `200` con gli strumenti MCP; back-end con PostgreSQL → `GET /chats` `200`; front-end → pagina e `/config.js`; utente `app`. | Docker, a mano |
+| CA-90 | `docker compose config`: quattro servizi senza profilo e CLI nel profilo `cli`; agente e PostgreSQL senza porte, back-end e front-end su `127.0.0.1`; volume e `healthcheck` di PostgreSQL; back-end dopo PostgreSQL `service_healthy`, `DATABASE_URL` e `AGENT_URL` interni; password mancante → errore. | automatica (CLI di Docker) |
+| CA-91 | `docker compose up`: `docker compose ps` mostra i quattro servizi attivi; l'agente non risponde su `127.0.0.1:8000` dell'host. | Docker, reale |
+| CA-92 | Dal browser con Compose e LM Studio: «Quanto fa 17 * 23?» → «391» con `calculate` mostrato e nel log dell'agente (`docker compose logs agent`). | Docker, reale |
+| CA-93 | Dopo `docker compose down` e `docker compose up` la chat e i suoi messaggi sono ancora presenti. | Docker, reale |

@@ -58,7 +58,7 @@ streaming facoltativo). Si fa solo ciò che chiede la traccia (decisione dell'ut
 
 ## Step 9 · Docker Compose: un container per componente
 
-- [ ] Dockerfile dell'agente come servizio HTTP (server MCP stdio nel suo container, LM Studio via `host.docker.internal`), del back-end e del front-end
+- [x] Dockerfile dell'agente come servizio HTTP (server MCP stdio nel suo container, LM Studio via `host.docker.internal`), del back-end e del front-end
 - [ ] `compose.yaml` con quattro servizi (front-end, back-end, agente, PostgreSQL ufficiale): volume dei dati di PostgreSQL, credenziali in `.env` (con esempio in `.env.example`), back-end avviato a database pronto, agente non esposto, front-end raggiungibile dal browser
 - [ ] Prova reale Step 9: `docker compose up` avvia i quattro servizi e `docker compose ps` li mostra attivi; chat dal browser con uno strumento visibile nei log dell'agente; chat presenti dopo `down` e `up`; README e CLAUDE.md aggiornati (comandi Docker)
 

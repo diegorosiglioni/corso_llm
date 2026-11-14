@@ -44,7 +44,11 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
   `init_db`, senza PostgreSQL. Le prove con LM Studio stanno in `test_real.py` (marcatore `real`).
   Il JavaScript del front-end si prova con `node --test` (`tests/frontend/*.test.mjs`, lanciati da
   `test_frontend_js.py`); la pagina in Edge con Playwright in `test_frontend_browser.py`
-  (marcatore `browser`, escluso dalla suite predefinita).
+  (marcatore `browser`, escluso dalla suite predefinita). I Dockerfile si controllano come testo
+  in `test_docker.py`.
+- Immagini Docker (Step 9): un Dockerfile per servizio in `docker/` (`agent.Dockerfile`, che serve
+  anche la CLI, `backend.Dockerfile`, `frontend.Dockerfile`), contesto di build la radice; stesse
+  prime istruzioni (base fissata e `requirements.txt`) per condividere il livello delle dipendenze.
 - Note in SQLite: in locale `NOTES_DB` (default `data/notes.sqlite3`, ignorato da Git), in
   Docker il volume `notes-data`.
 - Dipendenze dirette in `requirements.txt` (app) e `requirements-dev.txt` (test); tutte le

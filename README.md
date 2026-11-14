@@ -66,7 +66,8 @@ sottoprocesso stdio, con l'archivio delle note in una cartella temporanea (circa
 Il servizio HTTP si prova con l'app vera su un grafo finto, senza rete (`TestClient`), e la CLI
 parla con quella stessa app. Il back-end si prova su SQLite in memoria, con lo stesso schema, senza
 PostgreSQL. Il JavaScript della pagina del front-end si prova con Node.js (`node --test`, lanciato
-da `pytest`; senza Node il test si salta col motivo). Esito al 2026-11-14: `888 passed, 84
+da `pytest`; senza Node il test si salta col motivo). I Dockerfile si controllano come testo, senza
+costruire immagini (`tests/test_docker.py`). Esito al 2026-11-14: `909 passed, 84
 deselected` (le 84 deselezionate sono le 63 prove reali, 25 con LM Studio e 38 test dell'archivio
 ripetuti su PostgreSQL, e i 21 test nel browser).
 
@@ -755,10 +756,18 @@ docker compose logs agent
 docker compose down
 ```
 
-L'immagine (`python:3.13.18-slim-trixie`, fissata per digest nel `Dockerfile`) contiene solo il
-pacchetto `assistant` (con `assistant/data/catalog.json`, `assistant/data/scope.txt` e `assistant/data/preferenze.json`) e le dipendenze dell'applicazione, ed
-esegue come utente non root. Nel container l'orario dei log è in UTC; l'orario restituito dallo
-strumento dipende solo dal fuso richiesto.
+Ogni servizio ha il proprio Dockerfile nella cartella `docker/`, con contesto di build la radice
+della repository: `agent.Dockerfile` (comando predefinito `python -m assistant.service`; la CLI usa
+la stessa immagine con `python -m assistant`), `backend.Dockerfile` (`python -m backend`) e
+`frontend.Dockerfile` (`python -m frontend`). Le tre immagini partono da
+`python:3.13.18-slim-trixie`, fissata per digest, con le stesse prime istruzioni: il livello delle
+dipendenze (`requirements.txt` con `constraints.txt`) si costruisce una volta e si riusa. Ognuna
+contiene il pacchetto `assistant` (con `assistant/data/catalog.json`, `assistant/data/scope.txt` e
+`assistant/data/preferenze.json`) più quello del proprio servizio, ascolta su `0.0.0.0` nel
+container ed esegue come utente non root `app`. Un'immagine si costruisce anche da sola, per
+esempio `docker build -f docker/backend.Dockerfile -t assistente-backend .` (back-end e front-end
+entrano in `compose.yaml` con lo Step 9, in corso). Nel container l'orario dei log è in UTC;
+l'orario restituito dallo strumento dipende solo dal fuso richiesto.
 
 Le note stanno nel volume `notes-data`, montato in `/app/data` del servizio `agent`: una nota
 salvata resta anche dopo `docker compose down`. Il volume si elimina con
