@@ -112,8 +112,12 @@ Si conversa al prompt `Tu>`. La sessione termina con `esci`, con Ctrl+Z seguito 
 (fine input su Windows) o con Ctrl+C. La cronologia vale solo per la sessione in corso.
 La conversazione va su stdout, i log su stderr.
 Il testo che comincia con `/` è un comando e non arriva al modello: `/prompts` elenca i prompt del
-server MCP (nome, descrizione e argomenti, log `prompts/list count=… names=…`); un comando
-sconosciuto dà «Comando sconosciuto».
+server MCP (nome, descrizione e argomenti, log `prompts/list count=… names=…`);
+`/prompt nome chiave=valore` richiama un prompt (valori con spazi tra virgolette doppie, per esempio
+`/prompt spiega argomento="Model Context Protocol" livello=base`): un argomento obbligatorio
+mancante o sconosciuto blocca la richiesta senza chiamare il modello, altrimenti i messaggi del
+prompt entrano nella cronologia e passano dal grafo come una domanda (log `prompts/get …`). Un
+comando sconosciuto dà «Comando sconosciuto».
 
 Per una prova non interattiva si possono passare le domande in ingresso:
 

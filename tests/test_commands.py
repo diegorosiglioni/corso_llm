@@ -1,8 +1,10 @@
+import json
 import logging
 
 import pytest
+from langchain_core.messages import AIMessage, HumanMessage
 
-from assistant.commands import CommandResult, PromptCommands
+from assistant.commands import CommandResult, PromptCommands, parse_prompt_command
 from assistant.mcp_client import (
     PromptArgument,
     PromptMessage,
@@ -152,3 +154,221 @@ def test_prompt_messages_are_not_used_by_the_list():
     )
     PromptCommands(client).handle("/prompts")
     assert calls == [] and client.prompt_gets == []
+
+
+# --- /prompt (lesson 6, step 5, point 5) ---
+
+def explain_text(arguments):
+    return [PromptMessage("user", f"Spiegami {arguments['argomento']}.")]
+
+
+def client_answering(messages_for=explain_text, *specs: PromptSpec) -> FakeMcpClient:
+    specs = specs or (EXPLAIN, SUMMARY)
+    return FakeMcpClient(MCP_SPECS, prompts={spec.name: (spec, messages_for) for spec in specs})
+
+
+def _json(text):
+    return json.dumps(text, ensure_ascii=False)
+
+
+@pytest.mark.parametrize(("text", "name", "arguments"), [
+    ('/prompt spiega argomento="Model Context Protocol" livello=base',
+     "spiega", {"argomento": "Model Context Protocol", "livello": "base"}),
+    ("/prompt spiega argomento=l'IA", "spiega", {"argomento": "l'IA"}),
+    ('/prompt spiega argomento="a=b"', "spiega", {"argomento": "a=b"}),
+    ("/prompt spiega argomento=C#", "spiega", {"argomento": "C#"}),
+    ("/prompt spiega argomento=x=y", "spiega", {"argomento": "x=y"}),
+    ('/prompt spiega "argomento=due parole"', "spiega", {"argomento": "due parole"}),
+    ("/prompt   spiega   argomento=MCP  ", "spiega", {"argomento": "MCP"}),
+    ("/prompt riassumi_conversazione stile=sintetico", "riassumi_conversazione",
+     {"stile": "sintetico"}),
+])
+def test_parse_prompt_command(text, name, arguments):  # CA-55
+    assert parse_prompt_command(text.split(maxsplit=1)[1]) == (name, arguments)
+
+
+@pytest.mark.parametrize("word", ["/PROMPT", "/Prompt", "/prompt"])
+def test_prompt_command_word_ignores_case(word):  # CA-55
+    client = client_answering()
+    result = PromptCommands(client).handle(f"{word} spiega argomento=MCP")
+    assert result.messages == [HumanMessage("Spiegami MCP.")]
+    assert client.prompt_gets == [("spiega", {"argomento": "MCP"})]
+
+
+@pytest.mark.parametrize(("text", "reason"), [
+    ('/prompt spiega argomento="Model Context', "virgolette non chiuse"),
+    ("/prompt", "manca il nome del prompt"),
+    ("/prompt   ", "manca il nome del prompt"),
+    ('/prompt ""', "manca il nome del prompt"),
+    ("/prompt spiega MCP", "argomento non nella forma chiave=valore: 'MCP'"),
+    ("/prompt spiega =MCP", "argomento non nella forma chiave=valore: '=MCP'"),
+    ('/prompt spiega ""', "argomento non nella forma chiave=valore: ''"),
+    ("/prompt spiega argomento=a argomento=b", "argomento ripetuto: 'argomento'"),
+    ("/prompt spiega argomento=", "argomento senza valore: 'argomento'"),
+    ('/prompt spiega argomento=""', "argomento senza valore: 'argomento'"),
+])
+def test_syntax_errors_call_nothing(text, reason, caplog):  # CA-55
+    caplog.set_level(logging.INFO)
+    client = client_answering()
+    result = PromptCommands(client).handle(text)
+    assert result == CommandResult(output=(
+        f"Errore nel comando: {reason}. "
+        "Uso: /prompt nome chiave=valore (valori con spazi tra virgolette doppie)."
+    ))
+    assert client.prompt_lists == 0 and client.prompt_gets == []
+    assert [r.getMessage() for r in caplog.records] == [
+        f"prompt_command status=rejected reason={_json(reason)}",
+    ]
+
+
+@pytest.mark.parametrize(("text", "reason"), [
+    ("/prompt traduci testo=ciao",
+     "prompt sconosciuto: 'traduci' (disponibili: spiega, riassumi_conversazione)"),
+    ("/prompt Spiega argomento=MCP",
+     "prompt sconosciuto: 'Spiega' (disponibili: spiega, riassumi_conversazione)"),
+    ("/prompt spiega argomento=MCP lingua=it tono=serio",
+     "argomenti sconosciuti per 'spiega': 'lingua', 'tono' (attesi: argomento, livello)"),
+    ("/prompt spiega livello=base",
+     "argomenti obbligatori mancanti per 'spiega': 'argomento'"),
+    ("/prompt riassumi_conversazione",
+     "argomenti obbligatori mancanti per 'riassumi_conversazione': 'stile'"),
+    ("/prompt spiega Argomento=MCP",
+     "argomenti sconosciuti per 'spiega': 'Argomento' (attesi: argomento, livello)"),
+])
+def test_request_checked_against_the_list(text, reason, caplog):  # CA-57
+    caplog.set_level(logging.INFO)
+    client = client_with(EXPLAIN, SUMMARY)  # prompts/get would raise AssertionError
+    result = PromptCommands(client).handle(text)
+    assert result == CommandResult(
+        output=f"Errore nel comando: {reason}. Scrivi /prompts per l'elenco dei prompt."
+    )
+    assert client.prompt_lists == 1 and client.prompt_gets == []
+    assert [r.getMessage() for r in caplog.records] == [
+        "prompts/list count=2 names=spiega,riassumi_conversazione",
+        f"prompt_command status=rejected reason={_json(reason)}",
+    ]
+
+
+def test_unknown_prompt_on_a_server_without_prompts():
+    result = PromptCommands(client_with()).handle("/prompt spiega argomento=MCP")
+    assert result.output == (
+        "Errore nel comando: prompt sconosciuto: 'spiega' (disponibili: nessuno). "
+        "Scrivi /prompts per l'elenco dei prompt."
+    )
+
+
+def test_arguments_for_a_prompt_without_arguments():
+    client = client_with(PromptSpec("saluta", "", ()))
+    assert PromptCommands(client).handle("/prompt saluta a=1").output == (
+        "Errore nel comando: argomenti sconosciuti per 'saluta': 'a' (attesi: nessuno). "
+        "Scrivi /prompts per l'elenco dei prompt."
+    )
+
+
+def test_valid_request_returns_the_messages(caplog):  # CA-57
+    caplog.set_level(logging.INFO)
+    text = "Spiegami Model Context Protocol a livello base: con parole semplici."
+    client = client_answering(lambda a: [PromptMessage("user", text)])
+    result = PromptCommands(client).handle(
+        '/prompt spiega argomento="Model Context Protocol" livello=base'
+    )
+    assert result == CommandResult(messages=[HumanMessage(text)])
+    assert client.prompt_gets == [
+        ("spiega", {"argomento": "Model Context Protocol", "livello": "base"})
+    ]
+    assert client.calls == []
+    assert [(r.name, r.levelno, r.getMessage()) for r in caplog.records] == [
+        ("assistant.commands", logging.INFO,
+         "prompts/list count=2 names=spiega,riassumi_conversazione"),
+        ("assistant.commands", logging.INFO,
+         'prompts/get name=spiega arguments={"argomento": "Model Context Protocol", '
+         '"livello": "base"} status=ok messages=1'),
+        ("assistant.commands", logging.INFO,
+         f"prompts/get name=spiega message=1/1 role=user text={_json(text)}"),
+    ]
+
+
+def test_optional_argument_may_be_omitted():
+    client = client_answering()
+    assert PromptCommands(client).handle("/prompt spiega argomento=MCP").messages == [
+        HumanMessage("Spiegami MCP.")
+    ]
+    assert client.prompt_gets == [("spiega", {"argomento": "MCP"})]
+
+
+def test_user_and_assistant_messages_are_converted(caplog):
+    caplog.set_level(logging.INFO)
+    client = client_answering(lambda a: [
+        PromptMessage("user", "Esempio di domanda"),
+        PromptMessage("assistant", "Esempio di risposta"),
+        PromptMessage("user", "Ora tocca a te"),
+    ])
+    result = PromptCommands(client).handle("/prompt spiega argomento=MCP")
+    assert result.messages == [
+        HumanMessage("Esempio di domanda"), AIMessage("Esempio di risposta"),
+        HumanMessage("Ora tocca a te"),
+    ]
+    assert [r.getMessage() for r in caplog.records][-3:] == [
+        'prompts/get name=spiega message=1/3 role=user text="Esempio di domanda"',
+        'prompts/get name=spiega message=2/3 role=assistant text="Esempio di risposta"',
+        'prompts/get name=spiega message=3/3 role=user text="Ora tocca a te"',
+    ]
+
+
+@pytest.mark.parametrize(("received", "reason"), [
+    ([], "nessun messaggio"),
+    ([PromptMessage("system", "regole"), PromptMessage("user", "domanda")],
+     "ruolo non ammesso nel messaggio 1: 'system'"),
+    ([PromptMessage("user", "domanda"), PromptMessage("assistant", "risposta")],
+     "l'ultimo messaggio non è dell'utente"),
+])
+def test_unusable_messages_do_not_reach_the_model(received, reason, caplog):
+    caplog.set_level(logging.INFO)
+    client = client_answering(lambda a: received)
+    result = PromptCommands(client).handle("/prompt spiega argomento=MCP")
+    assert result == CommandResult(
+        output=f"Errore: il prompt 'spiega' non è utilizzabile ({reason})."
+    )
+    last = caplog.records[-1]
+    assert (last.levelno, last.getMessage()) == (
+        logging.WARNING, f"prompt_command status=unusable name=spiega reason={_json(reason)}"
+    )
+
+
+def test_value_rejected_by_the_server(caplog):  # CA-57
+    caplog.set_level(logging.INFO)
+    error = "Livello non valido: 'esperto'. Valori ammessi: base, intermedio, avanzato."
+
+    def refuse(arguments):
+        raise ValueError(error)
+
+    client = client_answering(refuse)
+    result = PromptCommands(client).handle("/prompt spiega argomento=MCP livello=esperto")
+    assert result == CommandResult(
+        output=f"Errore: il prompt 'spiega' non è disponibile ({error})."
+    )
+    assert [(r.levelno, r.getMessage()) for r in caplog.records][-1] == (
+        logging.WARNING,
+        'prompts/get name=spiega arguments={"argomento": "MCP", "livello": "esperto"} '
+        f"status=unavailable error={_json(error)}",
+    )
+
+
+def test_list_unavailable_for_prompt(caplog):
+    caplog.set_level(logging.INFO)
+    client = ListFails(MCP_SPECS)
+    result = PromptCommands(client).handle("/prompt spiega argomento=MCP")
+    assert result == CommandResult(output="Errore: prompt non disponibili (sessione MCP chiusa).")
+    assert client.prompt_gets == []
+    assert [r.getMessage() for r in caplog.records] == [
+        'prompts/list status=unavailable error="sessione MCP chiusa"',
+    ]
+
+
+def test_texts_with_quotes_and_newlines_stay_on_one_log_line(caplog):
+    caplog.set_level(logging.INFO)
+    client = client_answering(lambda a: [PromptMessage("user", 'Riga "uno"\nriga due')])
+    PromptCommands(client).handle("/prompt spiega argomento=MCP")
+    assert caplog.records[-1].getMessage() == (
+        r'prompts/get name=spiega message=1/1 role=user text="Riga \"uno\"\nriga due"'
+    )

@@ -1,8 +1,11 @@
 import pytest
+from langchain_core.messages import HumanMessage
 
 from assistant.commands import CommandResult, PromptCommands
+from assistant.mcp_client import PromptArgument, PromptSpec
+from assistant.session import Session
 from assistant.terminal import run
-from conftest import MCP_SPECS, FakeMcpClient, lm_studio_error
+from conftest import MCP_SPECS, FakeMcpClient, FakeModel, fake_graph, lm_studio_error
 
 
 def inputs(*lines):
@@ -27,25 +30,34 @@ class FakeSession:
     def __init__(self, *outcomes):
         self._outcomes = list(outcomes)
         self.questions = []
+        self.message_lists = []
 
     def send(self, text):
         self.questions.append(text)
-        outcome = self._outcomes.pop(0) if self._outcomes else f"risposta a {text}"
+        return self._next(f"risposta a {text}")
+
+    def send_messages(self, messages):
+        self.message_lists.append(list(messages))
+        return self._next(f"risposta a {messages[-1].content}")
+
+    def _next(self, default):
+        outcome = self._outcomes.pop(0) if self._outcomes else default
         if isinstance(outcome, BaseException):
             raise outcome
         return outcome
 
 
 class FakeCommands:
-    """Records the commands and answers with the scripted outputs."""
+    """Records the commands and answers with the scripted results (text → output only)."""
 
-    def __init__(self, *outputs):
-        self._outputs = list(outputs)
+    def __init__(self, *results):
+        self._results = list(results)
         self.texts = []
 
     def handle(self, text):
         self.texts.append(text)
-        return CommandResult(self._outputs.pop(0))
+        result = self._results.pop(0)
+        return result if isinstance(result, CommandResult) else CommandResult(result)
 
 
 def execute(session, *lines, commands=None):
@@ -144,6 +156,46 @@ def test_command_without_commands():
     outputs, _ = execute(session, "/prompts", "esci")
     assert outputs == ["Comandi non disponibili.", "Arrivederci!"]
     assert session.questions == []
+
+
+def test_prompt_messages_go_to_the_session():  # CA-57
+    session = FakeSession("Il protocollo MCP…")
+    messages = [HumanMessage("Spiegami MCP.")]
+    commands = FakeCommands(CommandResult(messages=messages))
+    outputs, _ = execute(session, "/prompt spiega argomento=MCP", commands=commands)
+    assert commands.texts == ["/prompt spiega argomento=MCP"]
+    assert session.message_lists == [messages] and session.questions == []
+    assert outputs == ["Assistente> Il protocollo MCP…", "Arrivederci!"]
+
+
+def test_lm_studio_error_after_a_prompt_and_continue():
+    session = FakeSession(lm_studio_error(), "eccomi")
+    commands = FakeCommands(CommandResult(messages=[HumanMessage("Spiegami MCP.")]))
+    outputs, _ = execute(session, "/prompt spiega argomento=MCP", "ancora", commands=commands)
+    assert outputs == [
+        "Errore: LM Studio non ha risposto correttamente (Connection error.). Riprova.",
+        "Assistente> eccomi",
+        "Arrivederci!",
+    ]
+
+
+def test_blocked_prompt_never_reaches_the_model():  # CA-57
+    model = FakeModel([])  # any call would fail: no scripted replies
+    session = Session(fake_graph(model))
+    spec = PromptSpec("spiega", "", (PromptArgument("argomento", "", True),))
+    client = FakeMcpClient(MCP_SPECS, prompts={"spiega": (spec, lambda a: [])})
+    outputs, _ = execute(
+        session, "/prompt spiega livello=base", "/prompt spiega argomento=MCP",
+        commands=PromptCommands(client),
+    )
+    assert outputs == [
+        "Errore nel comando: argomenti sconosciuti per 'spiega': 'livello' (attesi: argomento). "
+        "Scrivi /prompts per l'elenco dei prompt.",
+        "Errore: il prompt 'spiega' non è utilizzabile (nessun messaggio).",
+        "Arrivederci!",
+    ]
+    assert model.calls == [] and session.messages == []
+    assert client.prompt_gets == [("spiega", {"argomento": "MCP"})]
 
 
 def test_slash_inside_a_question_is_not_a_command():

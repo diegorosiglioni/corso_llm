@@ -466,6 +466,69 @@ Decisioni:
 - Problemi aperti: `/prompt` dà ancora «Comando sconosciuto» (arriva al punto 5); la riga d'uso
   dell'elenco lo cita già.
 
+### Punto 5 · Terminale: comando `/prompt` — piano
+
+1. `assistant/commands.py` (specifica §5): `CommandSyntaxError`, `parse_prompt_command(text)` con
+   `shlex.shlex(posix=True)`, `quotes='"'`, `escape=''`, `commenters=''`, `whitespace_split=True`;
+   `check_request(specs, name, arguments)` (prompt sconosciuto, argomenti sconosciuti, obbligatori
+   mancanti) e `to_messages(received)` (`user` → `HumanMessage`, `assistant` → `AIMessage`, elenco
+   non vuoto, ultimo `user`); `CommandResult.messages`; `PromptCommands.handle` riconosce `/prompt`
+   (senza distinzione di maiuscole) e scrive le righe `prompts/list`, `prompts/get`,
+   `prompt_command` della specifica.
+2. `assistant/session.py`: `Session.send_messages(messages)`; `send(text)` la richiama.
+3. `assistant/terminal.py`: risultato con `messages` → `"Assistente> " + session.send_messages(…)`,
+   dentro lo stesso `try` (errori di LM Studio gestiti come per le domande).
+4. `assistant/data/scope.txt`: riga delle spiegazioni di concetti e riassunti della conversazione
+   (specifica §7).
+5. Test: `test_commands.py` (analisi, ogni errore di sintassi senza chiamate, controllo rispetto a
+   `prompts/list` senza `prompts/get`, conversione e messaggi non utilizzabili, errori del client,
+   righe di log esatte), `test_session.py` (`send_messages`, turno fallito), `test_terminal.py`
+   (messaggi alla sessione, comando bloccato senza modello, errore di LM Studio), `test_main.py`
+   (`/prompt spiega …` con client e modello finti: messaggio nella cronologia, righe di riassunto,
+   router, agente, revisore), `test_config.py` (ambito predefinito). Poi `pytest` completo.
+
+Decisioni:
+- Gli errori di sintassi di `/prompt` aggiungono la riga d'uso (`Uso: /prompt nome chiave=valore …`)
+  invece del rimando a `/prompts`: l'errore riguarda la forma del comando, non l'elenco dei prompt.
+- `commenters=''` nell'analisi: con il default di `shlex` un `#` in un valore aprirebbe un commento
+  e taglierebbe il resto del comando.
+- Anche `/prompt` scrive la riga `prompts/list count=… names=…` dopo l'elenco: stesso evento MCP di
+  `/prompts`, utile nella diagnosi.
+- Messaggi del prompt non utilizzabili → `WARNING prompt_command status=unusable name=… reason="…"`,
+  dopo le righe `prompts/get … status=ok` e dei messaggi ricevuti (la specifica non fissa la riga;
+  così il log mostra che cosa ha mandato il server).
+- Elenchi vuoti nei motivi: `(disponibili: nessuno)`, `(attesi: nessuno)`.
+
+### Punto 5 · Terminale: comando `/prompt` — fatto
+
+- Implementati in `commands.py` `CommandSyntaxError`, `parse_prompt_command`, `check_request`,
+  `to_messages`, `CommandResult.messages` e il comando `/prompt` in `PromptCommands`;
+  `Session.send_messages` (ora `send` la richiama); in `terminal.py` i messaggi di un comando vanno
+  alla sessione dentro lo stesso `try` delle domande; `scope.txt` con le spiegazioni di concetti e i
+  riassunti della conversazione; README, sezione d'avvio, con una riga su `/prompt`.
+- Decisioni prese durante l'esecuzione: `_specs()` scrive la riga `prompts/list` in entrambi gli
+  esiti e rilancia `PromptUnavailableError` (niente stato nell'oggetto); l'ordine dei controlli di
+  sintassi segue le parole del comando (la prima parola sbagliata decide il motivo); un nome di
+  prompt vuoto (`/prompt ""`) → «manca il nome del prompt».
+- Test nuovi: `test_commands.py` (+38: analisi con virgolette, apostrofo, `=` e `#` nel valore,
+  maiuscole del comando; dieci errori di sintassi senza chiamate al client; prompt sconosciuto,
+  argomenti sconosciuti, obbligatori mancanti senza `prompts/get`; conversione `user`/`assistant`;
+  nessun messaggio, ruolo non ammesso, ultimo non `user`; valore rifiutato dal server; elenco non
+  disponibile; righe di log esatte e su una riga), `test_session.py` (+3), `test_terminal.py` (+3,
+  compreso un comando bloccato con grafo vero e modello che non deve essere chiamato),
+  `test_main.py` (+1: `/prompt spiega …` da `main` con client e modelli finti, messaggio in
+  cronologia, ricevuto da router, agente e revisore, righe `prompts/get` seguite da `node=summary`,
+  `node=router`, `node=llm`, `node=reviewer`), `test_config.py` (+1, ambito).
+- `pytest` → 490 passed, 17 deselected.
+- Prova d'avvio con il server MCP reale e LM Studio volutamente irraggiungibile
+  (`LMSTUDIO_BASE_URL=http://localhost:1/v1`): obbligatorio mancante, argomento sconosciuto,
+  virgolette non chiuse, prompt sconosciuto → rifiuti con `prompt_command status=rejected`;
+  `livello=esperto` → `prompts/get … status=unavailable` col messaggio del server; richiesta valida
+  → `event=prompt_get`, `prompts/get … status=ok messages=1`, `node=summary`, poi «Errore: LM
+  Studio non ha risposto correttamente» e la sessione continua; exit 0.
+- Problemi aperti: risposta del modello a un prompt, router con l'ambito esteso e suite reale
+  completa (CA-58…CA-60) da verificare al punto 6 con LM Studio.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

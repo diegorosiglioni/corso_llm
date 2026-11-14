@@ -97,6 +97,18 @@ def test_default_scope_is_the_package_file():
     assert c.scope.endswith("Ogni altra richiesta è fuori ambito.")
 
 
+def test_default_scope_covers_the_mcp_prompts():  # RF-51
+    scope = load_config(VALID).scope
+    assert (
+        "- spiegazioni di concetti di informatica, programmazione e intelligenza artificiale "
+        "(per esempio modelli linguistici, agenti, Model Context Protocol);"
+    ) in scope.splitlines()
+    assert (
+        "- l'utente che si presenta o dice qualcosa di sé, le domande su quanto detto in questa "
+        "conversazione e i riassunti della conversazione."
+    ) in scope.splitlines()
+
+
 def test_scope_file_override(tmp_path):
     f = tmp_path / "ambito.txt"
     f.write_text("  Solo calcoli.\n", encoding="utf-8")

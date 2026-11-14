@@ -252,3 +252,36 @@ def test_summary_restarts_empty():
     s = Session(graph)
     s.send("uno")
     assert graph.incoming_summaries == [""]
+
+
+# --- messages of an MCP prompt (lesson 6, step 5) ---
+
+def test_send_messages_adds_all_the_messages():
+    model = FakeModel([AIMessage("Piacere."), AIMessage("Tocca a me.")])
+    s = Session(fake_graph(model))
+    s.send("Mi chiamo Paolo")
+    prompt = [HumanMessage("Esempio"), AIMessage("Risposta d'esempio"), HumanMessage("Ora tu")]
+    assert s.send_messages(prompt) == "Tocca a me."
+    assert contents(model.calls[1][1:]) == [
+        "Mi chiamo Paolo", "Piacere.", "Esempio", "Risposta d'esempio", "Ora tu"
+    ]
+    assert contents(s.messages) == [
+        "Mi chiamo Paolo", "Piacere.", "Esempio", "Risposta d'esempio", "Ora tu", "Tocca a me."
+    ]
+
+
+def test_failed_send_messages_leaves_history_untouched():
+    model = FakeModel([AIMessage("Piacere."), lm_studio_error()])
+    s = Session(fake_graph(model))
+    s.send("Mi chiamo Paolo")
+    with pytest.raises(openai.APIConnectionError):
+        s.send_messages([HumanMessage("Spiegami MCP.")])
+    assert contents(s.messages) == ["Mi chiamo Paolo", "Piacere."] and s.summary == ""
+
+
+def test_send_messages_restarts_steps_and_reviews():
+    graph = RecordingGraph()
+    s = Session(graph)
+    s.send_messages([HumanMessage("uno")])
+    s.send_messages([HumanMessage("due")])
+    assert graph.incoming_steps == [0, 0] and graph.incoming_reviews == [0, 0]

@@ -10,7 +10,8 @@ log = logging.getLogger(__name__)
 def run(session, read=input, write=print, commands=None) -> None:
     """Conversation loop; ends with 'esci', end of input (EOF) or Ctrl+C.
 
-    Text that starts with "/" is a command: it goes to `commands.handle`, never to the model.
+    Text that starts with "/" is a command: it goes to `commands.handle`, never to the model as
+    text. A command that returns messages (an MCP prompt) sends them to the session as a turn.
     """
     while True:
         try:
@@ -26,6 +27,8 @@ def run(session, read=input, write=print, commands=None) -> None:
                 result = commands.handle(text)
                 if result.output is not None:
                     write(result.output)
+                if result.messages:
+                    write("Assistente> " + session.send_messages(result.messages))
                 continue
             write("Assistente> " + session.send(text))
         except (EOFError, KeyboardInterrupt):

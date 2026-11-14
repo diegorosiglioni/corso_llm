@@ -10,7 +10,13 @@ from assistant.__main__ import main
 from assistant.commands import PromptCommands
 from assistant.config import DEFAULT_PREFERENCES_FILE, DEFAULT_SCOPE_FILE, load_config
 from assistant.graph import SYSTEM_PROMPT
-from assistant.mcp_client import ALLOWED_MCP_TOOLS, PromptSpec, ToolSpec
+from assistant.mcp_client import (
+    ALLOWED_MCP_TOOLS,
+    PromptArgument,
+    PromptMessage,
+    PromptSpec,
+    ToolSpec,
+)
 from assistant.preferences import (
     DEFAULT_PREFERENCES,
     PREFERENCES_URI,
@@ -361,3 +367,52 @@ def test_prompts_command_uses_the_session_client(monkeypatch, caplog):  # CA-56
         "Prompt disponibili:\n- spiega: Spiega un argomento al livello scelto."
     )
     assert "prompts/list count=1 names=spiega" in caplog.text
+
+
+def test_prompt_command_goes_through_the_graph(monkeypatch, caplog):  # CA-57, RF-49
+    caplog.set_level(logging.INFO)
+    text = "Spiegami Model Context Protocol a livello base: con parole semplici."
+    spec = PromptSpec("spiega", "Spiega un argomento al livello scelto.", (
+        PromptArgument("argomento", "", True), PromptArgument("livello", "", False),
+    ))
+    client = FakeMcpClient(
+        MCP_SPECS, prompts={"spiega": (spec, lambda a: [PromptMessage("user", text)])}
+    )
+    monkeypatch.setattr(entry, "McpClient", lambda *a, **k: client)
+    model = FakeModel([AIMessage("MCP è un protocollo aperto.")])
+    router, reviewer = ConversationRouter(), ApprovingReviewer()
+    monkeypatch.setattr(entry, "create_model", lambda config, tools: model)
+    monkeypatch.setattr(entry, "create_router_model", lambda config: router)
+    monkeypatch.setattr(entry, "create_reviewer_model", lambda config: reviewer)
+    monkeypatch.setattr(entry, "create_summary_model", lambda config: FakeModel([]))
+    at_start, sessions, outputs = [], [], []
+
+    def fake_run(session, commands):
+        at_start.append((client.prompt_lists, list(client.prompt_gets)))
+        sessions.append(session)
+        result = commands.handle('/prompt spiega argomento="Model Context Protocol" livello=base')
+        outputs.append(session.send_messages(result.messages))
+
+    monkeypatch.setattr(entry, "run", fake_run)
+    assert main(VALID) == 0
+    assert at_start == [(0, [])]  # prompts/list and prompts/get only after the command
+    assert outputs == ["MCP è un protocollo aperto."]
+    assert [m.content for m in sessions[0].messages] == [text, "MCP è un protocollo aperto."]
+    assert router.calls[0][-1].content == text
+    assert model.calls[0][-1].content == text
+    assert reviewer.calls[0][-1].content.count(text) == 1
+    lines = [
+        r.getMessage() for r in caplog.records
+        if r.name in ("assistant.commands", "assistant.graph")
+    ]
+    start = lines.index("prompts/list count=1 names=spiega")
+    assert lines[start + 1] == (
+        'prompts/get name=spiega arguments={"argomento": "Model Context Protocol", '
+        '"livello": "base"} status=ok messages=1'
+    )
+    assert lines[start + 2].startswith("prompts/get name=spiega message=1/1 role=user text=")
+    nodes = [  # "step=1/5 node=llm" has the node in second position
+        line.split()[0] if line.startswith("node=") else line.split()[1]
+        for line in lines[start + 3:]
+    ]
+    assert nodes == ["node=summary", "node=router", "node=llm", "node=reviewer"]
