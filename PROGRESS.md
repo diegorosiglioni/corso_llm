@@ -1724,6 +1724,60 @@ Decisioni:
   elenca gli step successivi come da non anticipare non è stata cambiata (regola dell'utente,
   superata dalla sezione «Modalità autonoma»).
 
+## Facoltativo · Streaming della risposta (2026-11-14)
+
+Specifica: [`docs/superpowers/specs/2026-11-14-streaming-design.md`](docs/superpowers/specs/2026-11-14-streaming-design.md);
+requisiti §18 (RF-81…RF-87, CA-94…CA-104). Questo piano sostituisce l'approvazione (modalità
+autonoma); i punti successivi seguono la specifica.
+
+### Piano (un punto di `TODO.md` per riga)
+
+1. Specifica e requisiti §18 (solo documenti). Verifica: `pytest` invariato.
+2. Agente e back-end: `stream_turn` in `assistant/agent.py` (funzione comune con `run_turn` per il
+   risultato), `disable_streaming=True` per router, revisore e riassunto in `model.py`,
+   `POST /chat/stream` in `assistant/api.py` (controlli in una dipendenza, eventi con
+   `EventSourceResponse` di FastAPI), `iter_sse` e `AgentClient.chat_stream` in `api_client.py`,
+   `POST /chats/{chat_id}/messages/stream` in `backend/api.py`; modello finto in streaming in
+   `conftest.py`; test in `test_agent.py`, `test_model.py`, `test_api.py`, `test_api_client.py`,
+   `test_backend_api.py` (CA-94…CA-98, CA-103); contratto rigenerato.
+3. Front-end e prova reale: `readEvents` e `sendMessageStream` in `api.js`, testi in `texts.js`,
+   bozza e strumenti in `app.js` e CSS; test con `node --test` e nel browser (CA-99, CA-100); prove
+   reali CA-101 e CA-102 in `test_real.py` (LM Studio, PostgreSQL, Edge); README (CA-104). Servizi
+   non raggiungibili o LM Studio che non fa streaming con gli strumenti → `[!]`.
+
+### Decisioni (scelte del progettista, dettagli nella specifica §1)
+
+- **Bozza mostrata** mentre viene scritta, segnata come provvisoria; rifiuto del revisore → evento
+  `reset` `review` con il motivo e avviso nella pagina; si salva solo la risposta finale. Motivo: con
+  il modello locale mostrare solo la risposta approvata significherebbe non mostrare testo fino alla
+  fine del turno.
+- Server-Sent Events con `POST`, dal supporto SSE già incluso in FastAPI 0.162.7: nessuna dipendenza
+  nuova.
+- Endpoint nuovi accanto a quelli esistenti (`/chat/stream`, `/chats/{id}/messages/stream`); CLI
+  invariata (la traccia non la nomina).
+- Solo il nodo `llm` produce testo; router, revisore e riassunto con `disable_streaming=True`, così le
+  loro richieste a LM Studio restano identiche (verificato con un modello finto che i pezzi arrivano
+  con `langgraph_node`).
+- Errori prima del flusso in JSON come oggi, durante il flusso come evento `error` con gli stessi
+  codici; browser che chiude → il back-end chiude il flusso dell'agente, domanda senza risposta.
+- Back-end → agente: 60 s al massimo senza dati (FastAPI manda `: ping` ogni 15 s), 600 s per il
+  turno; nessuna ripresa di un flusso interrotto.
+
+### Punto 1 · Specifica e requisiti — fatto
+
+- Scritti la specifica `docs/superpowers/specs/2026-11-14-streaming-design.md` (decisioni, eventi,
+  agente, client, back-end, front-end, test, rischi) e i requisiti §18 (RF-81…RF-87, CA-94…CA-104;
+  intestazione di `requisiti.md` aggiornata).
+- Verifiche preliminari per la specifica: `fastapi/sse.py` (0.162.7) offre `EventSourceResponse` e il
+  `ping` ogni 15 s, anche con generatori sincroni; uno script usa e getta in `%TEMP%` (eliminato) con
+  `GenericFakeChatModel` ha mostrato che `graph.stream(stream_mode=["messages", "updates",
+  "values"])` dà i pezzi del nodo `llm` come `AIMessageChunk` con `langgraph_node="llm"`, mentre un
+  modello con `disable_streaming=True` dà un solo messaggio intero.
+- Test: `pytest` → 927 passed, 84 deselected (nessun codice cambiato).
+- Problemi aperti: non è ancora verificato che LM Studio con `google/gemma-4-e2b` restituisca le
+  chiamate a strumenti in streaming (prova reale al punto 3, CA-101); README e `CLAUDE.md` cambiano
+  dal punto 2, quando c'è codice da descrivere.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

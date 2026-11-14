@@ -1,12 +1,12 @@
 # Requisiti — Assistente del laboratorio
 
-Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5) e integrati per la lezione 6 (§9–§17)
+Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5) e integrati per la lezione 6 (§9–§18)
 Stato: §1–§7 approvati il 2026-10-26; revisioni del 2026-11-09 e §8 approvate il 2026-11-09
 (insieme alla specifica `specs/2026-11-09-strumenti-mcp-design.md`); §9 (lezione 6, Step 1)
 e §10 (lezione 6, Step 2) approvate il 2026-11-11; §11 (lezione 6, Step 3) approvata il 2026-11-13;
 §12 (lezione 6, Step 4), §13 (lezione 6, Step 5), §14 (lezione 6, Step 6), §15 (lezione 6,
-Step 7), §16 (lezione 6, Step 8) e §17 (lezione 6, Step 9) scritte il 2026-11-14 in modalità
-autonoma (piano in `PROGRESS.md`)
+Step 7), §16 (lezione 6, Step 8), §17 (lezione 6, Step 9) e §18 (streaming, facoltativo)
+scritte il 2026-11-14 in modalità autonoma (piano in `PROGRESS.md`)
 
 Questo documento fissa **che cosa** deve fare l'applicazione. Il **come** (architettura,
 moduli, dettagli del grafo) sarà descritto nella specifica, che rimanda a questi requisiti.
@@ -651,3 +651,52 @@ servizi attivi, agente non raggiungibile dall'host, «17 * 23 fa 391.» con `cal
 | CA-91 | `docker compose up`: `docker compose ps` mostra i quattro servizi attivi; l'agente non risponde su `127.0.0.1:8000` dell'host. | Docker, reale |
 | CA-92 | Dal browser con Compose e LM Studio: «Quanto fa 17 * 23?» → «391» con `calculate` mostrato e nel log dell'agente (`docker compose logs agent`). | Docker, reale |
 | CA-93 | Dopo `docker compose down` e `docker compose up` la chat e i suoi messaggi sono ancora presenti. | Docker, reale |
+
+## 18. Lezione 6, facoltativo — streaming della risposta (2026-11-14)
+
+Riferimento: `LLM_Lez_6.pdf`, «Facoltativo — streaming della risposta» (riassunto in `lezione6.md`).
+Stato: scritti il 2026-11-14 in modalità autonoma insieme alla specifica
+`specs/2026-11-14-streaming-design.md`; le scelte del progettista sono nella sua §1. Esiti delle
+verifiche in `PROGRESS.md`.
+
+- **RF-81** *Agente in streaming* — `POST /chat/stream` riceve lo stesso corpo di `/chat` e risponde
+  con Server-Sent Events: i pezzi del testo dell'agente man mano che il modello li scrive (`text`),
+  l'inizio e il risultato di ogni strumento (`tool_start`, `tool_end`), l'annullamento del testo già
+  mandato che non sarà la risposta (`reset`), e alla fine un solo evento `done` con lo stesso
+  contenuto della risposta di `/chat`, oppure `error`. Riassunto, router e revisore non producono
+  testo nel flusso.
+- **RF-82** *Bozza e revisore* — Con il revisore attivo la bozza si mostra mentre viene scritta,
+  indicata come provvisoria; se il revisore la respinge, il flusso lo segnala con il motivo
+  (`reset` `review`) prima della riscrittura. Si salva solo la risposta finale.
+- **RF-83** *Back-end in streaming* — `POST /chats/{chat_id}/messages/stream` salva la domanda,
+  inoltra al browser come Server-Sent Events gli eventi dell'agente (preceduti dalla domanda salvata)
+  e, solo alla fine del turno, salva la risposta completa con gli strumenti usati e lo stato
+  dell'agente, come `/messages`, mandando per ultimo domanda e risposta salvate.
+- **RF-84** *Errori* — Gli errori scoperti prima del flusso hanno il codice HTTP e il corpo
+  `{"error", "detail"}` degli endpoint senza streaming; quelli durante il flusso arrivano come evento
+  `error` con gli stessi codici e chiudono il flusso. Dopo un errore o un'interruzione la domanda
+  resta salvata senza risposta e lo stato dell'agente della chat non cambia.
+- **RF-85** *Pagina* — La pagina invia con lo streaming, mostra il testo mentre arriva (segnato come
+  bozza), indica lo strumento in uso durante l'attesa e poi il suo risultato, segnala la riscrittura
+  chiesta dal revisore, sostituisce la bozza con la risposta salvata alla fine e mostra gli errori come
+  nello Step 8, senza bloccare le altre chat.
+- **RF-86** *Compatibilità* — `POST /chat` e `POST /chats/{chat_id}/messages` non cambiano; la CLI
+  continua a usare `/chat`. Nessuna dipendenza nuova; il contratto del front-end include l'endpoint
+  con lo streaming.
+- **RF-87** *Log* — Agente e back-end scrivono una riga d'inizio e una di fine per ogni flusso, con
+  l'esito (`done`, `error`, `client_gone`), gli strumenti, la lunghezza della risposta e la durata,
+  senza il testo dei messaggi nel back-end.
+
+| ID | Verifica | Come |
+|----|----------|------|
+| CA-94 | Agente con un modello finto in streaming: ordine e contenuto degli eventi (testo, strumento riuscito e in errore, chiamata non interpretabile, limite, rifiuto del router, revisore che respinge e poi approva, riassunto); `done` uguale al risultato di `run_turn`. | automatica |
+| CA-95 | `POST /chat/stream` con grafo finto: `text/event-stream`, eventi e `done`; controlli preliminari in JSON coi codici di `/chat`; errori del modello ed errore imprevisto come evento `error`; righe di log; OpenAPI. | automatica |
+| CA-96 | Router, revisore e riassunto costruiti con `disable_streaming`; l'agente no. | automatica |
+| CA-97 | Lettore SSE e `AgentClient.chat_stream`: eventi, `error`, risposta d'errore JSON, agente spento, flusso interrotto, `done` malformato, tempo superato. | automatica |
+| CA-98 | `POST /chats/{chat_id}/messages/stream` con agente finto: domanda come primo evento, eventi inoltrati, risposta e stato salvati alla fine uguali a `/messages`; errori prima del flusso in JSON; `error` durante il flusso con domanda salvata e stato invariato; righe di log; contratto aggiornato. | automatica |
+| CA-99 | JavaScript con Node: lettore SSE su pezzi spezzati, `sendMessageStream` (eventi, `done`, `error`, interruzione, errore JSON, rete), testi nuovi. | automatica |
+| CA-100 | Nel browser con back-end e agente finti: testo a pezzi prima della fine, strumento indicato durante l'attesa, avviso di riscrittura del revisore, messaggi salvati alla fine, errore durante il flusso con la domanda salvata, pagina usabile. | browser |
+| CA-101 | Con LM Studio: `POST /chat/stream` «Quanto fa 17 * 23?» → `tool_start` e `tool_end` di `calculate`, `done` con «391». | reale |
+| CA-102 | Con LM Studio, PostgreSQL, agente, back-end e front-end, dal browser: il testo compare prima della fine del turno, lo strumento è indicato durante l'attesa, la risposta salvata resta dopo la ricarica. | reale |
+| CA-103 | `/chat`, `/chats/{chat_id}/messages` e la CLI invariati: la suite esistente passa senza modifiche ai suoi test. | automatica |
+| CA-104 | README con lo streaming (endpoint, eventi, decisione sulla bozza, diagnosi). | revisione |
