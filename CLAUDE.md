@@ -45,10 +45,14 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
   Il JavaScript del front-end si prova con `node --test` (`tests/frontend/*.test.mjs`, lanciati da
   `test_frontend_js.py`); la pagina in Edge con Playwright in `test_frontend_browser.py`
   (marcatore `browser`, escluso dalla suite predefinita). I Dockerfile si controllano come testo
-  in `test_docker.py`.
+  in `test_docker.py`, e `compose.yaml` con `docker compose config` (copia in una cartella
+  temporanea con un `.env` finto; saltato senza la CLI di Docker).
 - Immagini Docker (Step 9): un Dockerfile per servizio in `docker/` (`agent.Dockerfile`, che serve
   anche la CLI, `backend.Dockerfile`, `frontend.Dockerfile`), contesto di build la radice; stesse
   prime istruzioni (base fissata e `requirements.txt`) per condividere il livello delle dipendenze.
+  `compose.yaml`: `frontend` (`127.0.0.1:8080`), `backend` (`127.0.0.1:8001`), `agent` e `postgres`
+  (non pubblicati, volumi `notes-data` e `postgres-data`), CLI `assistant` nel profilo `cli`;
+  credenziali `POSTGRES_*` nel `.env` (password obbligatoria per ogni comando `docker compose`).
 - Note in SQLite: in locale `NOTES_DB` (default `data/notes.sqlite3`, ignorato da Git), in
   Docker il volume `notes-data`.
 - Dipendenze dirette in `requirements.txt` (app) e `requirements-dev.txt` (test); tutte le

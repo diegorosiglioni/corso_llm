@@ -1,7 +1,11 @@
-"""Dockerfiles of the three services, checked as text: no image is built (spec of Step 9, §7)."""
+"""Dockerfiles and compose.yaml, checked without building images (spec of Step 9, §7)."""
 
 import importlib.util
 import json
+import os
+import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -134,3 +138,140 @@ def test_dockerignore_keeps_secrets_and_local_data_out_of_the_context():
     ignored = (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
     for entry in (".env", ".venv/", "data/", ".git", "tests/"):
         assert entry in ignored
+
+
+# compose.yaml, read by Docker itself with `docker compose config` (no daemon, no images).
+
+FAKE_ENV = "POSTGRES_USER=utente\nPOSTGRES_PASSWORD=segreta\nPOSTGRES_DB=chatdb\n"
+MAIN_SERVICES = {"frontend", "backend", "agent", "postgres"}
+
+
+def compose_config(tmp_path: Path, env_text: str = FAKE_ENV, profiles: tuple[str, ...] = ()):
+    """`docker compose config --format json` on a copy of compose.yaml with its own .env."""
+    docker = shutil.which("docker")
+    if docker is None:
+        pytest.skip("CLI di Docker non installata")
+    text = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+    (tmp_path / "compose.yaml").write_text(text, encoding="utf-8")
+    (tmp_path / ".env").write_text(env_text, encoding="utf-8")
+    # Variables interpolated by compose.yaml ($$ excluded): in the shell they would win over .env.
+    interpolated = set(re.findall(r"(?<!\$)\$\{(\w+)", text))
+    env = {
+        name: value for name, value in os.environ.items()
+        if name not in interpolated and not name.startswith("COMPOSE_")
+    }
+    command = [docker, "compose", "--file", str(tmp_path / "compose.yaml")]
+    for profile in profiles:
+        command += ["--profile", profile]
+    return subprocess.run(
+        command + ["config", "--format", "json"],
+        capture_output=True, text=True, encoding="utf-8", env=env, timeout=60,
+    )
+
+
+@pytest.fixture
+def compose(tmp_path):
+    result = compose_config(tmp_path)
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+def test_compose_up_starts_exactly_the_four_services(compose):
+    assert set(compose["services"]) == MAIN_SERVICES
+    assert set(compose["volumes"]) == {"notes-data", "postgres-data"}
+
+
+def test_cli_is_only_in_the_cli_profile(tmp_path):
+    result = compose_config(tmp_path, profiles=("cli",))
+    assert result.returncode == 0, result.stderr
+    services = json.loads(result.stdout)["services"]
+    assert set(services) == MAIN_SERVICES | {"assistant"}
+    cli = services["assistant"]
+    assert cli["profiles"] == ["cli"]
+    assert cli["build"]["dockerfile"] == "docker/agent.Dockerfile"
+    assert cli["command"] == ["python", "-m", "assistant"]
+    assert cli["environment"]["AGENT_URL"] == "http://agent:8000"
+    assert cli["depends_on"]["agent"]["condition"] == "service_healthy"
+    assert cli["stdin_open"] and cli["tty"]
+
+
+@pytest.mark.parametrize("service", SERVICES)
+def test_each_service_is_built_from_its_dockerfile(compose, service):
+    assert compose["services"][service]["build"]["dockerfile"] == f"docker/{service}.Dockerfile"
+
+
+def test_agent_and_postgres_are_not_published(compose):
+    for service in ("agent", "postgres"):
+        assert "ports" not in compose["services"][service]
+
+
+@pytest.mark.parametrize(
+    "service, port", [("backend", DEFAULT_BACKEND_PORT), ("frontend", DEFAULT_FRONTEND_PORT)]
+)
+def test_backend_and_frontend_are_published_only_on_localhost(compose, service, port):
+    (published,) = compose["services"][service]["ports"]
+    assert published["host_ip"] == "127.0.0.1"
+    assert published["target"] == port and published["published"] == str(port)
+
+
+@pytest.mark.parametrize("service, variable", [
+    ("agent", "AGENT_HOST"), ("backend", "BACKEND_HOST"), ("frontend", "FRONTEND_HOST"),
+])
+def test_services_listen_on_all_interfaces_even_with_a_local_env(compose, service, variable):
+    assert compose["services"][service]["environment"][variable] == "0.0.0.0"
+
+
+def test_postgres_uses_the_official_image_a_volume_and_a_healthcheck(compose):
+    postgres = compose["services"]["postgres"]
+    assert postgres["image"] == "postgres:18.6"
+    assert postgres["environment"] == {
+        "POSTGRES_USER": "utente", "POSTGRES_PASSWORD": "segreta", "POSTGRES_DB": "chatdb",
+    }
+    (volume,) = postgres["volumes"]
+    assert (volume["type"], volume["source"], volume["target"]) == (
+        "volume", "postgres-data", "/var/lib/postgresql",
+    )
+    test = postgres["healthcheck"]["test"]
+    assert test[0] == "CMD-SHELL" and "pg_isready" in test[1]
+
+
+def test_backend_waits_for_the_database_and_uses_internal_addresses(compose):
+    backend = compose["services"]["backend"]
+    assert backend["depends_on"]["postgres"]["condition"] == "service_healthy"
+    assert backend["depends_on"]["agent"]["condition"] == "service_started"
+    environment = backend["environment"]
+    assert environment["DATABASE_URL"] == "postgresql://utente:segreta@postgres:5432/chatdb"
+    assert environment["AGENT_URL"] == "http://agent:8000"
+
+
+def test_database_credentials_stay_out_of_the_frontend(compose):
+    assert not any("POSTGRES" in name or "DATABASE" in name
+                   for name in compose["services"]["frontend"]["environment"])
+
+
+def test_unset_optional_variables_leave_the_service_defaults(compose):
+    # Empty values: the services use their defaults (BACKEND_URL, CORS_ORIGINS, LOG_LEVEL INFO).
+    assert compose["services"]["frontend"]["environment"]["BACKEND_URL"] == ""
+    assert compose["services"]["backend"]["environment"]["CORS_ORIGINS"] == ""
+    assert compose["services"]["backend"]["environment"]["LOG_LEVEL"] == "INFO"
+
+
+def test_user_and_database_have_defaults(tmp_path):
+    result = compose_config(tmp_path, "POSTGRES_PASSWORD=segreta\n")
+    assert result.returncode == 0, result.stderr
+    services = json.loads(result.stdout)["services"]
+    assert services["backend"]["environment"]["DATABASE_URL"] == (
+        "postgresql://lab:segreta@postgres:5432/assistente"
+    )
+
+
+def test_missing_password_stops_compose_with_a_message(tmp_path):
+    result = compose_config(tmp_path, "POSTGRES_USER=utente\n")
+    assert result.returncode != 0
+    assert "Manca POSTGRES_PASSWORD nel file .env" in result.stderr
+
+
+def test_env_example_has_the_postgres_credentials():
+    lines = (ROOT / ".env.example").read_text(encoding="utf-8").splitlines()
+    for name in ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"):
+        assert any(line.startswith(f"{name}=") for line in lines)

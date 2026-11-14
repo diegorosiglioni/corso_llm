@@ -613,7 +613,8 @@ front-end come processi ed Edge senza finestra, dalla prova `test_frontend_chat_
 
 Riferimento: `LLM_Lez_6.pdf`, Step 9 (riassunto in `lezione6.md`). Stato: scritti il 2026-11-14 in
 modalità autonoma insieme alla specifica `specs/2026-11-14-compose-design.md`; le scelte del
-progettista sono nella sua §1. Esiti delle verifiche in `PROGRESS.md`. CA-88 verificato con `pytest`;
+progettista sono nella sua §1. Esiti delle verifiche in `PROGRESS.md`. CA-88 e CA-90 verificati con
+`pytest` (CA-90 con Docker Compose v5.6.0);
 CA-89 il 2026-11-14 con Docker 29.9.1, LM Studio (`google/gemma-4-e2b`) e il PostgreSQL 18.6 del
 container dello Step 7.
 

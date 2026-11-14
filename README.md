@@ -67,7 +67,9 @@ Il servizio HTTP si prova con l'app vera su un grafo finto, senza rete (`TestCli
 parla con quella stessa app. Il back-end si prova su SQLite in memoria, con lo stesso schema, senza
 PostgreSQL. Il JavaScript della pagina del front-end si prova con Node.js (`node --test`, lanciato
 da `pytest`; senza Node il test si salta col motivo). I Dockerfile si controllano come testo, senza
-costruire immagini (`tests/test_docker.py`). Esito al 2026-11-14: `909 passed, 84
+costruire immagini, e `compose.yaml` con `docker compose config` su una copia con un `.env` di
+credenziali finte, senza il demone (`tests/test_docker.py`; senza la CLI di Docker questi test si
+saltano col motivo). Esito al 2026-11-14: `927 passed, 84
 deselected` (le 84 deselezionate sono le 63 prove reali, 25 con LM Studio e 38 test dell'archivio
 ripetuti su PostgreSQL, e i 21 test nel browser).
 
@@ -230,7 +232,8 @@ docker exec assistente-postgres pg_isready -U lab -d assistente    # «accepting
 
 I dati restano nel container (anche dopo `docker stop assistente-postgres` e
 `docker start assistente-postgres`); `docker rm -f assistente-postgres` lo elimina con le chat.
-Compose con PostgreSQL e un volume arriva con lo Step 9.
+Con Docker Compose PostgreSQL è invece il servizio `postgres`, con i dati nel volume `postgres-data`
+(sezione «Docker»); è un database distinto da quello di questo container.
 
 **Avvio del back-end**, in un terzo terminale (servizio dell'agente già avviato):
 
@@ -721,22 +724,36 @@ model_unavailable`. Per eseguire solo queste:
 
 ## Docker
 
-LM Studio resta sull'host; Compose avvia due servizi dalla stessa immagine:
+LM Studio resta sull'host. `compose.yaml` definisce quattro servizi, ognuno in un container, più la
+CLI:
 
+- `frontend`: la pagina della chat (`python -m frontend`), pubblicata solo su
+  `http://127.0.0.1:8080` di questo computer.
+- `backend`: il back-end (`python -m backend`), pubblicato su `127.0.0.1:8001` perché la pagina nel
+  browser lo chiama direttamente (CORS dello Step 8); salva in `postgres` e chiama l'agente su
+  `http://agent:8000`. Parte solo quando PostgreSQL è pronto (`healthcheck` con `pg_isready`).
 - `agent`: il servizio HTTP dell'agente (`python -m assistant.service`, con il server MCP come
-  sottoprocesso nello stesso container e le note nel volume `notes-data`), pubblicato solo su
-  `http://127.0.0.1:8000` di questo computer (OpenAPI su `http://127.0.0.1:8000/docs`). Un
-  `healthcheck` lo dichiara pronto quando `GET /status` risponde, con qualsiasi codice (LM Studio
-  spento dà `503`, ma l'agente c'è).
-- `assistant`: la CLI, client dell'agente (`AGENT_URL=http://agent:8000`), avviata solo quando
-  `agent` è pronto.
+  sottoprocesso nello stesso container e le note nel volume `notes-data`), **non pubblicato**: lo
+  raggiungono solo back-end e CLI sulla rete di Compose. Un `healthcheck` lo dichiara pronto quando
+  `GET /status` risponde, con qualsiasi codice (LM Studio spento dà `503`, ma l'agente c'è). Lo stato
+  si legge da dentro il container:
+  `docker compose exec -T agent python -c "import httpx; print(httpx.get('http://127.0.0.1:8000/status').text)"`.
+- `postgres`: PostgreSQL ufficiale (`postgres:18.6`), dati nel volume `postgres-data`, non
+  pubblicato.
+- `assistant`: la CLI, client dell'agente (`AGENT_URL=http://agent:8000`), nel profilo `cli`: non
+  parte con `docker compose up`, si avvia con `docker compose run --rm assistant` quando `agent` è
+  pronto.
 
 Compose legge `.env` (vedi «Configurazione») e in `agent` imposta `LMSTUDIO_BASE_URL` a
 `http://host.docker.internal:1234/v1`. Se LM Studio usa un'altra porta o un altro host, si imposta
-`LMSTUDIO_BASE_URL_DOCKER` nel `.env` (vedi `.env.example`).
+`LMSTUDIO_BASE_URL_DOCKER` nel `.env` (vedi `.env.example`). Le credenziali di PostgreSQL
+(`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`) stanno solo nel `.env`, da cui `compose.yaml`
+costruisce `DATABASE_URL` del back-end: la password è obbligatoria per **ogni** comando `docker
+compose` (senza, si ferma con «Manca POSTGRES_PASSWORD nel file .env»), va scelta senza i caratteri
+`@ : / % #` e vale solo alla prima creazione del volume `postgres-data`.
 
 ```powershell
-Copy-Item .env.example .env      # solo la prima volta
+Copy-Item .env.example .env      # solo la prima volta; poi cambiare POSTGRES_PASSWORD
 docker compose build
 docker compose run --rm assistant
 ```
@@ -765,8 +782,9 @@ dipendenze (`requirements.txt` con `constraints.txt`) si costruisce una volta e 
 contiene il pacchetto `assistant` (con `assistant/data/catalog.json`, `assistant/data/scope.txt` e
 `assistant/data/preferenze.json`) più quello del proprio servizio, ascolta su `0.0.0.0` nel
 container ed esegue come utente non root `app`. Un'immagine si costruisce anche da sola, per
-esempio `docker build -f docker/backend.Dockerfile -t assistente-backend .` (back-end e front-end
-entrano in `compose.yaml` con lo Step 9, in corso). Nel container l'orario dei log è in UTC;
+esempio `docker build -f docker/backend.Dockerfile -t assistente-backend .`. L'avvio dei quattro
+servizi insieme con `docker compose up` e la chat dal browser sono documentati dopo la prova reale
+dello Step 9 (in corso). Nel container l'orario dei log è in UTC;
 l'orario restituito dallo strumento dipende solo dal fuso richiesto.
 
 Le note stanno nel volume `notes-data`, montato in `/app/data` del servizio `agent`: una nota

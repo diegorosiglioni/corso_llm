@@ -1601,6 +1601,71 @@ autonoma); i punti successivi dello step seguono la specifica.
   da riscrivere al punto 3 insieme alla prova reale. L'agente resta pubblicato su `127.0.0.1:8000`
   fino al punto 2.
 
+### Punto 2 · `compose.yaml` a quattro servizi — piano
+
+1. `compose.yaml` (specifica §4): `frontend` (`docker/frontend.Dockerfile`, `127.0.0.1:8080:8080`,
+   `FRONTEND_HOST=0.0.0.0`, `BACKEND_URL=${BACKEND_URL:-}`, `LOG_LEVEL`), `backend`
+   (`docker/backend.Dockerfile`, `127.0.0.1:8001:8001`, `DATABASE_URL` costruita da `POSTGRES_*` verso
+   `postgres:5432`, `AGENT_URL=http://agent:8000`, `BACKEND_HOST=0.0.0.0`, `CORS_ORIGINS`,
+   `LOG_LEVEL`; `depends_on` `postgres` `service_healthy` e `agent` `service_started`), `agent`
+   come ora ma **senza `ports`**, `postgres` (`postgres:18.6`, `POSTGRES_*`, `healthcheck`
+   `pg_isready`, volume `postgres-data` in `/var/lib/postgresql`, senza porte), `assistant` con
+   `profiles: ["cli"]`; volumi `notes-data` e `postgres-data`.
+2. `.env.example`: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` con la nota sui caratteri
+   della password; `.env` locale (fuori da Git) con le stesse tre righe, perché ora ogni comando
+   `docker compose` le richiede.
+3. Test in `tests/test_docker.py` (CA-90): `compose.yaml` copiato in `tmp_path` con un `.env` di
+   credenziali finte, `docker compose config --format json` (con e senza `--profile cli`) con
+   l'ambiente ripulito dalle variabili interpolate; saltato se manca la CLI di Docker. Controlli
+   della specifica §7 più password mancante → errore col messaggio. Poi `pytest` completo e
+   `docker compose config` sul file vero.
+
+Decisioni:
+- Il test copia `compose.yaml` in una cartella temporanea con il suo `.env`: `env_file: .env` è
+  relativo al file, e un clone senza `.env` (o con un `.env` vero) non deve cambiare l'esito.
+- Ambiente del sottoprocesso senza `POSTGRES_*`, `LOG_LEVEL`, `CORS_ORIGINS`, `BACKEND_URL`,
+  `LMSTUDIO_BASE_URL_DOCKER` e `COMPOSE_*`: le variabili della shell vincono sul `.env`
+  nell'interpolazione.
+- `pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}` (variabili lette nel container): senza
+  `-U`/`-d` `pg_isready` userebbe l'utente `root` e la riga «FATAL: role "root"» nel log.
+
+### Punto 2 · `compose.yaml` a quattro servizi — fatto
+
+- `compose.yaml`: `frontend`, `backend`, `agent` (senza `ports`), `postgres` (`postgres:18.6`,
+  `healthcheck` `pg_isready`, volume `postgres-data`), CLI `assistant` nel profilo `cli`;
+  `DATABASE_URL` del back-end costruita da `POSTGRES_*` con
+  `${POSTGRES_PASSWORD:?Manca POSTGRES_PASSWORD nel file .env}`; `BACKEND_URL` e `CORS_ORIGINS`
+  vuoti se non impostati (i servizi usano i predefiniti, verificato nel codice di configurazione).
+- `.env.example` con `POSTGRES_USER=lab`, `POSTGRES_PASSWORD=cambiami`, `POSTGRES_DB=assistente` e la
+  nota sui caratteri; `.env` locale (fuori da Git) con le tre righe (`lab`/`labprova`/`assistente`,
+  come il container del README).
+- Test nuovi in `tests/test_docker.py` (+18, CA-90): quattro servizi e due volumi senza profilo; CLI
+  solo con `--profile cli` (Dockerfile, comando, `AGENT_URL`, `service_healthy`, `stdin_open`/`tty`);
+  Dockerfile di ogni servizio; `agent` e `postgres` senza porte; `backend`/`frontend` solo su
+  `127.0.0.1` con le porte predefinite; `*_HOST=0.0.0.0`; immagine, credenziali, volume e
+  `healthcheck` di `postgres`; `depends_on` e indirizzi interni del back-end; nessuna variabile del
+  database nel front-end; facoltative vuote; predefiniti di utente e database; password mancante →
+  errore col messaggio; `.env.example` con le tre righe. Mutazione temporanea (profilo tolto,
+  `service_started` per `postgres`) → 3 test falliti.
+- Decisione presa durante l'esecuzione: le variabili da togliere dall'ambiente del sottoprocesso si
+  leggono da `compose.yaml` con un'espressione regolare (`${NOME`, esclusi i `$${…}`), invece di un
+  elenco scritto a mano che una variabile nuova renderebbe incompleto.
+
+| CA | Prova | Esito |
+|----|-------|-------|
+| CA-90 | `pytest tests/test_docker.py` | ✅ 39 passed (Docker Compose v5.6.0, senza demone necessario) |
+| — | `POSTGRES_PASSWORD=dallashell pytest` | ✅ 927 passed, 84 deselected (la variabile della shell non cambia l'esito) |
+| — | `docker compose config` sul file vero con il `.env` locale | ✅ servizi `agent`, `postgres`, `backend`, `frontend`; `DATABASE_URL` → `postgresql://lab:***@postgres:5432/assistente` |
+| — | `printf 'Quanto fa 2 + 2?\nesci\n' \| docker compose run --rm -T assistant` (immagine dell'agente del punto 1, LM Studio attivo) | ✅ agente `(healthy)` con `8000/tcp` non pubblicata, «2 + 2 fa 4.», «Arrivederci!», exit 0; dall'host `127.0.0.1:8000/status` non risponde, da `docker compose exec agent` → `200`; poi `docker compose down` |
+
+- Documenti: README (sezione Docker con i quattro servizi, l'agente non pubblicato e le credenziali;
+  test di `compose.yaml`; conteggio dei test; rimando dal container PostgreSQL del back-end),
+  `CLAUDE.md` (struttura: `compose.yaml` e test), requisiti §17 (CA-90).
+- Problemi aperti: `docker compose up` con i quattro servizi, la chat dal browser e la persistenza
+  dopo `down`/`up` (CA-91…CA-93) al punto 3, con la riscrittura dei comandi Docker nel README e in
+  `CLAUDE.md` (che dice ancora «non `up`»). Chi ha un `.env` senza `POSTGRES_PASSWORD` deve
+  aggiungerla anche solo per la CLI in Docker (detto nel README).
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13
