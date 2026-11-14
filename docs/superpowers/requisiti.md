@@ -616,7 +616,10 @@ modalità autonoma insieme alla specifica `specs/2026-11-14-compose-design.md`; 
 progettista sono nella sua §1. Esiti delle verifiche in `PROGRESS.md`. CA-88 e CA-90 verificati con
 `pytest` (CA-90 con Docker Compose v5.6.0);
 CA-89 il 2026-11-14 con Docker 29.9.1, LM Studio (`google/gemma-4-e2b`) e il PostgreSQL 18.6 del
-container dello Step 7.
+container dello Step 7. CA-91, CA-92 e CA-93 verificati il 2026-11-14 con `docker compose up -d
+--build` (Docker 29.9.1, LM Studio con `google/gemma-4-e2b`, pagina in Edge con Playwright): quattro
+servizi attivi, agente non raggiungibile dall'host, «17 * 23 fa 391.» con `calculate` mostrato e in
+`docker compose logs agent`, chat e messaggi presenti dopo `down` e `up -d`.
 
 - **RF-76** *Immagini* — Agente (servizio HTTP), back-end e front-end hanno ciascuno il proprio
   Dockerfile (`docker/agent.Dockerfile`, `docker/backend.Dockerfile`, `docker/frontend.Dockerfile`),

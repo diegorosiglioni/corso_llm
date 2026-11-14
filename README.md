@@ -20,6 +20,8 @@ Un **back-end** separato (FastAPI, `python -m backend`) salva chat e messaggi in
 chiama l'agente con la cronologia salvata: le chat restano dopo il riavvio.
 Un **front-end** (`python -m frontend`) serve una pagina di chat per il browser che parla solo con il
 back-end: elenco, creazione ed eliminazione delle chat, messaggi con gli strumenti usati.
+Con **Docker Compose** front-end, back-end, agente e PostgreSQL girano ciascuno nel proprio container
+(`docker compose up -d --build`, sezione «Docker»).
 
 Requisiti e specifica: [`docs/superpowers/`](docs/superpowers/).
 
@@ -752,26 +754,50 @@ costruisce `DATABASE_URL` del back-end: la password è obbligatoria per **ogni**
 compose` (senza, si ferma con «Manca POSTGRES_PASSWORD nel file .env»), va scelta senza i caratteri
 `@ : / % #` e vale solo alla prima creazione del volume `postgres-data`.
 
+### Avvio dei quattro servizi e chat dal browser
+
 ```powershell
 Copy-Item .env.example .env      # solo la prima volta; poi cambiare POSTGRES_PASSWORD
-docker compose build
+docker compose up -d --build     # costruisce le immagini e avvia frontend, backend, agent, postgres
+docker compose ps                # quattro servizi Up; agent e postgres (healthy)
+```
+
+Poi si apre `http://127.0.0.1:8080` nel browser. `docker compose ps` mostra le porte: `frontend`
+`127.0.0.1:8080->8080/tcp`, `backend` `127.0.0.1:8001->8001/tcp`, `agent` solo `8000/tcp` e
+`postgres` solo `5432/tcp` (non pubblicati: dall'host `http://127.0.0.1:8000` non risponde). Il
+back-end parte dopo che `postgres` è `(healthy)`. I log si leggono servizio per servizio:
+
+```powershell
+docker compose logs agent        # step=1/5 variant=mcp tool=calculate …, api response=chat … tools=calculate
+docker compose logs backend      # backend response=send_message chat=1 status=201 tools=calculate …
+docker compose down              # ferma e rimuove i container; i volumi restano
+docker compose up -d             # riparte con le stesse chat e le stesse note
+```
+
+Le chat restano nel volume `postgres-data` dopo `docker compose down` (e dopo `up -d` la pagina le
+mostra di nuovo); dopo `docker compose down`, `docker volume rm
+assistente-laboratorio_postgres-data` le cancella (le note, nel volume `notes-data`, restano). Le
+variabili dei servizi valgono dal loro avvio: dopo una modifica del `.env` servono `docker compose
+down` e `docker compose up -d`.
+
+### CLI in Docker
+
+```powershell
 docker compose run --rm assistant
 ```
 
-`docker compose run --rm assistant` avvia anche `agent`, che resta attivo dopo l'uscita dalla CLI
-(una nuova sessione lo ritrova pronto) fino a `docker compose down`. I log dell'agente si leggono con
-`docker compose logs agent`; `docker compose ps` lo mostra `(healthy)`. Le variabili dell'agente
-(modello, soglie, ambito, preferenze) valgono dal suo avvio: dopo una modifica del `.env` servono
-`docker compose down` e un nuovo `docker compose run --rm assistant`.
-
-L'avvio interattivo si fa con `docker compose run --rm`: `docker compose up` non collega
-correttamente l'input del terminale. Per una prova non interattiva serve `-T`:
+`docker compose run --rm assistant` avvia anche `agent` (se non è già attivo), che resta attivo dopo
+l'uscita dalla CLI fino a `docker compose down`; con i quattro servizi avviati la CLI usa lo stesso
+`agent` della pagina. La CLI parte solo con `run`, non con `docker compose up` (profilo `cli`), che
+non collegherebbe l'input del terminale. Per una prova non interattiva serve `-T`:
 
 ```powershell
 "Che ore sono a Tokyo?", "esci" | docker compose run --rm -T assistant
 docker compose logs agent
 docker compose down
 ```
+
+### Immagini e volumi
 
 Ogni servizio ha il proprio Dockerfile nella cartella `docker/`, con contesto di build la radice
 della repository: `agent.Dockerfile` (comando predefinito `python -m assistant.service`; la CLI usa
@@ -782,9 +808,8 @@ dipendenze (`requirements.txt` con `constraints.txt`) si costruisce una volta e 
 contiene il pacchetto `assistant` (con `assistant/data/catalog.json`, `assistant/data/scope.txt` e
 `assistant/data/preferenze.json`) più quello del proprio servizio, ascolta su `0.0.0.0` nel
 container ed esegue come utente non root `app`. Un'immagine si costruisce anche da sola, per
-esempio `docker build -f docker/backend.Dockerfile -t assistente-backend .`. L'avvio dei quattro
-servizi insieme con `docker compose up` e la chat dal browser sono documentati dopo la prova reale
-dello Step 9 (in corso). Nel container l'orario dei log è in UTC;
+esempio `docker build -f docker/backend.Dockerfile -t assistente-backend .`. Nel container l'orario
+dei log è in UTC;
 l'orario restituito dallo strumento dipende solo dal fuso richiesto.
 
 Le note stanno nel volume `notes-data`, montato in `/app/data` del servizio `agent`: una nota
@@ -962,6 +987,19 @@ docker compose run --rm -T agent python -c "import urllib.request; print(urllib.
 
 Deve stampare l'elenco dei modelli. Con Docker Desktop su Windows ha funzionato senza modificare
 LM Studio; se fallisce, attivare in LM Studio l'opzione per servire anche sulla rete locale.
+
+**`docker compose up` fallisce con «ports are not available: … 127.0.0.1:8080 … bind: Only one usage
+of each socket address …».** La porta 8080 (o 8001) è già usata, di solito dallo stesso servizio
+avviato a mano con `python -m frontend` (o `python -m backend`): fermarlo, oppure trovare il processo
+con `netstat -ano | findstr :8080`. I servizi già partiti restano attivi; un nuovo `docker compose up
+-d` avvia quello mancante.
+
+**In Compose il back-end esce con «Database non raggiungibile: … password authentication failed for
+user "lab"».** `POSTGRES_PASSWORD` nel `.env` è cambiata dopo la prima creazione del volume
+`postgres-data`: PostgreSQL tiene la password con cui il volume è stato inizializzato. Rimettere
+quella di prima, oppure eliminare il volume (cancella le chat): `docker compose down`, `docker volume
+rm assistente-laboratorio_postgres-data` e di nuovo `docker compose up -d`. Lo stato si vede con `docker compose ps
+-a` (`backend` `Exited (1)`) e il motivo con `docker compose logs backend`.
 
 **Configurazione nel container.** Una variabile dell'agente si può sovrascrivere per una sola
 esecuzione del servizio, per esempio per verificare il messaggio di configurazione mancante

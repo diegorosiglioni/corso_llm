@@ -72,8 +72,11 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
     terzo terminale con `DATABASE_URL` impostata: `.\.venv\Scripts\python.exe -m backend`;
     front-end in un quarto: `.\.venv\Scripts\python.exe -m frontend` (pagina su
     `http://127.0.0.1:8080`)
-  - Docker: `docker compose build` e `docker compose run --rm assistant` (non `up`; avvia anche il
-    servizio `agent`, che resta attivo fino a `docker compose down`)
+  - Docker: `docker compose up -d --build` avvia `frontend`, `backend`, `agent` e `postgres`
+    (`docker compose ps`, `docker compose logs agent`, pagina su `http://127.0.0.1:8080`);
+    `docker compose down` li ferma (i volumi restano). La CLI solo con
+    `docker compose run --rm assistant` (profilo `cli`; avvia anche `agent`, che resta attivo fino a
+    `docker compose down`)
 
 ## Obiettivo
 Un'applicazione da terminale in Python che conversa con un modello locale e:

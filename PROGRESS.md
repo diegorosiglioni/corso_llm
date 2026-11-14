@@ -1666,6 +1666,64 @@ Decisioni:
   `CLAUDE.md` (che dice ancora «non `up`»). Chi ha un `.env` senza `POSTGRES_PASSWORD` deve
   aggiungerla anche solo per la CLI in Docker (detto nel README).
 
+### Punto 3 · Prova reale con Compose — piano
+
+Servizi verificati all'inizio: Docker 29.9.1, LM Studio con `google/gemma-4-e2b` (`GET /v1/models`),
+`.env` locale con `POSTGRES_*`.
+1. CA-91: porte 8001 e 8080 libere; `docker compose up -d --build`; `docker compose ps` (quattro
+   servizi, `healthy` per `agent` e `postgres`); `127.0.0.1:8000/status` dall'host non risponde.
+2. CA-92: script usa e getta in `%TEMP%` (fuori dal progetto) con Playwright e Edge sulla pagina
+   `http://127.0.0.1:8080`: nuova chat, «Quanto fa 17 * 23?» → «391» con «Strumenti usati:
+   calculate»; `docker compose logs agent` (`variant=mcp tool=calculate`) e `logs backend`
+   (`send_message … status=201`).
+3. CA-93: `docker compose down` e `docker compose up -d`; la pagina ricaricata mostra la stessa chat
+   con i due messaggi (e `GET /chats` dall'host).
+4. README (sezione Docker: comandi `up`/`ps`/`logs`/`down`, diagnosi delle porte occupate e della
+   password del volume) e `CLAUDE.md` (comandi Docker, «non `up`» tolto); esiti in requisiti §17 e
+   qui; `pytest`. Docker o LM Studio non raggiungibili → `[!]`.
+
+Decisioni:
+- Prova a mano con uno script fuori dal progetto, non una prova in `tests/test_real.py`: la
+  specifica §7 tiene le prove con Compose a mano (costruzione delle immagini e `down`/`up` durano
+  minuti e toccano volumi condivisi).
+- Il volume `postgres-data` non si cancella dopo la prova: contiene solo la chat di prova ed è il
+  volume che userebbe l'utente; lo si dice qui, con il comando per eliminarlo. (Cambiata durante
+  l'esecuzione, vedi sotto.)
+
+### Punto 3 · Prova reale con Compose — fatto
+
+- Nessun codice dell'applicazione né test cambiati: solo prove con Docker, README, `CLAUDE.md` e
+  requisiti. Script di Playwright usa e getta in `%TEMP%\step9compose` (fuori dal progetto), con le
+  schermate.
+
+| CA | Prova | Esito |
+|----|-------|-------|
+| CA-91 | `docker compose up -d --build` (porte 8000/8001/8080 libere prima); `docker compose ps`; `curl http://127.0.0.1:8000/status` dall'host | ✅ volume `postgres-data` e rete creati, `postgres` `Healthy` prima dell'avvio di `backend`; `ps`: `agent` `Up (healthy)` `8000/tcp`, `backend` `127.0.0.1:8001->8001/tcp`, `frontend` `127.0.0.1:8080->8080/tcp`, `postgres` `Up (healthy)` `5432/tcp`; 8000 dall'host: nessuna risposta (curl exit 7); `/config.js` → `backendUrl http://127.0.0.1:8001`; `GET /chats` `200 []` |
+| CA-92 | Edge senza finestra su `http://127.0.0.1:8080`: «Nuova chat», «Quanto fa 17 * 23?» | ✅ attesa visibile, risposta dopo 70 s «17 * 23 fa 391.», «Strumenti usati: calculate» (argomenti `{"expression":"17 * 23"}`, risultato 391), titolo dalla domanda, indirizzo `#/chats/1`, nessun errore JavaScript. `docker compose logs agent`: `step=1/5 variant=mcp tool=calculate call_id=… arguments={'expression': '17 * 23'}`, `api response=chat status=200 tools=calculate`; `logs backend`: riga d'avvio con `lab:***@postgres:5432` e `agent_url=http://agent:8000`, `send_message chat=1 status=201 tools=calculate` |
+| CA-93 | `docker compose down` (container e rete rimossi, volumi presenti), `docker compose up -d`, pagina riaperta | ✅ quattro servizi di nuovo attivi; `GET /chats` → la chat 1; nella pagina la stessa chat con i due messaggi e «Strumenti usati: calculate» |
+| — | `printf 'Quanto fa 2 + 2?\nesci\n' \| docker compose run --rm -T assistant` con i quattro servizi attivi | ✅ CLI sullo stesso `agent` (`Running`, `Healthy`), «2 + 2 fa 4.», «Arrivederci!», exit 0 |
+| — | Diagnosi: `python -m http.server 8080` sull'host, poi `docker compose up -d frontend` | ✅ «ports are not available: exposing port TCP 127.0.0.1:8080 … bind: Only one usage of each socket address …», exit 1; processo fermato → `up -d frontend` riparte |
+| — | Diagnosi: `POSTGRES_PASSWORD=altrapassword docker compose up -d backend` sul volume già inizializzato | ✅ `postgres` ricreato e `healthy`, `backend` `Exited (1)` con «Database non raggiungibile: … password authentication failed for user "lab"»; `docker compose up -d` con il `.env` → di nuovo attivo, chat presente |
+| — | `docker compose down`, `docker volume rm assistente-laboratorio_postgres-data`, `docker compose up -d` (comando del README) | ✅ `GET /chats` → `[]`; `notes-data` intatto; poi `docker compose down` |
+| — | `pytest` | ✅ 927 passed, 84 deselected |
+
+- Decisione cambiata durante l'esecuzione: il volume `postgres-data` è stato eliminato per verificare
+  il comando del README; ricreato vuoto dall'`up -d` successivo (la chat di prova non c'è più, gli
+  esiti restano qui). Lo stack è fermo (`docker compose down`); volumi `notes-data` e
+  `postgres-data` presenti. Container `assistente-postgres` dello Step 7 non toccato.
+- Nel README niente `docker compose down -v` (scritto in una prima stesura e tolto): cancellerebbe
+  anche `notes-data`; per le chat si indica `docker volume rm …_postgres-data`.
+- Documenti: README (introduzione con Compose; sezione Docker divisa in «Avvio dei quattro servizi e
+  chat dal browser», «CLI in Docker», «Immagini e volumi»; «in corso» tolto; due voci di «Diagnosi»:
+  porta occupata e password cambiata dopo la creazione del volume), `CLAUDE.md` (comandi Docker con
+  `up -d --build`, `ps`, `logs`, `down`), requisiti §17 (esiti di CA-91…CA-93).
+- Problemi aperti: una sola esecuzione con il modello (dimostra il comportamento con quella domanda);
+  pagina provata solo con Edge; `docker compose up` senza `-d` (log in primo piano) e
+  `docker compose build --no-cache` non provati; i comandi del README sono stati eseguiti da Git
+  Bash, non da PowerShell (sono gli stessi comandi `docker`); la frase di `CLAUDE.md` «Confini» che
+  elenca gli step successivi come da non anticipare non è stata cambiata (regola dell'utente,
+  superata dalla sezione «Modalità autonoma»).
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13
