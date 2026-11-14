@@ -22,11 +22,16 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
   prompt MCP `spiega` e `riassumi_conversazione` in `prompts.py`; server
   FastMCP in `mcp_server.py`, client sincrono e adattatore in `mcp_client.py`. Solo
   `service.py` collega grafo, MCP e modelli; `__main__.py` collega client HTTP e terminale.
+- Back-end (Step 7, in corso) nel pacchetto `backend/`, servizio distinto dall'agente: `db.py`
+  (schema SQLAlchemy `chats`/`chat_messages`, `create_db_engine`, `init_db`), `store.py`
+  (`ChatStore`: chat, messaggi visibili e stato dell'agente). Da `assistant` importa solo il client
+  dell'agente e la configurazione del logging; `assistant` non importa nulla da `backend`.
 - Test in `tests/`; il modello finto (`FakeModel`), il router finto (`ConversationRouter`), il
   revisore finto (`ApprovingReviewer`), il client MCP finto (`FakeMcpClient`), il servizio finto
   (`fake_service`: l'app vera su un grafo finto, con `TestClient`) e gli aiuti comuni sono in
   `conftest.py`. I test MCP avviano il server
-  reale via stdio. Le prove con LM Studio stanno in `test_real.py` (marcatore `real`).
+  reale via stdio. I test del back-end (`test_backend_*.py`) usano SQLite in memoria con lo stesso
+  `init_db`, senza PostgreSQL. Le prove con LM Studio stanno in `test_real.py` (marcatore `real`).
 - Note in SQLite: in locale `NOTES_DB` (default `data/notes.sqlite3`, ignorato da Git), in
   Docker il volume `notes-data`.
 - Dipendenze dirette in `requirements.txt` (app) e `requirements-dev.txt` (test); tutte le

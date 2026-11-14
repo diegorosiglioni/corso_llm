@@ -1004,6 +1004,66 @@ autonoma); i punti successivi dello step seguono la specifica.
 - Problemi aperti: rischi nella specifica §13 (invii contemporanei, SQLite nei test, domande senza
   risposta); README e `CLAUDE.md` cambiano dal punto 2 in poi, quando c'è codice da descrivere.
 
+### Punto 2 · Modello dati e archivio — piano
+
+1. `backend/__init__.py`; `backend/db.py` (specifica §3): `Base`, `Chat`, `ChatMessage` (ORM
+   dichiarativo, `ON DELETE CASCADE`, `cascade="all, delete-orphan"` con `passive_deletes=True`),
+   `create_db_engine(url)` (SQLite: `StaticPool` per il database in memoria e
+   `PRAGMA foreign_keys=ON`; PostgreSQL: `pool_pre_ping=True`), `init_db(engine)` con `create_all`.
+2. `backend/store.py` (specifica §4): `ChatNotFoundError`, `InvalidInputError`, `MessageRecord`,
+   `ChatRecord`, `AgentState`, `ChatStore` (una sessione e una transazione per metodo, orari in UTC
+   anche se SQLite li restituisce senza fuso), `title_from_question`.
+3. Test `tests/test_backend_store.py` su SQLite in memoria con orologio fisso e avanzabile:
+   schema (tabelle, colonne, chiave esterna con `CASCADE`), creazione con e senza titolo, elenco con
+   titolo, data dell'ultimo messaggio e ordine, lettura in ordine, eliminazione con i messaggi
+   contati nella tabella, titolo dalla prima domanda (taglio, prima riga) e non dalle successive,
+   `add_question`/`add_answer` con lo stato dell'agente, chat inesistente, chat eliminata durante il
+   turno, errori di SQLAlchemy che arrivano al chiamante. Poi `pytest` completo.
+4. `CLAUDE.md` (struttura: pacchetto `backend/`).
+
+Decisioni:
+- L'archivio normalizza titolo e testo (spazi tolti, titolo vuoto = assente) e solleva
+  `InvalidInputError` per titolo oltre 200 caratteri o messaggio vuoto: un solo punto di controllo,
+  che l'API del punto 3 trasforma in `400 invalid_request`. Un'eccezione propria e non `ValueError`,
+  così un `ValueError` imprevisto non diventa un `400`.
+- Titolo dalla prima domanda: prima riga senza spazi ai lati; se supera 60 caratteri, i primi 59
+  (spazi finali tolti) più «…», così il titolo resta entro 60 caratteri.
+- `create_db_engine` accetta anche SQLite (solo i test lo usano): i test passano dallo stesso
+  `create_db_engine` e `init_db` dell'esercizio; il rifiuto degli schemi diversi da PostgreSQL sta
+  nella configurazione (punto 3).
+- `pool_pre_ping=True` su PostgreSQL: dopo un riavvio del database la prima richiesta non fallisce
+  per una connessione morta nel pool (opzione standard di SQLAlchemy).
+
+### Punto 2 · Modello dati e archivio — fatto
+
+- Implementati `backend/__init__.py`, `backend/db.py` (`Chat`, `ChatMessage`, `create_db_engine`,
+  `init_db`) e `backend/store.py` (`ChatStore`, `ChatRecord`, `MessageRecord`, `AgentState`,
+  `ChatNotFoundError`, `InvalidInputError`, `title_from_question`, `MAX_TITLE_LENGTH`,
+  `TITLE_LENGTH`); `CLAUDE.md` (struttura e test del back-end).
+- Decisioni prese durante l'esecuzione:
+  - `last_message_at` di `get_chat` calcolato dai messaggi già letti (niente seconda query);
+    `list_chats` usa `max(created_at)` con `outer join` e `group_by(chats.id)` (ammesso da
+    PostgreSQL perché `id` è la chiave primaria).
+  - L'eliminazione lascia la cancellazione dei messaggi al database (`passive_deletes=True`): un
+    test cancella la chat con SQL diretto e controlla che i messaggi spariscano.
+- Test nuovi: `test_backend_store.py` (44: schema e chiave esterna con `CASCADE`, `create_all` che
+  non tocca i dati, `PRAGMA foreign_keys`; creazione con e senza titolo, spazi, titolo di 200 e 201
+  caratteri; elenco vuoto, titolo e data dell'ultimo messaggio, ordine per attività e a parità per
+  id; orari in UTC da un altro fuso; lettura in ordine anche con orari uguali, chat vuota, chat
+  separate, chat inesistente; eliminazione con i messaggi contati nella tabella, cascata del
+  database, nuova chat che non eredita messaggi né stato; titolo dalla prima domanda, prima riga,
+  taglio con «…», non dalle successive né sopra un titolo dato; stato dell'agente vuoto, sostituito
+  con la risposta, invariato con la sola domanda, separato per chat, copiato; messaggio vuoto e chat
+  inesistente senza righe salvate; chat eliminata durante il turno; errori di SQLAlchemy al
+  chiamante).
+- Verifiche: tre mutazioni temporanee (senza `PRAGMA`, orario non convertito in UTC, titolo
+  sovrascritto a ogni domanda) fanno fallire 5, 1 e 3 test; DDL PostgreSQL compilato senza database
+  (`SERIAL`, `TIMESTAMP WITH TIME ZONE`, `JSON DEFAULT '[]'`, `ON DELETE CASCADE`, indice su
+  `chat_id`), conforme alla specifica §3.
+- `pytest` → 733 passed, 23 deselected (`-W error` sul file nuovo: nessun avviso).
+- Problemi aperti: l'archivio su PostgreSQL vero (CA-77) resta da provare al punto 5; API, avvio e
+  README arrivano ai punti 3–5. README non cambiato: nessun comportamento visibile all'utente.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13
