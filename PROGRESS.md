@@ -689,6 +689,66 @@ Decisioni:
 - Problemi aperti: nessuno nuovo. Il modulo non è ancora esposto via HTTP (punto 3); README
   invariato (comportamento della CLI uguale), si aggiorna al punto 5.
 
+### Punto 3 · Endpoint `POST /chat` — piano
+
+1. `assistant/commands.py`: `PromptRequestError` con le sottoclassi `PromptRejectedError`
+   (controllo dell'host), `PromptListError` (`prompts/list` fallito), `PromptGetError` (`prompts/get`
+   fallito o messaggi non utilizzabili); `resolve_prompt(client, name, arguments)` con le righe di
+   log dello Step 5; `PromptCommands._prompt` la usa (testi e log della CLI invariati).
+2. `assistant/api.py` (specifica §4–§7): modelli `pydantic` dei messaggi (`role` come
+   discriminatore), di richiesta, risposta ed errore; `ApiError`; `create_app(*, graph, client)` con
+   `POST /chat` (messaggio o prompt), corpo d'errore `{"error", "detail"}`, righe `api request=chat …`
+   e `api response=chat …`; titolo e descrizioni dell'OpenAPI in italiano.
+3. Test: `tests/test_api.py` con `TestClient`, `fake_graph` e `FakeMcpClient` (messaggio, strumento
+   usato, cronologia e riassunto di un turno precedente, compressione, prompt valido e rifiutato senza
+   `prompts/get` né modello, ogni errore di richiesta, cronologia e prompt, cronologia del chiamante
+   invariata, `/openapi.json` e `/docs`, righe di log); `test_commands.py` con `resolve_prompt`. Poi
+   `pytest` completo.
+
+Decisioni:
+- In questo punto gli errori della richiesta di `/chat` (`400` `invalid_request`, `invalid_history`,
+  `prompt_rejected`; `502` `prompt_unavailable`; `503` `mcp_unavailable` di `prompts/list`): il ramo
+  dei prompt non si prova senza. Errori di LM Studio (`model_unavailable`, `model_error`), `500`,
+  `/status`, `/prompts` e i parametri `model_id`/`model_status` di `create_app` al punto 4 (niente
+  codice senza uso).
+- Cronologia descritta con modelli `pydantic` (unione discriminata da `role`, `extra="forbid"`): il
+  formato compare nell'OpenAPI; forma sbagliata (ruolo sconosciuto o `system`, campo in più, tipo
+  sbagliato) → `422` come nella tabella §6; ordine e testi vuoti → `messages_from_json` → `400
+  invalid_history`.
+- Risposta con `response_model_exclude_unset=True`: la cronologia esce esattamente come da
+  `messages_to_json` (campi assenti omessi, `args: null` delle chiamate non interpretabili conservato).
+- Il `422` lo produce FastAPI prima dell'endpoint: nessuna riga `api` (annotato nella specifica §7).
+
+### Punto 3 · Endpoint `POST /chat` — fatto
+
+- Implementati `assistant/api.py` (modelli `pydantic` dei messaggi con `role` discriminatore,
+  `ChatRequest`, `ChatResponse`, `ToolUse`, `ErrorBody`, `ApiError`, `create_app(*, graph, client)`
+  con `POST /chat`, righe `api request=chat …`/`api response=chat …`) e in `commands.py`
+  `resolve_prompt` con `PromptRequestError` e le sottoclassi `PromptRejectedError`,
+  `PromptListError`, `PromptGetError`; `PromptCommands._prompt` la usa (`_specs` e il log del
+  rifiuto sono ora funzioni del modulo: niente codice duplicato tra CLI e servizio). `CLAUDE.md`,
+  struttura, con `api.py`; specifica §7 con le aggiunte del punto.
+- Decisioni prese durante l'esecuzione: `message` senza spazi iniziali e finali, come nel terminale
+  (stessa domanda da CLI e API, CA-68); riga di richiesta con `kind=none`/`kind=both` per le
+  richieste senza o con entrambi i campi; `InvalidToolCall` con `id` e `name` testo o `null` nello
+  schema (la risposta non deve fallire se LM Studio manda una chiamata senza `id`; il rifiuto in
+  ingresso resta di `messages_from_json`, `400`); `PromptListFails` spostato in `conftest.py` (lo
+  useranno anche i test di `/prompts` e `/status`).
+- Test nuovi: `tests/test_api.py` (45: messaggio con strumento e cronologia JSON attesa, spazi tolti,
+  turno successivo con cronologia e riassunto del precedente, servizio senza conversazioni,
+  riassunto del chiamante all'agente, compressione, cronologia con ogni ruolo e campo restituita
+  uguale, errore di uno strumento nel turno `200`; prompt valido e senza argomenti, tre rifiuti
+  dell'host senza `prompts/get` né modello, `prompts/list` fallito `503`, valore rifiutato dal server
+  e messaggi non utilizzabili `502`; cinque `invalid_request`, quattro `invalid_history` anche con un
+  prompt e senza `prompts/list`, tredici corpi non conformi `422` senza righe `api`; righe di log
+  esatte e livelli; `/openapi.json` con `/chat`, codici, schemi e discriminatore; `/docs`),
+  `test_commands.py` (+6, `resolve_prompt`). Test esistenti della CLI invariati e verdi.
+- `pytest` → 593 passed, 19 deselected.
+- Problemi aperti: errori di LM Studio (`503`/`502`) e `500` non ancora tradotti (un'eccezione del
+  grafo dà il `500` predefinito di FastAPI); `/status`, `/prompts` e l'avvio con
+  `python -m assistant.service` al punto 4; README invariato (il servizio non si avvia ancora da riga
+  di comando), si aggiorna al punto 5.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

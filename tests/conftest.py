@@ -159,6 +159,14 @@ class FakeMcpClient:
             raise PromptUnavailableError(str(error)) from error
 
 
+class PromptListFails(FakeMcpClient):
+    """FakeMcpClient whose prompts/list fails as with a closed MCP session."""
+
+    def list_prompts(self):
+        self.prompt_lists += 1
+        raise PromptUnavailableError("sessione MCP chiusa")
+
+
 def lm_studio_error() -> openai.APIConnectionError:
     return openai.APIConnectionError(
         request=httpx2.Request("POST", "http://localhost:1234/v1/chat/completions")

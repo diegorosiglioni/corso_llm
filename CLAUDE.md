@@ -9,6 +9,7 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
 ## Struttura e comandi
 - Codice in `assistant/`: `config.py`, `model.py`, `tools.py`, `router.py`, `reviewer.py`,
   `summary.py`, `preferences.py`, `graph.py`, `agent.py` (turno senza stato e messaggi in JSON),
+  `api.py` (app FastAPI del servizio HTTP dell'agente),
   `session.py` (che usa `agent.py`), `terminal.py`, `commands.py`
   (comandi della CLI che cominciano con `/`); ambito del router in
   `assistant/data/scope.txt` (sostituibile con `SCOPE_FILE`); preferenze dell'utente (resource MCP

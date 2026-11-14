@@ -4,13 +4,17 @@ import logging
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
-from assistant.commands import CommandResult, PromptCommands, parse_prompt_command
-from assistant.mcp_client import (
-    PromptArgument,
-    PromptMessage,
-    PromptSpec,
-    PromptUnavailableError,
+from assistant.commands import (
+    CommandResult,
+    PromptCommands,
+    PromptGetError,
+    PromptListError,
+    PromptRejectedError,
+    PromptRequestError,
+    parse_prompt_command,
+    resolve_prompt,
 )
+from assistant.mcp_client import PromptArgument, PromptMessage, PromptSpec
 from assistant.prompts import (
     EXPLAIN_DESCRIPTION,
     LEVEL_DESCRIPTION,
@@ -19,7 +23,7 @@ from assistant.prompts import (
     TOPIC_DESCRIPTION,
 )
 
-from conftest import MCP_SPECS, FakeMcpClient
+from conftest import MCP_SPECS, FakeMcpClient, PromptListFails
 
 EXPLAIN = PromptSpec("spiega", EXPLAIN_DESCRIPTION, (
     PromptArgument("argomento", TOPIC_DESCRIPTION, True),
@@ -85,15 +89,9 @@ def test_command_word_ignores_case(text):
     assert PromptCommands(client_with(EXPLAIN, SUMMARY)).handle(text).output == SERVER_LIST
 
 
-class ListFails(FakeMcpClient):
-    def list_prompts(self):
-        self.prompt_lists += 1
-        raise PromptUnavailableError("sessione MCP chiusa")
-
-
 def test_list_unavailable(caplog):  # CA-56
     caplog.set_level(logging.INFO)
-    client = ListFails(MCP_SPECS)
+    client = PromptListFails(MCP_SPECS)
     result = PromptCommands(client).handle("/prompts")
     assert result.output == "Errore: prompt non disponibili (sessione MCP chiusa)."
     assert [(r.levelno, r.getMessage()) for r in caplog.records] == [
@@ -356,7 +354,7 @@ def test_value_rejected_by_the_server(caplog):  # CA-57
 
 def test_list_unavailable_for_prompt(caplog):
     caplog.set_level(logging.INFO)
-    client = ListFails(MCP_SPECS)
+    client = PromptListFails(MCP_SPECS)
     result = PromptCommands(client).handle("/prompt spiega argomento=MCP")
     assert result == CommandResult(output="Errore: prompt non disponibili (sessione MCP chiusa).")
     assert client.prompt_gets == []
@@ -372,3 +370,56 @@ def test_texts_with_quotes_and_newlines_stay_on_one_log_line(caplog):
     assert caplog.records[-1].getMessage() == (
         r'prompts/get name=spiega message=1/1 role=user text="Riga \"uno\"\nriga due"'
     )
+
+
+# --- resolve_prompt, shared by the CLI and the HTTP service (lesson 6, step 6, point 3) ---
+
+def test_resolve_prompt_returns_the_messages(caplog):
+    caplog.set_level(logging.INFO)
+    client = client_answering()
+    assert resolve_prompt(client, "spiega", {"argomento": "MCP"}) == [HumanMessage("Spiegami MCP.")]
+    assert client.prompt_gets == [("spiega", {"argomento": "MCP"})]
+    assert [r.getMessage() for r in caplog.records] == [
+        "prompts/list count=2 names=spiega,riassumi_conversazione",
+        'prompts/get name=spiega arguments={"argomento": "MCP"} status=ok messages=1',
+        'prompts/get name=spiega message=1/1 role=user text="Spiegami MCP."',
+    ]
+
+
+def test_resolve_prompt_rejected_without_prompts_get(caplog):
+    caplog.set_level(logging.INFO)
+    client = client_with(EXPLAIN, SUMMARY)  # prompts/get would raise AssertionError
+    reason = "argomenti obbligatori mancanti per 'spiega': 'argomento'"
+    with pytest.raises(PromptRejectedError) as raised:
+        resolve_prompt(client, "spiega", {"livello": "base"})
+    assert str(raised.value) == reason
+    assert client.prompt_gets == []
+    assert caplog.records[-1].getMessage() == f"prompt_command status=rejected reason={_json(reason)}"
+
+
+def test_resolve_prompt_list_unavailable():
+    client = PromptListFails(MCP_SPECS)
+    with pytest.raises(PromptListError, match=r"^prompt non disponibili \(sessione MCP chiusa\)$"):
+        resolve_prompt(client, "spiega", {"argomento": "MCP"})
+    assert client.prompt_gets == []
+
+
+def test_resolve_prompt_value_rejected_by_the_server():
+    def refuse(arguments):
+        raise ValueError("Livello non valido")
+
+    with pytest.raises(PromptGetError) as raised:
+        resolve_prompt(client_answering(refuse), "spiega", {"argomento": "MCP", "livello": "x"})
+    assert str(raised.value) == "il prompt 'spiega' non è disponibile (Livello non valido)"
+
+
+def test_resolve_prompt_unusable_messages():
+    client = client_answering(lambda a: [])
+    with pytest.raises(PromptGetError) as raised:
+        resolve_prompt(client, "spiega", {"argomento": "MCP"})
+    assert str(raised.value) == "il prompt 'spiega' non è utilizzabile (nessun messaggio)"
+
+
+def test_prompt_request_errors_share_a_base_class():
+    for error in (PromptRejectedError, PromptListError, PromptGetError):
+        assert issubclass(error, PromptRequestError)

@@ -193,6 +193,11 @@ api response=status status=503 mcp=ok model=unavailable
 Il testo dei messaggi non entra nelle righe dell'API (c'è già nei log del grafo e di MCP, quando
 serve). Le risposte `4xx` sono a livello INFO, `5xx` a WARNING (`500` a ERROR con traceback).
 
+Aggiunte del punto 3 (modalità autonoma): `kind` vale `none` o `both` per una richiesta senza
+`message` né `prompt` o con entrambi; `tools=` resta vuoto in un turno senza strumenti; un corpo non
+conforme allo schema (`422`) è rifiutato da FastAPI prima dell'endpoint e non scrive righe `api`. Il
+testo di `message` arriva al grafo senza gli spazi iniziali e finali, come nel terminale.
+
 ## 8. Servizio (`assistant/service.py`)
 
 Stessa sequenza dell'avvio attuale: configurazione (`load_config`, più `AGENT_HOST` e `AGENT_PORT`),
