@@ -50,6 +50,57 @@ Dove si trova il lavoro già fatto (punti `[x]` di `TODO.md`):
 - `.gitattributes`: `*.sh` sempre con fine riga LF, perché con `core.autocrlf=true` un checkout darebbe a `loop.sh` fine riga CRLF che bash non accetta.
 - Nessun file cancellato.
 
+## Step 4 · Resource MCP: preferenze dell'utente (2026-11-14)
+
+Specifica: [`docs/superpowers/specs/2026-11-14-preferenze-design.md`](docs/superpowers/specs/2026-11-14-preferenze-design.md);
+requisiti §12 (RF-39…RF-44, CA-46…CA-52). Questo piano sostituisce l'approvazione (modalità
+autonoma); i punti successivi dello step seguono la specifica.
+
+### Piano dello step (un punto di `TODO.md` per riga)
+
+1. Specifica e requisiti §12. Verifica: `pytest` invariato (solo documenti).
+2. Server: `assistant/preferences.py` (`PREFERENCES_URI`, `read_preferences_file`),
+   `assistant/data/preferenze.json`, resource in `mcp_server.py` con `--preferences-file`,
+   `server_command(..., preferences_file)`, `PREFERENCES_FILE` in `config.py` e `__main__.py` (per
+   non lasciare la suite rossa). Test: `test_preferences.py` (lettura del file),
+   `test_mcp_server.py` (`resources/list` sì, `tools/list` no, lettura, file mancante),
+   `test_config.py`.
+3. Client: `ResourceUnavailableError`, `McpClient.read_resource`, `FakeMcpClient.read_resource` in
+   `conftest.py`. Test: `test_mcp_client.py` via stdio (leggibile, URI inesistente, file mancante,
+   sessione chiusa).
+4. Host: `Preferences`, `parse_preferences`, `preferences_prompt`, `with_preferences`,
+   `load_preferences` in `preferences.py`; `SYSTEM_PROMPT` e parametro `preferences` di
+   `build_graph`; lettura in `_converse`, riga di avvio. Test: `test_preferences.py`,
+   `test_graph.py`, `test_main.py` con client e modello finti.
+5. Prove reali CA-50…CA-52 (`test_real.py`), README (sezione preferenze e diagnosi), `CLAUDE.md`
+   (struttura), esiti in requisiti §12 e qui. LM Studio non raggiungibile → `[!]`.
+
+### Decisioni (scelte del progettista, dettagli nella specifica §1)
+
+- Chiavi JSON in inglese (`language`, `timezone`, `style`), valori in italiano come nella traccia:
+  regola di `CLAUDE.md` sulle chiavi JSON.
+- Predefiniti `italiano`, `Europe/Rome`, `sintetico`: coincidono con il comportamento attuale.
+- File di esempio nel pacchetto (`assistant/data/preferenze.json`) con `PREFERENCES_FILE`: stesso
+  schema già usato per `scope.txt`/`SCOPE_FILE`.
+- Il server controlla solo che sia un oggetto JSON, l'host valida campo per campo: un campo sbagliato
+  non fa perdere gli altri.
+- Testo italiano costruito dai valori, non il JSON grezzo, in cima al prompt: istruzioni esplicite
+  per un modello piccolo.
+- Solo l'agente riceve le preferenze: la traccia parla del suo prompt di sistema.
+- `SYSTEM_PROMPT` senza «in italiano, in modo breve» né l'esempio `Europe/Rome`: altrimenti
+  contraddirebbe le preferenze.
+- Eccezione nuova `ResourceUnavailableError`: tiene separati resource e strumenti nel codice e nei log.
+- `compose.yaml` e `Dockerfile` invariati: il file di esempio è già nell'immagine.
+
+### Punto 1 · Specifica e requisiti — fatto
+
+- Scritti la specifica e i requisiti §12. API di `fastmcp` 4.1.6 verificata con uno script usa e
+  getta fuori dal progetto (`list_resources`, `read_resource`, `ResourceError(log_level=…)`,
+  URI inesistente → `MCPError`).
+- Test: `pytest` → 297 passed, 15 deselected (nessun codice cambiato).
+- Problemi aperti: rischi nella specifica §9 (fuso predefinito ignorato dal modello, revisore con
+  risposte non in italiano), da verificare nella prova reale del punto 5.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

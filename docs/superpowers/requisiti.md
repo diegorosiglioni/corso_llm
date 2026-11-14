@@ -1,9 +1,10 @@
 # Requisiti — Assistente del laboratorio
 
-Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5) e integrati per la lezione 6 (§9–§11)
+Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5) e integrati per la lezione 6 (§9–§12)
 Stato: §1–§7 approvati il 2026-10-26; revisioni del 2026-11-09 e §8 approvate il 2026-11-09
 (insieme alla specifica `specs/2026-11-09-strumenti-mcp-design.md`); §9 (lezione 6, Step 1)
-e §10 (lezione 6, Step 2) approvate il 2026-11-11; §11 (lezione 6, Step 3) approvata il 2026-11-13
+e §10 (lezione 6, Step 2) approvate il 2026-11-11; §11 (lezione 6, Step 3) approvata il 2026-11-13;
+§12 (lezione 6, Step 4) scritta il 2026-11-14 in modalità autonoma (piano in `PROGRESS.md`)
 
 Questo documento fissa **che cosa** deve fare l'applicazione. Il **come** (architettura,
 moduli, dettagli del grafo) sarà descritto nella specifica, che rimanda a questi requisiti.
@@ -353,3 +354,46 @@ Riferimento: `LLM_Lez_6.pdf`, slide 3 e 6 (riassunto in `lezione6.md`). Stato: a
 | CA-43 | Con LM Studio e soglie 4 e 2: «Mi chiamo Paolo», «Che ore sono a Tokyo?», «Come mi chiamo?» → entro il terzo turno riga con i messaggi prima e dopo; nessun messaggio conservato prima dell'ultima domanda contiene «Paolo»; risposta con «Paolo». | reale |
 | CA-44 | Le prove reali precedenti (CA-2…CA-4, CA-16…CA-21, CA-27, CA-36) passano con il nodo riassunto attivo. | reale |
 | CA-45 | Da terminale, in locale e con Docker Compose, la sequenza di CA-43 con soglie 4 e 2 mostra le righe `node=summary` e la risposta con «Paolo». | reale, manuale |
+
+## 12. Lezione 6, Step 4 — resource MCP delle preferenze (2026-11-14)
+
+Riferimento: `LLM_Lez_6.pdf`, Blocco B e Step 4 (riassunto in `lezione6.md`). Stato: scritti il
+2026-11-14 in modalità autonoma insieme alla specifica `specs/2026-11-14-preferenze-design.md`; le
+scelte del progettista sono nella sua §1.
+
+- **RF-39** *File delle preferenze* — Le preferenze dell'utente stanno in un file JSON, non nel
+  codice: per default `assistant/data/preferenze.json`, sostituibile con la variabile
+  `PREFERENCES_FILE`. Il file è un oggetto con `language` (lingua delle risposte, testo libero su una
+  riga, al massimo 40 caratteri), `timezone` (fuso orario predefinito, nome IANA) e `style`
+  (`sintetico` o `dettagliato`). Valori predefiniti: `italiano`, `Europe/Rome`, `sintetico`.
+- **RF-40** *Resource* — Il server MCP locale espone la resource `utente://preferenze` (nome
+  `preferenze`, tipo `application/json`), che a ogni lettura restituisce il contenuto del file. La
+  resource compare in `resources/list` e non in `tools/list`. Un file mancante, illeggibile o che non
+  contiene un oggetto JSON produce un errore MCP con un messaggio in italiano.
+- **RF-41** *Lettura dell'host* — L'applicazione legge la resource una sola volta, a inizio sessione
+  e prima della prima domanda, e mette in cima al prompt di sistema dell'agente un testo con lingua,
+  fuso predefinito e stile; il fuso predefinito si usa quando l'utente chiede data o ora senza
+  indicare un luogo o un fuso. La resource non è passata al modello come strumento (`bind_tools`
+  riceve gli stessi strumenti di prima) e il modello non la richiede. Router, revisore e riassunto
+  non ricevono le preferenze.
+- **RF-42** *Resource non disponibile* — Se la resource non si può leggere o il suo contenuto non è
+  un oggetto JSON, la sessione parte con i valori predefiniti e il log lo segnala con un WARNING. Un
+  singolo campo mancante o non valido prende il valore predefinito, con un WARNING che indica campo,
+  problema e valore; gli altri campi restano quelli del file. Le preferenze non impediscono mai
+  l'avvio.
+- **RF-43** *Log* — La lettura della resource ha righe proprie, che cominciano con `resources/read`
+  e riportano URI, esito (`ok`, `partial`, `unavailable`) e valori usati, separate dalle righe delle
+  chiamate agli strumenti; il server scrive `event=resource_read`. All'avvio il log riporta
+  `preferences_file`.
+- **RF-44** *Effetto* — Modificando il file, la sessione successiva segue le preferenze nuove senza
+  modifiche al codice.
+
+| ID | Verifica | Come |
+|----|----------|------|
+| CA-46 | Lettura del file: esempio → tre valori predefiniti; BOM ammesso; file mancante, JSON non valido o non oggetto → errore con il percorso. Validazione: ogni campo mancante o non valido prende il predefinito da solo. | automatica |
+| CA-47 | Server via stdio: `utente://preferenze` in `resources/list` con nome e `application/json`, assente da `tools/list` (restano i sette strumenti); lettura → JSON del file; file mancante → errore MCP. | automatica |
+| CA-48 | Client via stdio: `read_resource` restituisce il testo; URI inesistente, file mancante e sessione chiusa → `ResourceUnavailableError`. | automatica |
+| CA-49 | Con client e modello finti: resource letta una sola volta in una sessione di più turni; testo delle preferenze in cima al prompt di sistema dell'agente, prima di `SYSTEM_PROMPT` e del riassunto; strumenti del modello invariati; resource assente → predefiniti e WARNING `status=unavailable`; riga di avvio con `preferences_file`. | automatica |
+| CA-50 | Con LM Studio e `timezone="America/New_York"`: «Che ore sono?» → `get_current_time` con `America/New_York`, senza chiedere il fuso. | reale |
+| CA-51 | Con LM Studio: la stessa domanda in due sessioni, preferenze predefinite e poi `language="inglese"` → prima risposta in italiano, seconda in inglese. | reale |
+| CA-52 | Le prove reali precedenti (CA-2…CA-4, CA-16…CA-21, CA-27, CA-36, CA-43) passano con le preferenze predefinite. | reale |
