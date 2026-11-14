@@ -1,17 +1,69 @@
-# Handoff — Assistente del laboratorio
+# Diario di lavoro
+
+## Stato iniziale (2026-11-14)
+
+- Branch `auto-claude`, creato da `dev` a `428cc8a`; `origin/dev` e `origin/main` allineati allo
+  Step 3.
+- Fatto: base delle lezioni 3–4, correzioni dell'audit, lezione 5 (MCP e quattro strumenti),
+  lezione 6 Step 1 (router), Step 2 (revisore) e Step 3 (riassunto). Prossimo: Step 4 · Resource
+  `utente://preferenze` (primo punto `[ ]` di `TODO.md`).
+- Test senza modello, da PowerShell nella radice: `.\.venv\Scripts\python.exe -m pytest`
+  (da Git Bash: `.venv/Scripts/python.exe -m pytest`). Esito al 2026-11-14:
+  `297 passed, 15 deselected in 21.21s`.
+- Prove reali (LM Studio attivo, variabili impostate, circa 30 minuti):
+  `.\.venv\Scripts\python.exe -m pytest -m real -v`.
+
+Dove si trova il lavoro già fatto (punti `[x]` di `TODO.md`):
+- Base (lezioni 3–4): specifica `docs/superpowers/specs/2026-10-26-assistente-laboratorio-design.md`,
+  piano `docs/superpowers/plans/2026-10-26-assistente-laboratorio.md`; commit `d7d0d38`…`68ceec8`
+  (`assistant/graph.py`, `config.py`, `session.py`, `terminal.py`, `model.py`, `tools.py`,
+  `Dockerfile`, `compose.yaml`).
+- Correzioni dell'audit: specifica e piano del 2026-11-03; commit `708b40a`…`be631ef`
+  (`constraints.txt`, `compose.yaml`, `.dockerignore`).
+- Lezione 5: specifica e piano del 2026-11-09; commit `8ed2849`…`edcb005` (`units.py`,
+  `calculator.py`, `catalog.py`, `notes.py`, `mcp_server.py`, `mcp_client.py`, `tests/test_real.py`).
+- Progetto nella radice: commit `83a5fc7`.
+- Step 1 · Router: specifica e piano del 2026-11-11; commit `c1f110f`…`d0bc81c` (`router.py`,
+  `assistant/data/scope.txt`).
+- Step 2 · Revisore: specifica e piano del 2026-11-11; commit `595c59a`…`f53b67a` (`reviewer.py`).
+- Step 3 · Riassunto: specifica e piano del 2026-11-13; commit `32bdf67`…`428cc8a` (`summary.py`).
+- Dettagli, verifiche e punti aperti di ogni fase: sezione «Storico» più sotto.
+
+## Riorganizzazione iniziale (2026-11-14)
+
+- `docs/superpowers/handoff.md` → `PROGRESS.md` (`git mv`): stesso scopo (stato, verifiche,
+  decisioni). Contenuto conservato per intero nella sezione «Storico», con i titoli abbassati di un
+  livello e i link relativi corretti per la nuova posizione (`docs/superpowers/...`).
+- `docs/superpowers/prossimo-prompt.txt` → `_archivio/prossimo-prompt.txt` (`git mv`): prompt per
+  la sessione successiva, superato (riguardava lo Step 3, già fatto) e sostituito da `PROMPT.md`.
+- Creati `TODO.md` (punti fatti `[x]` e step 4–9 della lezione 6 più lo streaming facoltativo,
+  dalla traccia `docs/superpowers/lezione6.md`), `PROMPT.md` e `loop.sh`.
+- `CLAUDE.md`: puntatore a `PROGRESS.md` e `TODO.md` al posto di `handoff.md`; nuova sezione
+  «Modalità autonoma (branch `auto-claude`)» che adatta al loop le regole su approvazioni, branch e
+  commit (scelta: senza questa sezione ogni sessione del loop si fermerebbe in attesa di
+  un'approvazione che non arriva).
+- `docs/superpowers/requisiti.md`: i due rimandi a `handoff.md` ora indicano `PROGRESS.md`.
+- `.gitignore`: aggiunti `/LLM_Lez_*.pdf` (le slide restano non tracciate, come deciso in
+  precedenza, e il loop fa `git add -A`). `_archivio/` invece è versionato.
+- Non toccati: `.superpowers/` (stato locale delle skill, già escluso dal suo `.gitignore`),
+  `assistente-laboratorio/` (cartella vuota, residuo dello spostamento), `lezione3/` (solo locale).
+- `.gitattributes`: `*.sh` sempre con fine riga LF, perché con `core.autocrlf=true` un checkout darebbe a `loop.sh` fine riga CRLF che bash non accetta.
+- Nessun file cancellato.
+
+## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13
 Stato: **lezione 6, Step 1 (router), Step 2 (revisore) e Step 3 (riassunto): implementati e
 verificati e pubblicati.**
 Il 2026-11-13 `origin/dev` e `origin/main` sono stati portati a `f53b67a` (Step 2) e poi, con lo
 Step 3, al commit che contiene questa riga (avanzamento rapido).
-Step 3: specifica [`specs/2026-11-13-riassunto-design.md`](specs/2026-11-13-riassunto-design.md),
-piano [`plans/2026-11-13-riassunto.md`](plans/2026-11-13-riassunto.md), requisiti §11 (RF-34…RF-38,
-CA-38…CA-45). Step 2: specifica [`specs/2026-11-11-revisore-design.md`](specs/2026-11-11-revisore-design.md),
-piano [`plans/2026-11-11-revisore.md`](plans/2026-11-11-revisore.md), requisiti §10 (RF-28…RF-33,
+Step 3: specifica [`specs/2026-11-13-riassunto-design.md`](docs/superpowers/specs/2026-11-13-riassunto-design.md),
+piano [`plans/2026-11-13-riassunto.md`](docs/superpowers/plans/2026-11-13-riassunto.md), requisiti §11 (RF-34…RF-38,
+CA-38…CA-45). Step 2: specifica [`specs/2026-11-11-revisore-design.md`](docs/superpowers/specs/2026-11-11-revisore-design.md),
+piano [`plans/2026-11-11-revisore.md`](docs/superpowers/plans/2026-11-11-revisore.md), requisiti §10 (RF-28…RF-33,
 CA-30…CA-37). Step 1: specifica
-[`specs/2026-11-11-router-design.md`](specs/2026-11-11-router-design.md), piano
-[`plans/2026-11-11-router.md`](plans/2026-11-11-router.md), requisiti §9 (RF-23…RF-27,
+[`specs/2026-11-11-router-design.md`](docs/superpowers/specs/2026-11-11-router-design.md), piano
+[`plans/2026-11-11-router.md`](docs/superpowers/plans/2026-11-11-router.md), requisiti §9 (RF-23…RF-27,
 CA-23…CA-29). Il push si fa solo su richiesta dell'utente (regola in `CLAUDE.md`, sezione «Git»).
 La lezione 5 resta come descritta più sotto.
 
@@ -24,13 +76,13 @@ La lezione 5 resta come descritta più sotto.
 `name: assistente-laboratorio`. I documenti precedenti citano ancora `assistente-laboratorio/`: sono
 storici e non sono stati riscritti.
 
-## Lezione 6 — prossimo passo (2026-11-13)
+### Lezione 6 — prossimo passo (2026-11-13)
 
 **Step 3 · Riassunto della cronologia: fatto** (sezione seguente). Prossimo: Step 4 · Resource
-`utente://preferenze` (traccia in [`lezione6.md`](lezione6.md)), da avviare con un nuovo
+`utente://preferenze` (traccia in [`lezione6.md`](docs/superpowers/lezione6.md)), da avviare con un nuovo
 brainstorming. I commit dello Step 3 sono pubblicati su `origin/dev` e `origin/main`.
 
-## Lezione 6, Step 3 — riassunto (2026-11-13)
+### Lezione 6, Step 3 — riassunto (2026-11-13)
 
 All'inizio di ogni turno il nodo `summary` (prima del router) conta i messaggi della cronologia,
 domanda appena arrivata compresa. Fino a `SUMMARY_MAX_MESSAGES` (default 20) non chiama il modello
@@ -51,7 +103,7 @@ avvio, `conftest.py`, fixture reale), `b85f9d9` (router con il riassunto), `4277
 il riassunto e frase in `REVIEWER_PROMPT`), `bde496a` (Task 5, prova reale), poi la
 documentazione (Task 6).
 
-### Verifiche (2026-11-13)
+#### Verifiche (2026-11-13)
 
 Prove reali con LM Studio, `google/gemma-4-e2b`, contesto 8192, soglie non impostate (20 e 6) salvo
 dove indicato.
@@ -74,7 +126,7 @@ ambiente. Dimostrano il comportamento con quelle domande, non che il modello ria
 sempre così. Con il modello reale non si sono visti `nothing_to_compress` né `empty_summary`:
 sono verificati solo con il modello simulato.
 
-### Decisioni prese durante l'esecuzione
+#### Decisioni prese durante l'esecuzione
 
 - **Worktree:** nessuno (`CLAUDE.md`); lavoro direttamente su `dev`. LM Studio e Docker Desktop
   avviati durante la sessione.
@@ -96,7 +148,7 @@ sono verificati solo con il modello simulato.
   `REVIEWER_PROMPT` non giudica i dati «da strumenti o dalla conversazione precedente».
 - Le prove dirette sono script usa e getta nella scratchpad, non nel progetto.
 
-### Revisione indipendente finale (2026-11-13)
+#### Revisione indipendente finale (2026-11-13)
 
 Un revisore con contesto pulito ha esaminato `8d5796a..4e511f1`. Esito: «Ready to merge: Yes»,
 nessun problema critico o importante; i cinque punti della Review Focus hanno test dedicati;
@@ -120,7 +172,7 @@ strumenti persi (specifica §1, §5, §14, §15); CA-43 che può fallire senza d
 del secondo turno usa il nome (specifica §11); falsi rifiuti «timestamp futuro» del revisore dello
 Step 2 (fuori traccia).
 
-### Punti aperti (Step 3)
+#### Punti aperti (Step 3)
 
 - **Revisore senza compressione:** in CA-4 (nome e domanda in due turni, nessun riassunto) il
   revisore ha bocciato due volte la risposta con il nome (`review_limit_reached`); la prova è
@@ -137,12 +189,12 @@ Step 2 (fuori traccia).
 Non si fanno i punti che stanno fuori dalla traccia: le correzioni minori rimandate degli Step 1 e
 2, le prove manuali mai ripetute delle lezioni precedenti (CA-5, Ctrl+Z), i minori aperti della
 lezione 5 e la prova mirata di una riscrittura dopo `add_note`. Restano annotati più sotto solo
-come memoria. Traccia completa: [`lezione6.md`](lezione6.md); lo schema del grafo dei tre
+come memoria. Traccia completa: [`lezione6.md`](docs/superpowers/lezione6.md); lo schema del grafo dei tre
 step è la slide 3 di `LLM_Lez_6.pdf` (non tracciato). In questa macchina manca `pdftoppm`: le slide
 si leggono come immagini con PyMuPDF installato nella scratchpad (`pip install --target`), non nel
 progetto.
 
-## Lezione 6, Step 2 — revisore (2026-11-13)
+### Lezione 6, Step 2 — revisore (2026-11-13)
 
 Dopo la risposta finale dell'agente (nessuna tool_call) il nodo `reviewer` (stesso modello, prompt
 `REVIEWER_PROMPT`, nessuno strumento, output `json_schema` con `reason` e `coherent`) riceve solo
@@ -160,7 +212,7 @@ Commit: `8498085` (piano), `51e9216` (Task 1, `MAX_REVIEWS`), `5e46842` (Task 2,
 `0f54a2d` (Task 4: grafo, sessione, avvio, `conftest.py` e fixture reale in un solo commit),
 `6dfd2b9` (Task 5, prove reali), poi la documentazione (Task 6).
 
-### Verifiche (2026-11-13)
+#### Verifiche (2026-11-13)
 
 Prove reali con LM Studio, `google/gemma-4-e2b`, contesto 8192, `MAX_REVIEWS` non impostata (2).
 
@@ -182,7 +234,7 @@ Limite: una sola esecuzione delle prove reali. Dimostra il comportamento con que
 il revisore giudichi sempre così. Con il modello reale non si sono visti né il limite delle
 revisioni né il ripiego: sono verificati solo con il revisore simulato.
 
-### Decisioni prese durante l'esecuzione
+#### Decisioni prese durante l'esecuzione
 
 - **Worktree:** nessuno, come chiede `CLAUDE.md`; lavoro direttamente su `dev`.
 - **Prove rapide da terminale con `NOTES_DB` in una cartella temporanea**, per non toccare `data/`
@@ -190,7 +242,7 @@ revisioni né il ripiego: sono verificati solo con il revisore simulato.
 - **LM Studio e Docker Desktop** sono stati avviati durante la sessione (`lms server start`,
   `lms load google/gemma-4-e2b --context-length 8192 -y`, Docker Desktop dal menu Start).
 
-### Revisione indipendente finale (2026-11-13)
+#### Revisione indipendente finale (2026-11-13)
 
 Un revisore con contesto pulito ha esaminato `595c59a..e518505`. Esito: «With fixes», nessun
 problema critico; i cinque punti della Review Focus hanno test precisi.
@@ -219,7 +271,7 @@ strumento con effetti: da controllare in una prova futura); `error="None"` nel r
 specifica); esattezza dei dati non giudicata (RF-28); eccezioni diverse da quelle previste che
 arrivano al terminale (come per il router).
 
-### Punti aperti (Step 2)
+#### Punti aperti (Step 2)
 
 - **Durata delle prove reali:** da circa 10 a circa 32 minuti (ogni turno ha almeno una chiamata in
   più; la prova con la risposta imposta da sola dura circa 4 minuti).
@@ -230,7 +282,7 @@ arrivano al terminale (come per il router).
 - Con il modello reale non sono stati osservati il limite delle revisioni, il ripiego e i falsi
   rifiuti su domande brevi di continuazione («E a Roma?» è stata approvata).
 
-## Lezione 6, Step 1 — router (2026-11-11)
+### Lezione 6, Step 1 — router (2026-11-11)
 
 Prima dell'agente il nodo `router` (stesso modello, prompt diverso, nessuno strumento, output
 `json_schema` con `category` e `reason`) classifica l'ultimo messaggio leggendo l'ambito di
@@ -244,7 +296,7 @@ Commit: `69ff4cc` (Task 1, ambito), `0c6c070` (Task 2, `router.py`), `5d5bf61` (
 insieme: grafo, modello del router, avvio), `c8f0eb4` (Task 5, prove reali e ritocco dei testi),
 poi la documentazione (Task 6).
 
-### Verifiche (2026-11-11)
+#### Verifiche (2026-11-11)
 
 | CA | Comando | Esito |
 |----|---------|-------|
@@ -259,7 +311,7 @@ poi la documentazione (Task 6).
 Limite: una sola esecuzione delle prove reali dopo il ritocco. Dimostra il comportamento con
 quelle domande, non che il router classifichi sempre così.
 
-### Decisioni prese durante l'esecuzione
+#### Decisioni prese durante l'esecuzione
 
 - **Falsi rifiuti alla prima prova reale** («Mi chiamo Paolo», «Come mi chiamo?», «Ci sono corsi
   di astrologia?», «Ricordami di comprare il latte»): il modello giudicava l'argomento delle
@@ -275,7 +327,7 @@ quelle domande, non che il router classifichi sempre così.
   `openai.LengthFinishReasonError` e `openai.ContentFilterFinishReasonError` in
   `RouterOutputError`; `openai.APIError` passa fino al terminale.
 
-### Revisione indipendente finale (2026-11-11)
+#### Revisione indipendente finale (2026-11-11)
 
 Un revisore con contesto pulito ha esaminato `2b13342..7fa0149`. Esito: «Ready to merge: Yes»,
 nessun problema critico o importante. Due punti segnalati come minori sono stati rivalutati come
@@ -298,14 +350,14 @@ Rimandati (minori):
 - `test_create_router_model_needs_no_server` non verifica `json_schema` né l'assenza di
   strumenti; manca un test per `scope.txt` non UTF-8 (il codice lo gestisce).
 
-### Punti aperti (Step 1)
+#### Punti aperti (Step 1)
 
 - Il motivo del router comincia spesso con la maiuscola, quindi il rifiuto si legge «…fuori dal
   mio ambito: La richiesta…». Solo estetica, non toccata.
 - Nei log rediretti su file in Windows le lettere accentate possono uscire in cp1252 (già noto
   dalla lezione 5).
 
-## Riprendere da qui (stato della lezione 5)
+### Riprendere da qui (stato della lezione 5)
 
 **`.env` aggiornato (2026-11-09).** L'utente ha cambiato i nomi delle variabili:
 `LMSTUDIO_MODELLO` → `LMSTUDIO_MODEL` e `MAX_PASSI` → `MAX_STEPS`.
@@ -316,8 +368,8 @@ Rimandati (minori):
 - Un `.env` creato prima della lezione 5 va aggiornato allo stesso modo (vedi README).
 
 Leggere prima, in quest'ordine:
-1. `../../CLAUDE.md`: regole del progetto, struttura e comandi aggiornati.
-2. [`specs/2026-11-09-strumenti-mcp-design.md`](specs/2026-11-09-strumenti-mcp-design.md): il
+1. `CLAUDE.md`: regole del progetto, struttura e comandi aggiornati.
+2. [`specs/2026-11-09-strumenti-mcp-design.md`](docs/superpowers/specs/2026-11-09-strumenti-mcp-design.md): il
    **come** della lezione 5.
 3. Questo file, sezioni «Decisioni prese durante l'esecuzione» e «Punti aperti».
 
@@ -329,7 +381,7 @@ Da sapere:
 - Suite predefinita: `pytest` → `297 passed, 15 deselected` (Step 3 della lezione 6), in circa 20–50 s. I test MCP avviano il
   server come sottoprocesso, circa 1 s ciascuno.
 
-## Che cosa c'è oggi (lezione 5)
+### Che cosa c'è oggi (lezione 5)
 
 È un'applicazione Python da terminale. Conversa con `google/gemma-4-e2b`, servito da LM Studio
 sull'host, attraverso un grafo LangGraph esplicito: nodi `llm`, `tools`, `limit` e funzione
@@ -360,7 +412,7 @@ sono in italiano.
   esistente cambiata. `pywin32` vi compare perché il venv è su Windows, ma non viene installato
   nell'immagine.
 
-## Commit della lezione 5 (solo locali)
+### Commit della lezione 5 (solo locali)
 
 | Commit | Contenuto |
 |--------|-----------|
@@ -379,7 +431,7 @@ sono in italiano.
 
 Prima di questi commit `origin/main` era fermo a `5854213`; il push del 2026-11-09 lo ha portato a `7bff3ec`.
 
-## Verifiche (2026-11-09)
+### Verifiche (2026-11-09)
 
 Comandi da PowerShell nella cartella del progetto (allora `assistente-laboratorio/`, oggi la radice). Per le prove reali: LM Studio con
 `google/gemma-4-e2b` (contesto 8192) e
@@ -422,7 +474,7 @@ Altre verifiche:
 Limite delle prove reali: una sola esecuzione. Dimostra che `gemma-4-e2b` usa gli strumenti con
 quelle domande, non che lo faccia sempre.
 
-## Decisioni prese durante l'esecuzione
+### Decisioni prese durante l'esecuzione
 
 Si aggiungono a quelle del piano («Scostamenti dalla specifica»).
 
@@ -451,7 +503,7 @@ Si aggiungono a quelle del piano («Scostamenti dalla specifica»).
   - In CA-20 il codice di `get_item` si confronta senza distinzione di maiuscole, come lo accetta il
     server.
 
-## Revisione indipendente finale (2026-11-09)
+### Revisione indipendente finale (2026-11-09)
 
 Un revisore con contesto pulito ha esaminato il diff `84ec958..178466b`. Esito: «With fixes»,
 nessun problema critico. Tutti e cinque i punti della Review Focus sono stati verificati anche
@@ -483,7 +535,7 @@ Rimandati (minori):
   Job Object di Windows termina comunque il server);
 - il log di avvio `tools=[…]` usa il nome `__main__`.
 
-## Punti aperti
+### Punti aperti
 
 - **Prove manuali non ripetute:** CA-5, LM Studio fermato e riavviato; Ctrl+Z con i tasti reali.
 - **Audit del 2026-11-03, punti M4–M13:** non affrontati. La descrizione non è nel repository.
@@ -498,7 +550,7 @@ Rimandati (minori):
   - LM Studio su un'altra porta tramite `LMSTUDIO_BASE_URL_DOCKER`;
   - `docker compose build --no-cache`.
 
-## Comandi
+### Comandi
 
 Da PowerShell nella radice della repository:
 
@@ -519,7 +571,7 @@ nel container `LMSTUDIO_BASE_URL` vale `http://host.docker.internal:1234/v1`, op
 `LMSTUDIO_BASE_URL_DOCKER` se è impostata.
 
 Documenti precedenti:
-- base: [`specs/2026-10-26-assistente-laboratorio-design.md`](specs/2026-10-26-assistente-laboratorio-design.md),
-  [`plans/2026-10-26-assistente-laboratorio.md`](plans/2026-10-26-assistente-laboratorio.md);
-- audit: [`specs/2026-11-03-correzioni-audit-design.md`](specs/2026-11-03-correzioni-audit-design.md),
-  [`plans/2026-11-03-correzioni-audit.md`](plans/2026-11-03-correzioni-audit.md).
+- base: [`specs/2026-10-26-assistente-laboratorio-design.md`](docs/superpowers/specs/2026-10-26-assistente-laboratorio-design.md),
+  [`plans/2026-10-26-assistente-laboratorio.md`](docs/superpowers/plans/2026-10-26-assistente-laboratorio.md);
+- audit: [`specs/2026-11-03-correzioni-audit-design.md`](docs/superpowers/specs/2026-11-03-correzioni-audit-design.md),
+  [`plans/2026-11-03-correzioni-audit.md`](docs/superpowers/plans/2026-11-03-correzioni-audit.md).

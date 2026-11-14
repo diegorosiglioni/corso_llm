@@ -4,7 +4,7 @@ Progetto del corso «Deep Learning e LLM: costruire chatbot e agenti».
 La cartella del progetto è `"C:\Users\diegorosiglioni\Desktop\paolo\test_paolo"`, radice della
 repository: il progetto sta direttamente lì (fino al 2026-11-09 stava in `assistente-laboratorio/`).
 Requisiti, specifica e piano: `docs/superpowers/`.
-Stato corrente e prossimo passo: `docs/superpowers/handoff.md` (leggerlo per primo).
+Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/superpowers/handoff.md`; leggerlo per primo) e lavori da fare in `TODO.md`.
 
 ## Struttura e comandi
 - Codice in `assistant/`: `config.py`, `model.py`, `tools.py`, `router.py`, `reviewer.py`,
@@ -96,6 +96,22 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
      poi `git fetch origin main:main` per allineare il `main` locale.
   Se l'avanzamento rapido viene rifiutato (`main` ha commit che `dev` non ha), fermarsi e chiedere:
   niente `--force`, niente merge automatici.
+
+## Modalità autonoma (branch `auto-claude`)
+Dal 2026-11-14, sul branch `auto-claude` il lavoro procede in loop (`loop.sh` avvia una sessione
+con `PROMPT.md` per ogni punto di `TODO.md`) senza nessuno che risponda. Su quel branch valgono
+queste regole al posto di quelle contrarie scritte sopra; tutte le altre restano.
+- I punti di `TODO.md` (step 4–9 della lezione 6 e streaming facoltativo, dalla traccia
+  `docs/superpowers/lezione6.md`) sono concordati, front-end compreso; niente oltre la traccia.
+- L'approvazione di specifica e piano è sostituita dal piano scritto in `PROGRESS.md`; il primo
+  punto di ogni step scrive la specifica in `docs/superpowers/specs/` e i requisiti in
+  `requisiti.md`, che i punti successivi dello step seguono. Le scelte aperte si risolvono con
+  l'opzione consigliata o più standard, annotata in una riga in `PROGRESS.md`.
+- Nuove dipendenze ammesse solo se motivate nella specifica e con versione fissata in
+  `requirements*.txt` e `constraints.txt`.
+- Commit su `auto-claude` (non su `dev`), nel formato di `PROMPT.md`; nessun push.
+- Prove reali (LM Studio, Docker, PostgreSQL, browser): se il servizio non è raggiungibile, il
+  punto va segnato `[!]` con il motivo in `PROGRESS.md`, senza simularne l'esito.
 
 ## Documentazione
 - Tenere aggiornato il README con configurazione, avvio, test e diagnosi, riportando solo

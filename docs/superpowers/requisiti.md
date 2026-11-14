@@ -277,7 +277,7 @@ insieme alla specifica `specs/2026-11-11-router-design.md`.
 
 Riferimento: `LLM_Lez_6.pdf`, slide 3 e slide dello Step 2 (riassunto in `lezione6.md`). Stato:
 approvati il 2026-11-11, insieme alla specifica `specs/2026-11-11-revisore-design.md`; CA-30…CA-37
-verificati il 2026-11-13 (comandi ed esiti in `handoff.md`).
+verificati il 2026-11-13 (comandi ed esiti in `PROGRESS.md`, ex `handoff.md`).
 
 - **RF-28** *Revisore* — Dopo la risposta finale dell'agente (nessuna richiesta di strumenti) un
   nodo LLM (stesso modello, prompt di sistema diverso, nessuno strumento) riceve solo la domanda
@@ -318,7 +318,7 @@ verificati il 2026-11-13 (comandi ed esiti in `handoff.md`).
 
 Riferimento: `LLM_Lez_6.pdf`, slide 3 e 6 (riassunto in `lezione6.md`). Stato: approvati il
 2026-11-13 insieme alla specifica `specs/2026-11-13-riassunto-design.md`; CA-38…CA-45 verificati il
-2026-11-13 (comandi ed esiti in `handoff.md`).
+2026-11-13 (comandi ed esiti in `PROGRESS.md`, ex `handoff.md`).
 
 - **RF-34** *Soglia configurabile* — `SUMMARY_MAX_MESSAGES` (intero ≥ 1, default 20) è il numero
   di messaggi della cronologia, domanda appena arrivata compresa, oltre il quale si riassume.

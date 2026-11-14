@@ -6,3 +6,5 @@ __pycache__/
 /data/
 # Lezione passata, tenuta solo in locale
 /lezione3/
+# Slide delle lezioni, solo in locale
+/LLM_Lez_*.pdf
