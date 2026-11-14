@@ -25,7 +25,7 @@ streaming facoltativo). Si fa solo ciò che chiede la traccia (decisione dell'ut
 
 ## Step 5 · Prompt MCP: comandi riusabili nella CLI
 
-- [ ] Specifica dello Step 5 in `docs/superpowers/specs/` e requisiti §13 (sintassi di `/prompts` e `/prompt nome chiave=valore` con valori tra virgolette, messaggi d'errore, righe di log)
+- [x] Specifica dello Step 5 in `docs/superpowers/specs/` e requisiti §13 (sintassi di `/prompts` e `/prompt nome chiave=valore` con valori tra virgolette, messaggi d'errore, righe di log)
 - [ ] Server MCP: prompt `spiega(argomento, livello="base")` e `riassumi_conversazione(stile)`; test di `prompts/list` (nome, descrizione, argomenti) e `prompts/get`
 - [ ] Client MCP: metodi sincroni `list_prompts` e `get_prompt` in `mcp_client.py` e nel `FakeMcpClient`; test con il server reale via stdio
 - [ ] Terminale: comando `/prompts` che mostra nome, descrizione e argomenti di ogni prompt; test con client finto

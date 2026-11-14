@@ -1,10 +1,11 @@
 # Requisiti — Assistente del laboratorio
 
-Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5) e integrati per la lezione 6 (§9–§12)
+Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5) e integrati per la lezione 6 (§9–§13)
 Stato: §1–§7 approvati il 2026-10-26; revisioni del 2026-11-09 e §8 approvate il 2026-11-09
 (insieme alla specifica `specs/2026-11-09-strumenti-mcp-design.md`); §9 (lezione 6, Step 1)
 e §10 (lezione 6, Step 2) approvate il 2026-11-11; §11 (lezione 6, Step 3) approvata il 2026-11-13;
-§12 (lezione 6, Step 4) scritta il 2026-11-14 in modalità autonoma (piano in `PROGRESS.md`)
+§12 (lezione 6, Step 4) e §13 (lezione 6, Step 5) scritte il 2026-11-14 in modalità autonoma
+(piano in `PROGRESS.md`)
 
 Questo documento fissa **che cosa** deve fare l'applicazione. Il **come** (architettura,
 moduli, dettagli del grafo) sarà descritto nella specifica, che rimanda a questi requisiti.
@@ -399,3 +400,53 @@ scelte del progettista sono nella sua §1. CA-46…CA-52 verificati il 2026-11-1
 | CA-50 | Con LM Studio e `timezone="America/New_York"`: «Che ore sono?» → `get_current_time` con `America/New_York`, senza chiedere il fuso. | reale |
 | CA-51 | Con LM Studio: la stessa domanda in due sessioni, preferenze predefinite e poi `language="inglese"` → prima risposta in italiano, seconda in inglese. | reale |
 | CA-52 | Le prove reali precedenti (CA-2…CA-4, CA-16…CA-21, CA-27, CA-36, CA-43) passano con le preferenze predefinite. | reale |
+
+## 13. Lezione 6, Step 5 — prompt MCP come comandi della CLI (2026-11-14)
+
+Riferimento: `LLM_Lez_6.pdf`, Blocco B e Step 5 (riassunto in `lezione6.md`). Stato: scritti il
+2026-11-14 in modalità autonoma insieme alla specifica `specs/2026-11-14-prompt-mcp-design.md`; le
+scelte del progettista sono nella sua §1.
+
+- **RF-45** *Prompt del server* — Il server MCP locale espone due prompt: `spiega` (argomenti
+  `argomento`, obbligatorio, e `livello`, facoltativo con valore predefinito `base`; livelli `base`,
+  `intermedio`, `avanzato`) e `riassumi_conversazione` (argomento obbligatorio `stile`: `sintetico` o
+  `dettagliato`). Compaiono in `prompts/list` con descrizioni in italiano del prompt e di ogni
+  argomento, e non in `tools/list`. `prompts/get` restituisce un solo messaggio dell'utente con il
+  testo della richiesta. Un valore non ammesso produce un errore MCP con un messaggio in italiano.
+- **RF-46** *Comando `/prompts`* — Il comando `/prompts` mostra, per ogni prompt di `prompts/list`,
+  nome, descrizione e argomenti (nome, obbligatorio o facoltativo, descrizione), più una riga d'uso.
+  Non chiama il modello.
+- **RF-47** *Comando `/prompt`* — Il comando `/prompt nome chiave=valore …` richiama un prompt. I
+  valori con spazi vanno tra virgolette doppie; l'apostrofo è un carattere normale. Errori di
+  sintassi (virgolette non chiuse, nome mancante, parola senza `=`, chiave ripetuta, valore vuoto)
+  danno un messaggio comprensibile. Le parole dei comandi non distinguono maiuscole e minuscole; un
+  altro testo che comincia con `/` dà «Comando sconosciuto». In nessuno di questi casi si chiama il
+  modello.
+- **RF-48** *Controllo dell'host* — Prima di `prompts/get` l'applicazione controlla la richiesta
+  rispetto a `prompts/list`: un prompt non pubblicato, un argomento non dichiarato o un argomento
+  obbligatorio mancante bloccano la richiesta con un messaggio che nomina gli argomenti in questione,
+  senza chiamare `prompts/get` né il modello. Prompt non disponibili (errore MCP, sessione chiusa) o
+  rifiutati dal server danno un messaggio d'errore e nessuna chiamata al modello.
+- **RF-49** *Passaggio dal grafo* — I messaggi ottenuti con `prompts/get` si aggiungono alla
+  cronologia e attraversano il grafo come una domanda scritta a mano: riassunto, router, agente con
+  gli strumenti e revisore. Se il turno fallisce, cronologia e riassunto restano invariati.
+  `riassumi_conversazione` riassume i turni della sessione corrente (compreso l'eventuale riassunto
+  dello Step 3).
+- **RF-50** *Log* — Il log riporta `prompts/list` (numero e nomi), `prompts/get` con nome, argomenti,
+  esito e numero di messaggi, e una riga per ogni messaggio ricevuto (ruolo e testo); le richieste
+  bloccate dall'host hanno una riga `prompt_command status=rejected` con il motivo; il server scrive
+  `event=prompt_get`. Queste righe compaiono solo quando l'utente scrive un comando.
+- **RF-51** *Ambito* — L'ambito predefinito del router comprende le spiegazioni di concetti di
+  informatica, programmazione e intelligenza artificiale e i riassunti della conversazione, così che
+  i due prompt non vengano rifiutati; le domande chiaramente fuori ambito restano rifiutate.
+
+| ID | Verifica | Come |
+|----|----------|------|
+| CA-53 | Logica pura e server via stdio: i due prompt in `prompts/list` con descrizioni e argomenti (`livello` facoltativo), assenti da `tools/list` (restano sette strumenti); `prompts/get` → un messaggio `user` con il testo atteso, `livello` predefinito `base`; valore non ammesso, obbligatorio mancante, prompt inesistente → errore MCP. | automatica |
+| CA-54 | Client via stdio: `list_prompts` → nomi, descrizioni e argomenti; `get_prompt` → messaggi; valore rifiutato, prompt inesistente, sessione chiusa → `PromptUnavailableError`. | automatica |
+| CA-55 | Analisi di `/prompt`: virgolette doppie, apostrofo, `=` nel valore, maiuscole del comando; ogni errore di sintassi dà il suo messaggio senza chiamare il client. | automatica |
+| CA-56 | `/prompts` con client finto: nome, descrizione e argomenti di ogni prompt; nessun prompt; `prompts/list` non disponibile → messaggio d'errore; modello mai chiamato. | automatica |
+| CA-57 | `/prompt` con client e modello finti: prompt sconosciuto, argomento sconosciuto, obbligatorio mancante → nessun `prompts/get`, nessuna chiamata al modello, riga `status=rejected`; richiesta valida → messaggio nella cronologia, righe `prompts/get` e righe del grafo (riassunto, router, agente, revisore). | automatica |
+| CA-58 | Con LM Studio: `/prompt spiega argomento="Model Context Protocol" livello=base` → router `conversation`, revisore attivo, risposta non vuota che nomina il protocollo. | reale |
+| CA-59 | Con LM Studio: «Mi chiamo Paolo», «Quanto fa 17 * 23?», poi `/prompt riassumi_conversazione stile=sintetico` → risposta con «Paolo» e «391». | reale |
+| CA-60 | Le prove reali precedenti (CA-2…CA-4, CA-16…CA-21, CA-27, CA-36, CA-43, CA-50, CA-51) passano con l'ambito esteso. | reale |

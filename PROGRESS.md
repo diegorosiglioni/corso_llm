@@ -282,6 +282,59 @@ Problemi aperti:
 - Una sola esecuzione della suite dopo la correzione: dimostra il comportamento con quelle domande.
 - I falsi rifiuti del revisore (CA-4, orari) restano quelli degli Step 2 e 3, fuori traccia.
 
+## Step 5 · Prompt MCP: comandi riusabili nella CLI (2026-11-14)
+
+Specifica: [`docs/superpowers/specs/2026-11-14-prompt-mcp-design.md`](docs/superpowers/specs/2026-11-14-prompt-mcp-design.md);
+requisiti §13 (RF-45…RF-51, CA-53…CA-60). Questo piano sostituisce l'approvazione (modalità
+autonoma); i punti successivi dello step seguono la specifica.
+
+### Piano dello step (un punto di `TODO.md` per riga)
+
+1. Specifica e requisiti §13. Verifica: `pytest` invariato (solo documenti).
+2. Server: `assistant/prompts.py` (testi, valori ammessi, descrizioni), prompt `spiega` e
+   `riassumi_conversazione` in `mcp_server.py` (`PromptError` a livello INFO, log
+   `event=prompt_get`). Test: `test_prompts.py`, `test_mcp_server.py`.
+3. Client: `PromptArgument`, `PromptSpec`, `PromptMessage`, `PromptUnavailableError`,
+   `McpClient.list_prompts` e `get_prompt`; `FakeMcpClient(..., prompts=…)` in `conftest.py`.
+   Test: `test_mcp_client.py` via stdio.
+4. `assistant/commands.py` (`PromptCommands`, `CommandResult`) con `/prompts` e il comando
+   sconosciuto; `terminal.run(..., commands=)`; `__main__.py` (comandi e benvenuto). Test:
+   `test_commands.py`, `test_terminal.py`, `test_main.py`.
+5. `/prompt`: analisi con `shlex` (solo virgolette doppie, nessun escape), controllo rispetto a
+   `prompts/list`, `prompts/get`, conversione dei messaggi, log; `Session.send_messages`;
+   `scope.txt` esteso. Test con client e modello finti (`test_commands.py`, `test_session.py`,
+   `test_terminal.py`, `test_main.py`, `test_config.py`).
+6. Prove reali CA-58…CA-60 (`test_real.py`), README (sezione prompt e diagnosi), `CLAUDE.md`
+   (struttura), esiti in requisiti §13 e qui. LM Studio non raggiungibile → `[!]`.
+
+### Decisioni (scelte del progettista, dettagli nella specifica §1)
+
+- Descrizioni degli argomenti con `Field(description=…)` come default e annotazione `str`: con
+  `Annotated` `fastmcp` 4.1.6 aggiunge una nota in inglese sullo schema (verificato).
+- Valori ammessi controllati dal server (`livello`: base/intermedio/avanzato; `stile`:
+  sintetico/dettagliato); nome, obbligatori e sconosciuti dall'host: il server ignora in silenzio gli
+  argomenti sconosciuti (verificato), quindi il controllo della traccia deve stare nell'host.
+- `prompts/list` a ogni comando, nessuna cache: nei log i prompt compaiono solo quando l'utente li
+  attiva, come nella tabella della traccia.
+- Solo virgolette doppie e nessun escape nel comando: l'apostrofo italiano (`l'IA`) resta un
+  carattere normale.
+- Testo con `/` che non è un comando → «Comando sconosciuto», niente modello: un errore di battitura
+  non diventa una domanda.
+- `scope.txt` esteso a spiegazioni di concetti di informatica/IA e ai riassunti della
+  conversazione: il prompt deve passare dal router (traccia), e aggirarlo la contraddirebbe.
+- Moduli separati `prompts.py` (testi, lato server, come `units.py`) e `commands.py` (comandi, lato
+  host): il server non importa codice dell'host e `terminal.py` resta piccolo.
+
+### Punto 1 · Specifica e requisiti — fatto
+
+- Scritti la specifica e i requisiti §13. API dei prompt di `fastmcp` 4.1.6 verificata con script usa
+  e getta in `%TEMP%\step5probe` (fuori dal progetto): `list_prompts` con `required`, `get_prompt` con
+  un messaggio `user`, `PromptError(log_level=…)`, errori come `MCPError`, argomenti sconosciuti
+  ignorati, descrizioni degli argomenti da `Field` senza nota in inglese.
+- Test: `pytest` → 375 passed, 17 deselected (nessun codice cambiato).
+- Problemi aperti: rischi nella specifica §11 (ambito più largo, revisore sul riassunto), da
+  verificare nella prova reale del punto 6.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13
