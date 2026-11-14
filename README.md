@@ -11,6 +11,8 @@ All'inizio di ogni turno, quando la cronologia supera `SUMMARY_MAX_MESSAGES` mes
 riassunto comprime i turni vecchi in un riassunto che agente, router e revisore ricevono nel prompt
 di sistema. All'avvio l'applicazione legge dal server MCP la resource `utente://preferenze` (lingua
 delle risposte, fuso orario predefinito, stile) e la mette in cima al prompt di sistema dell'agente.
+Il server MCP offre anche due prompt riusabili, `spiega` e `riassumi_conversazione`, che l'utente
+richiama dal terminale con i comandi `/prompts` e `/prompt`.
 
 Requisiti e specifica: [`docs/superpowers/`](docs/superpowers/).
 
@@ -117,7 +119,7 @@ server MCP (nome, descrizione e argomenti, log `prompts/list count=… names=…
 `/prompt spiega argomento="Model Context Protocol" livello=base`): un argomento obbligatorio
 mancante o sconosciuto blocca la richiesta senza chiamare il modello, altrimenti i messaggi del
 prompt entrano nella cronologia e passano dal grafo come una domanda (log `prompts/get …`). Un
-comando sconosciuto dà «Comando sconosciuto».
+comando sconosciuto dà «Comando sconosciuto». Dettagli nella sezione «Prompt MCP: comandi della CLI».
 
 Per una prova non interattiva si possono passare le domande in ingresso:
 
@@ -339,6 +341,65 @@ INFO assistant.preferences: resources/read uri=utente://preferenze status=partia
 WARNING assistant.preferences: resources/read uri=utente://preferenze status=unavailable error="File delle preferenze non leggibile: '…' (No such file or directory)." fallback=defaults language="italiano" timezone=Europe/Rome style=sintetico
 ```
 
+## Prompt MCP: comandi della CLI
+
+Il server MCP espone due **prompt**: modelli di messaggio con argomenti, scelti dall'utente (non dal
+modello, come invece gli strumenti). Non compaiono in `tools/list` e non entrano in `bind_tools`.
+
+| Prompt | Argomenti | Messaggio prodotto |
+|--------|-----------|--------------------|
+| `spiega` | `argomento` (obbligatorio, una riga, al più 200 caratteri), `livello` (facoltativo: `base`, `intermedio`, `avanzato`; predefinito `base`) | «Spiegami <argomento> a livello <livello>: …» |
+| `riassumi_conversazione` | `stile` (obbligatorio: `sintetico` o `dettagliato`) | «Riassumi la nostra conversazione fino a questo momento, …», senza strumenti |
+
+Dal terminale:
+
+- `/prompts` elenca nome, descrizione e argomenti di ogni prompt (`prompts/list`, chiesto a ogni
+  comando):
+
+  ```
+  Prompt disponibili:
+  - spiega: Spiega un argomento al livello scelto.
+      argomento (obbligatorio): Argomento da spiegare (per esempio Model Context Protocol).
+      livello (facoltativo): Livello della spiegazione: base, intermedio o avanzato (predefinito: base).
+  - riassumi_conversazione: Riassume i turni della conversazione corrente.
+      stile (obbligatorio): Stile del riassunto: sintetico o dettagliato.
+  Uso: /prompt nome chiave=valore (valori con spazi tra virgolette doppie).
+  ```
+- `/prompt nome chiave=valore …` richiama un prompt. I valori con spazi vanno tra virgolette doppie;
+  l'apostrofo e `=` dentro le virgolette sono caratteri normali. Esempi:
+  `/prompt spiega argomento="Model Context Protocol" livello=base`,
+  `/prompt riassumi_conversazione stile=sintetico`.
+- Prima di chiedere il prompt l'host controlla la richiesta rispetto a `prompts/list`: nome
+  sconosciuto, argomento sconosciuto o obbligatorio mancante bloccano il comando con
+  «Errore nel comando: …» senza chiamare il server né il modello. Un valore non ammesso (per
+  esempio `livello=esperto`) lo rifiuta il server: «Errore: il prompt 'spiega' non è disponibile
+  (…)».
+- I messaggi ottenuti entrano nella cronologia e fanno un turno normale: riassunto, router (l'ambito
+  in `scope.txt` comprende spiegazioni di concetti e riassunti della conversazione), agente con gli
+  strumenti, revisore.
+- Il testo che comincia con `/` non arriva mai al modello; «quanto fa 6 / 3?» invece è una domanda.
+- Il revisore controlla che la risposta sia coerente con la richiesta, non che sia corretta: nella
+  prova del 2026-11-14 la spiegazione «base» del Model Context Protocol data da `google/gemma-4-e2b`
+  era chiara ma sbagliata nel merito (lo descriveva come il modo in cui il modello usa il contesto, non
+  come il protocollo che collega applicazioni, strumenti e dati). È un limite del modello piccolo.
+- Con Docker i comandi funzionano allo stesso modo (`docker compose run --rm assistant`).
+
+Log della prova reale del 2026-11-14 `test_summary_prompt` («Mi chiamo Paolo», «Quanto fa 17 * 23?»,
+poi `/prompt riassumi_conversazione stile=sintetico`):
+
+```
+INFO assistant.commands: prompts/list count=2 names=spiega,riassumi_conversazione
+INFO assistant.commands: prompts/get name=riassumi_conversazione arguments={"stile": "sintetico"} status=ok messages=1
+INFO assistant.commands: prompts/get name=riassumi_conversazione message=1/1 role=user text="Riassumi la nostra conversazione fino a questo momento, in pochi punti essenziali, con le richieste e i risultati ottenuti. Usa solo quanto detto in questa conversazione, compreso l'eventuale riassunto dei turni precedenti, senza chiamare strumenti."
+INFO assistant.graph: node=summary messages=5/20 skipped=below_threshold next_node=router
+INFO assistant.graph: node=router category=conversation reason="La richiesta rientra nell'ambito dell'assistente, poiché chiede un riassunto della conversazione precedente." next_node=llm
+...
+INFO assistant.graph: node=reviewer review=1/2 coherent=true reason="La risposta riassume correttamente i punti essenziali della conversazione precedente come richiesto." next_node=end
+```
+
+Un comando bloccato dall'host scrive `prompt_command status=rejected reason="…"`; un prompt
+rifiutato dal server `prompts/get … status=unavailable error="…"` (WARNING).
+
 ## Prove reali con LM Studio
 
 Sono separate dai test automatici e partono solo su richiesta, con le variabili impostate:
@@ -519,6 +580,18 @@ la descrizione dello stile sintetico «breve ed essenziale, in poche frasi» fac
 «Quanto fa 17 * 23?» senza `calculate` (0 volte su 8); senza «in poche frasi» lo strumento è chiamato
 (dettagli nella §11 della [specifica](docs/superpowers/specs/2026-11-14-preferenze-design.md)). Dopo
 una modifica di `preferences.py` o del prompt si ripete `pytest -m real`.
+
+**Un `/prompt` non funziona.** Le righe del logger `assistant.commands` dicono dove si è fermato:
+`prompt_command status=rejected reason="…"` se l'host ha bloccato il comando (sintassi, nome o
+argomenti rispetto a `prompts/list`: il modello non è stato chiamato); `prompts/list
+status=unavailable` o `prompts/get … status=unavailable error="…"` se il server non ha risposto o ha
+rifiutato un valore; `prompts/get … status=ok` seguita da `message=1/1 … text="…"` con il testo
+mandato al grafo. Da lì in poi il turno ha le righe consuete di `summary`, `router`, agente e
+`reviewer`. Se la risposta non è quella attesa, conta il testo del prompt in `assistant/prompts.py`:
+nella prima prova reale del 2026-11-14 lo stile `sintetico` («in pochi punti essenziali») faceva
+riassumere solo le richieste dell'utente, senza i risultati (0 volte su 4); con «…, con le
+richieste e i risultati ottenuti» 4 su 4 (dettagli nella §13 della
+[specifica](docs/superpowers/specs/2026-11-14-prompt-mcp-design.md)).
 
 **Più dettagli.** Con `$env:LOG_LEVEL = "DEBUG"` i log mostrano la traccia completa degli errori
 e le richieste HTTP verso LM Studio.

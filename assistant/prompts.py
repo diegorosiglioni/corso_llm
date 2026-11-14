@@ -6,7 +6,9 @@ LEVELS = {
     "avanzato": "in modo tecnico e preciso, con i dettagli di funzionamento e i limiti",
 }
 SUMMARY_STYLES = {
-    "sintetico": "in pochi punti essenziali",
+    # "with the requests and the results": without it the model lists only the user's requests
+    # (real test CA-59, specification §13)
+    "sintetico": "in pochi punti essenziali, con le richieste e i risultati ottenuti",
     "dettagliato": "turno per turno, con le domande, le risposte e i risultati ottenuti",
 }
 MAX_TOPIC_LENGTH = 200

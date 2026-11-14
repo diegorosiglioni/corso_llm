@@ -529,6 +529,64 @@ Decisioni:
 - Problemi aperti: risposta del modello a un prompt, router con l'ambito esteso e suite reale
   completa (CA-58…CA-60) da verificare al punto 6 con LM Studio.
 
+### Punto 6 · Prova reale e documentazione — piano
+
+LM Studio raggiungibile (`GET /v1/models` → `google/gemma-4-e2b`).
+1. `tests/test_real.py`: aiuto `send_prompt(session, client, text)` che passa il comando a
+   `PromptCommands(client)` (come `terminal.run`) e manda i messaggi con `session.send_messages`.
+2. Prove nuove: CA-58 (`/prompt spiega argomento="Model Context Protocol" livello=base`: riga
+   `prompts/get name=spiega … status=ok`, router `category=conversation`, riga `node=reviewer`,
+   risposta non vuota, non un rifiuto, con «protocol» o «MCP») e CA-59 («Mi chiamo Paolo», «Quanto
+   fa 17 * 23?», `/prompt riassumi_conversazione stile=sintetico`: router `conversation`, «Paolo» e
+   «391» nella risposta).
+3. Esecuzione: prima le due prove nuove, poi l'intera suite reale (CA-60), poi `pytest`; prova da
+   terminale con `python -m assistant` e `/prompt` in pipe.
+4. README (sezione prompt e diagnosi con le righe `prompts/list`/`prompts/get`), `CLAUDE.md`
+   (struttura: `prompts.py`), requisiti §13 con gli esiti.
+
+Decisioni:
+- `open_session` resta `(session, client)` e i comandi si costruiscono in `send_prompt` (la
+  specifica §9 diceva «`open_session` restituisce anche i comandi»): un terzo elemento obbligherebbe
+  a cambiare tutte le prove esistenti per nulla; il comportamento provato è lo stesso.
+
+### Punto 6 · Prova reale e documentazione — fatto
+
+Prove reali con LM Studio, `google/gemma-4-e2b`, `MAX_STEPS=5`, altre variabili non impostate
+(da Git Bash, `LMSTUDIO_BASE_URL=http://localhost:1234/v1`).
+
+| CA | Comando | Esito |
+|----|---------|-------|
+| CA-58, CA-59 | `pytest -m real -v -k "explain_prompt or summary_prompt"` (prima esecuzione) | CA-58 ✅: `prompts/get name=spiega … status=ok messages=1`, router `conversation`, revisore `coherent=true`. CA-59 ❌: «L'utente ha chiesto il risultato della moltiplicazione di 17 per 23.», senza «391» |
+| CA-59 | `pytest -m real -k summary_prompt` (ripetuta) | ❌ stessa risposta senza risultato |
+| — | prova diretta (`%TEMP%\step5probe2\probe.py`, stessa cronologia, prompt dell'agente con le preferenze, 4 chiamate per variante) | stile `sintetico` attuale 0/4; «…, con le richieste e i risultati ottenuti» 4/4; «…, con le domande e le risposte principali» 4/4 |
+| CA-59 | `pytest -m real -k summary_prompt` dopo la correzione | ✅ 1 passed in 224 s, router `conversation`, revisore `coherent=true`, «Paolo» e «391» |
+| CA-60 | `pytest -m real -v -o log_cli=true --log-cli-level=INFO` | ❌ 18 passed, 1 failed in 2256 s (38 min): CA-43, il router ha rifiutato «Come mi chiamo?» (`out_of_scope`) pur con il riassunto «L'utente si è presentato come Paolo.»; CA-27 (rifiuto fuori ambito), CA-58 e CA-59 passate |
+| — | prova diretta sul router (`router_probe.py`, riassunto e cronologia di CA-43 dopo la compressione, 8 chiamate per ambito) | ambito dello Step 4 8/8 `conversation`, ambito dello Step 5 8/8 `conversation` |
+| CA-43 | `pytest -m real -k survives_compression`, due volte | ✅ 2 passed (225 s e 239 s), router `conversation`, «Paolo» nella risposta |
+| — | `/prompts`, `/prompt spiega argomento="Model Context Protocol"`, `/prompt riassumi_conversazione stile=sintetico`, `esci` in pipe verso `python -m assistant` | ✅ elenco dei due prompt, spiegazione e riassunto (con richiesta e risultato), righe `prompts/list`, `prompts/get … status=ok`, router `conversation`, revisore `coherent=true`, exit 0 |
+| — | `docker compose build`, poi `/prompts`, `/prompt spiega livello=base`, `esci` in pipe verso `docker compose run --rm -T assistant` | ✅ elenco, rifiuto «argomenti obbligatori mancanti per 'spiega': 'argomento'» con `prompt_command status=rejected`, exit 0 |
+| — | `pytest` | ✅ 490 passed, 19 deselected; `pytest -m real --collect-only` raccoglie 19 prove |
+
+Decisioni prese durante l'esecuzione:
+- **Testo dello stile `sintetico` corretto** (non fragilità del test): «in pochi punti essenziali»
+  faceva riassumere solo le richieste dell'utente. Ora «in pochi punti essenziali, con le richieste e
+  i risultati ottenuti» (riprende le parole dello stile `dettagliato`). Specifica §13, README
+  («Diagnosi»).
+- **CA-43 trattata come errore intermittente del modello, non regressione dello Step 5**: con
+  l'ingresso del router ricostruito, l'ambito vecchio e quello nuovo danno entrambi 8/8
+  `conversation`, e la prova ripetuta passa 2 volte su 2. Nella prova fallita il revisore aveva
+  rifiutato una prima risposta sull'ora (una riscrittura in più), ma il router non vede bozze né
+  indicazioni. Nessuna modifica al codice o al test.
+
+Problemi aperti:
+- Router: «Come mi chiamo?» dopo la compressione è stato rifiutato 1 volta su 3 esecuzioni di CA-43
+  (dopo lo Step 3 la suite era passata). Non riprodotto con la prova diretta.
+- La spiegazione del Model Context Protocol data dal modello è chiara ma sbagliata nel merito (lo
+  descrive come gestione del contesto); CA-58 controlla solo che nomini il protocollo, e il revisore
+  giudica la coerenza, non la correttezza. Limite del modello, annotato nel README.
+- Due esecuzioni per CA-58 e due per CA-59 dopo la correzione (prova singola e suite): dimostrano il
+  comportamento con quelle domande, non che il modello risponda sempre così.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

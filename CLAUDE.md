@@ -13,7 +13,8 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
   `assistant/data/scope.txt` (sostituibile con `SCOPE_FILE`); preferenze dell'utente (resource MCP
   `utente://preferenze`) in `assistant/data/preferenze.json` (sostituibile con `PREFERENCES_FILE`);
   logica pura degli strumenti MCP in `units.py`,
-  `calculator.py`, `catalog.py` (dati in `assistant/data/catalog.json`), `notes.py`; server
+  `calculator.py`, `catalog.py` (dati in `assistant/data/catalog.json`), `notes.py`; testi dei
+  prompt MCP `spiega` e `riassumi_conversazione` in `prompts.py`; server
   FastMCP in `mcp_server.py`, client sincrono e adattatore in `mcp_client.py`. Solo
   `__main__.py` collega i moduli.
 - Test in `tests/`; il modello finto (`FakeModel`), il router finto (`ConversationRouter`), il
@@ -42,6 +43,8 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
   conserva almeno gli ultimi `SUMMARY_KEEP_MESSAGES`, tagliando sempre all'inizio di un turno;
 - (lezione 6, Step 4) legge una volta a inizio sessione la resource MCP `utente://preferenze`
   (lingua, fuso predefinito, stile) e la mette in cima al prompt di sistema dell'agente;
+- (lezione 6, Step 5) i comandi `/prompts` e `/prompt nome chiave=valore` elencano e richiamano i
+  prompt MCP `spiega` e `riassumi_conversazione`; i messaggi ottenuti passano dal grafo;
 - usa un modello servito da LM Studio, che resta sul computer host;
 - conserva la cronologia della conversazione per la durata della sessione (la cronologia non è persistente);
 - offre uno strumento orologio con fuso orario esplicito, richiesto dal modello tramite tool calling
@@ -52,9 +55,9 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
 
 ## Confini
 - Implementare solo i requisiti concordati. MCP e i quattro strumenti della lezione 5 e gli
-  Step 1 (router), 2 (revisore), 3 (riassunto) e 4 (resource delle preferenze) della lezione 6
-  sono concordati e implementati;
-  gli step successivi della lezione 6 (prompt MCP, servizio HTTP, back-end,
+  Step 1 (router), 2 (revisore), 3 (riassunto), 4 (resource delle preferenze) e 5 (prompt MCP)
+  della lezione 6 sono concordati e implementati;
+  gli step successivi della lezione 6 (servizio HTTP, back-end,
   front-end, Compose a più container),
   altri strumenti, altri server MCP, workflow e RAG non vanno anticipati: ognuno avrà il proprio
   ciclo di specifica e piano.

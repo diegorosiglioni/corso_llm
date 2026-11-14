@@ -70,7 +70,7 @@ LEVELS = {
     "avanzato": "in modo tecnico e preciso, con i dettagli di funzionamento e i limiti",
 }
 SUMMARY_STYLES = {
-    "sintetico": "in pochi punti essenziali",
+    "sintetico": "in pochi punti essenziali, con le richieste e i risultati ottenuti",  # §13
     "dettagliato": "turno per turno, con le domande, le risposte e i risultati ottenuti",
 }
 MAX_TOPIC_LENGTH = 200
@@ -370,3 +370,14 @@ Servizio HTTP e passi successivi (la CLI come client dell'API arriva allo Step 6
 automatico dei comandi o degli argomenti (`completion/complete`); notifiche di cambiamento dei
 prompt; prompt con argomenti non testuali o messaggi con immagini e resource incorporate; prompt
 suggeriti o scelti dal modello; comando di aiuto generale; altri prompt oltre ai due della traccia.
+
+## 13. Correzione dopo la prova reale (2026-11-14)
+
+CA-59 è fallita due volte su due: con lo stile `sintetico` («in pochi punti essenziali») il modello
+riassumeva solo le richieste dell'utente («L'utente ha chiesto il risultato della moltiplicazione di
+17 per 23.»), senza il risultato. Prova diretta (stessa cronologia, prompt di sistema dell'agente con
+le preferenze predefinite, 4 chiamate per variante): testo attuale 0/4; «…, con le richieste e i
+risultati ottenuti» 4/4; «…, con le domande e le risposte principali» 4/4. Scelta la prima: riprende
+le parole dello stile `dettagliato`. `SUMMARY_STYLES["sintetico"]` è ora «in pochi punti essenziali,
+con le richieste e i risultati ottenuti»; i test senza modello confrontano il testo con la costante,
+quindi non cambiano.

@@ -405,7 +405,9 @@ scelte del progettista sono nella sua §1. CA-46…CA-52 verificati il 2026-11-1
 
 Riferimento: `LLM_Lez_6.pdf`, Blocco B e Step 5 (riassunto in `lezione6.md`). Stato: scritti il
 2026-11-14 in modalità autonoma insieme alla specifica `specs/2026-11-14-prompt-mcp-design.md`; le
-scelte del progettista sono nella sua §1.
+scelte del progettista sono nella sua §1. CA-53…CA-60 verificati il 2026-11-14 (comandi ed esiti in
+`PROGRESS.md`); per CA-59 il testo dello stile `sintetico` è stato corretto (specifica §13), e in
+CA-60 CA-43 è fallita una volta su tre esecuzioni (rifiuto del router, vedi `PROGRESS.md`).
 
 - **RF-45** *Prompt del server* — Il server MCP locale espone due prompt: `spiega` (argomenti
   `argomento`, obbligatorio, e `livello`, facoltativo con valore predefinito `base`; livelli `base`,

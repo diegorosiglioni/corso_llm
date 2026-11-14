@@ -15,6 +15,7 @@ import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
 from assistant.catalog import DEFAULT_CATALOG_PATH
+from assistant.commands import PromptCommands
 from assistant.config import DEFAULT_PREFERENCES_FILE, ConfigError, load_config
 from assistant.graph import build_graph
 from assistant.mcp_client import McpClient, create_mcp_tools, server_command
@@ -368,3 +369,46 @@ def test_language_from_preferences(config, tmp_path, caplog):  # CA-51
     assert it > en, (italian, it, en)
     it, en = language_counts(english)
     assert en > it, (english, it, en)
+
+
+# --- lesson 6, step 5: MCP prompts (CA-58, CA-59) ---
+
+REFUSAL = "Mi dispiace, questa domanda è fuori dal mio ambito"
+
+
+def send_prompt(session, client, text: str) -> str:
+    """A /prompt command as the terminal runs it: the messages go to the session as a turn."""
+    result = PromptCommands(client).handle(text)
+    assert result.messages, result.output
+    return session.send_messages(result.messages)
+
+
+def prompt_get_lines(caplog, name: str) -> list[str]:
+    return [r.getMessage() for r in caplog.records
+            if r.getMessage().startswith(f"prompts/get name={name} arguments=")]
+
+
+def test_explain_prompt(real, caplog):  # CA-58
+    caplog.set_level(logging.INFO, logger="assistant")
+    session, client = real
+    reply = send_prompt(
+        session, client, '/prompt spiega argomento="Model Context Protocol" livello=base'
+    )
+    assert any("status=ok" in line for line in prompt_get_lines(caplog, "spiega")), caplog.text
+    assert any("category=conversation" in line for line in router_lines(caplog)), caplog.text
+    assert reviewer_lines(caplog), caplog.text
+    assert reply.strip() and not reply.startswith(REFUSAL), reply
+    assert "protocol" in reply.lower() or "mcp" in reply.lower(), reply
+
+
+def test_summary_prompt(real, caplog):  # CA-59
+    caplog.set_level(logging.INFO, logger="assistant")
+    session, client = real
+    session.send("Mi chiamo Paolo")
+    session.send("Quanto fa 17 * 23?")
+    n = len(router_lines(caplog))
+    reply = send_prompt(session, client, "/prompt riassumi_conversazione stile=sintetico")
+    assert any("status=ok" in line
+               for line in prompt_get_lines(caplog, "riassumi_conversazione")), caplog.text
+    assert any("category=conversation" in line for line in router_lines(caplog)[n:]), caplog.text
+    assert "Paolo" in reply and "391" in reply, (reply, session.messages)
