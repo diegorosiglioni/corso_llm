@@ -1,11 +1,11 @@
 # Requisiti — Assistente del laboratorio
 
-Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5) e integrati per la lezione 6 (§9–§13)
+Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5) e integrati per la lezione 6 (§9–§14)
 Stato: §1–§7 approvati il 2026-10-26; revisioni del 2026-11-09 e §8 approvate il 2026-11-09
 (insieme alla specifica `specs/2026-11-09-strumenti-mcp-design.md`); §9 (lezione 6, Step 1)
 e §10 (lezione 6, Step 2) approvate il 2026-11-11; §11 (lezione 6, Step 3) approvata il 2026-11-13;
-§12 (lezione 6, Step 4) e §13 (lezione 6, Step 5) scritte il 2026-11-14 in modalità autonoma
-(piano in `PROGRESS.md`)
+§12 (lezione 6, Step 4), §13 (lezione 6, Step 5) e §14 (lezione 6, Step 6) scritte il 2026-11-14
+in modalità autonoma (piano in `PROGRESS.md`)
 
 Questo documento fissa **che cosa** deve fare l'applicazione. Il **come** (architettura,
 moduli, dettagli del grafo) sarà descritto nella specifica, che rimanda a questi requisiti.
@@ -452,3 +452,52 @@ CA-60 CA-43 è fallita una volta su tre esecuzioni (rifiuto del router, vedi `PR
 | CA-58 | Con LM Studio: `/prompt spiega argomento="Model Context Protocol" livello=base` → router `conversation`, revisore attivo, risposta non vuota che nomina il protocollo. | reale |
 | CA-59 | Con LM Studio: «Mi chiamo Paolo», «Quanto fa 17 * 23?», poi `/prompt riassumi_conversazione stile=sintetico` → risposta con «Paolo» e «391». | reale |
 | CA-60 | Le prove reali precedenti (CA-2…CA-4, CA-16…CA-21, CA-27, CA-36, CA-43, CA-50, CA-51) passano con l'ambito esteso. | reale |
+
+## 14. Lezione 6, Step 6 — l'agente come servizio HTTP (2026-11-14)
+
+Riferimento: `LLM_Lez_6.pdf`, Blocco C e Step 6 (riassunto in `lezione6.md`). Stato: scritti il
+2026-11-14 in modalità autonoma insieme alla specifica `specs/2026-11-14-servizio-http-design.md`; le
+scelte del progettista sono nella sua §1. Esiti delle verifiche in `PROGRESS.md`.
+
+- **RF-52** *Agente senza stato* — Il turno dell'agente è una funzione separata dall'interfaccia: riceve
+  i messaggi che aprono il turno, la cronologia e il riassunto e restituisce la risposta, gli
+  strumenti usati, la cronologia e il riassunto aggiornati, senza conservare nulla tra un turno e
+  l'altro. La CLI e l'API usano lo stesso grafo attraverso questa funzione.
+- **RF-53** *Messaggi in JSON* — Cronologia e messaggi viaggiano in un formato JSON documentato con
+  ruoli `user`, `assistant` e `tool`, che conserva le chiamate agli strumenti (anche quelle non
+  interpretabili), le risposte degli strumenti e le indicazioni del revisore. Una cronologia con
+  messaggi di sistema, risposte di strumenti senza chiamata o chiamate senza risposta è rifiutata
+  con un messaggio che indica il messaggio in questione.
+- **RF-54** *Endpoint di conversazione* — `POST /chat` riceve un messaggio (oppure un prompt MCP con
+  nome e argomenti), la cronologia e il riassunto, e restituisce risposta, strumenti usati (nome,
+  argomenti, risultato, esito), cronologia e riassunto aggiornati. Con un prompt il servizio fa il
+  controllo dell'host dello Step 5 prima di `prompts/get`.
+- **RF-55** *Endpoint di stato e dei prompt* — `GET /status` riporta se agente, server MCP e modello
+  (presente in `/models` di LM Studio) sono raggiungibili, con codice `200` se tutto risponde e `503`
+  altrimenti; `GET /prompts` restituisce l'elenco di `prompts/list`.
+- **RF-56** *Errori* — Richieste non valide, prompt rifiutati, LM Studio o server MCP non raggiungibili
+  ed errori imprevisti producono il codice HTTP della specifica §6 e un corpo
+  `{"error", "detail"}` con un messaggio in italiano; un errore non cambia cronologia e riassunto del
+  chiamante. Un errore di uno strumento durante un turno resta nel turno (risultato con `ok: false`).
+- **RF-57** *OpenAPI* — Il servizio pubblica il documento OpenAPI (`/openapi.json`) e la pagina
+  `/docs`, con gli schemi di richieste e risposte.
+- **RF-58** *Avvio e log* — Il servizio si avvia con `python -m assistant.service`, all'indirizzo di
+  `AGENT_HOST` e `AGENT_PORT` (predefiniti `127.0.0.1` e `8000`); il log ha una riga per ogni
+  richiesta e risposta (codice, strumenti, durata) accanto ai log del grafo e di MCP.
+- **RF-59** *CLI client* — `python -m assistant` è un client dell'API all'indirizzo di `AGENT_URL`
+  (predefinito `http://127.0.0.1:8000`): conserva cronologia e riassunto per la sessione e si comporta
+  come il terminale dello Step 5, comandi `/prompts` e `/prompt` compresi. Agente non raggiungibile
+  all'avvio → messaggio ed exit 1; errori durante la sessione → messaggio e sessione che continua.
+  `docker compose run --rm assistant` avvia anche l'agente.
+
+| ID | Verifica | Come |
+|----|----------|------|
+| CA-61 | Modulo dell'agente con grafo simulato: risposta, strumenti usati (riuscito, errore, non eseguito), cronologia e riassunto aggiornati anche dopo una compressione; argomenti non modificati; andata e ritorno JSON; ogni cronologia non valida rifiutata col suo messaggio. | automatica |
+| CA-62 | `POST /chat` con grafo simulato: messaggio, cronologia di un turno precedente, prompt (controllo dell'host senza `prompts/get` né modello); schema OpenAPI con `/chat`. | automatica |
+| CA-63 | Errori con grafo, modello e client MCP finti: ogni riga della tabella della specifica §6 col suo codice, `error` e `detail`. | automatica |
+| CA-64 | `GET /status` e `GET /prompts` con client MCP e stato del modello finti: tutte le combinazioni, codici `200`/`503`. | automatica |
+| CA-65 | Avvio del servizio con MCP e uvicorn sostituiti: indirizzo e porta, configurazione non valida, server MCP non avviato. | automatica |
+| CA-66 | CLI client con l'API simulata: domanda, `/prompts`, `/prompt` (errori di sintassi locali, rifiuto dell'host), errore del servizio senza perdere la cronologia, agente non raggiungibile all'avvio. | automatica |
+| CA-67 | Con LM Studio: `POST /chat` «Quanto fa 17 * 23?» → `200`, `calculate` negli strumenti usati, «391», righe dell'API e dello strumento nel log del servizio. | reale |
+| CA-68 | Con LM Studio: la stessa domanda dalla CLI e dall'API dà gli stessi strumenti e lo stesso risultato. | reale |
+| CA-69 | Con LM Studio: `/openapi.json` consultabile, `/status` `200`; con LM Studio irraggiungibile `/status` `503` e `/chat` `503 model_unavailable`. | reale |

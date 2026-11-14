@@ -587,6 +587,60 @@ Problemi aperti:
 - Due esecuzioni per CA-58 e due per CA-59 dopo la correzione (prova singola e suite): dimostrano il
   comportamento con quelle domande, non che il modello risponda sempre così.
 
+## Step 6 · L'agente come servizio HTTP (2026-11-14)
+
+Specifica: [`docs/superpowers/specs/2026-11-14-servizio-http-design.md`](docs/superpowers/specs/2026-11-14-servizio-http-design.md);
+requisiti §14 (RF-52…RF-59, CA-61…CA-69). Questo piano sostituisce l'approvazione (modalità
+autonoma); i punti successivi dello step seguono la specifica.
+
+### Piano dello step (un punto di `TODO.md` per riga)
+
+1. Specifica, requisiti §14, dipendenze (`fastapi`, `uvicorn`, `httpx` in `requirements.txt`,
+   `constraints.txt` rigenerato). Verifica: `pip check`, `pytest` invariato.
+2. `assistant/agent.py`: `run_turn`, `TurnResult`, `messages_to_json`, `messages_from_json`;
+   `Session` delega a `run_turn`. Test: `test_agent.py`, `test_session.py`.
+3. `assistant/api.py`: `create_app`, `POST /chat` (messaggio o prompt), OpenAPI; `resolve_prompt` in
+   `commands.py`. Test: `test_api.py` con `TestClient`, grafo e `FakeMcpClient` finti.
+4. `GET /status`, `GET /prompts`, tabella degli errori (specifica §6), `check_model` in `model.py`,
+   `assistant/service.py`, `AGENT_HOST`/`AGENT_PORT` in `config.py`. Test: `test_api.py`,
+   `test_service.py`, `test_model.py`, `test_config.py`.
+5. `assistant/api_client.py` (`AgentClient`, `AgentError`, `RemoteSession`), CLI client
+   (`__main__.py`, `commands.py`, `terminal.py`), `AGENT_URL`, `compose.yaml`; README e `CLAUDE.md`.
+   Test: `test_api_client.py`, `test_commands.py`, `test_terminal.py`, `test_main.py`.
+6. Prove reali CA-67…CA-69 (`test_real.py`), esiti in requisiti §14 e qui. LM Studio non
+   raggiungibile → `[!]`.
+
+### Decisioni (scelte del progettista, dettagli nella specifica §1)
+
+- FastAPI + uvicorn: standard per API Python con OpenAPI generata da `pydantic`; endpoint sincroni.
+- `httpx` 0.28.1 per la CLI e il controllo del modello: già installata e richiesta da `TestClient`.
+- Formato JSON proprio simile a OpenAI (`role` `user`/`assistant`/`tool`): leggibile e documentato
+  nell'OpenAPI, indipendente da LangChain, pronto per il salvataggio dello Step 7.
+- Prompt MCP dentro `POST /chat` (`prompt: {name, arguments}`): il controllo dell'host resta accanto
+  al client MCP, che vive nel servizio; la sintassi del comando resta nella CLI.
+- Errore di uno strumento durante il turno → turno `200` con `ok: false`; MCP spento → `503` in
+  `/status` e `/prompts`: lo Step 5 già passa al modello l'errore di trasporto.
+- Corpo d'errore `{"error", "detail"}` con codici `400`/`502`/`503`/`500` (tranne il `422` di FastAPI).
+- `AGENT_HOST` predefinito `127.0.0.1`: in locale il servizio non è raggiungibile da altri computer.
+- `python -m assistant` resta il comando della CLI (ora client, `AGENT_URL`); il servizio è
+  `python -m assistant.service`.
+- Compose con due servizi dalla stessa immagine (`agent` e `assistant`), così `docker compose run
+  --rm assistant` continua a funzionare; i quattro container restano allo Step 9.
+- `Session` in processo resta e delega a `run_turn`: la usano prove reali e test.
+
+### Punto 1 · Specifica e requisiti — fatto
+
+- Scritti la specifica e i requisiti §14 (intestazione di `requisiti.md` aggiornata).
+- Dipendenze: `fastapi==0.162.7` (nuova), `uvicorn==0.54.0` e `httpx==0.28.1` (già indirette) in
+  `requirements.txt`; `constraints.txt` rigenerato con `pip freeze` (righe nuove solo
+  `annotated-doc==0.0.6` e `fastapi==0.162.7`). `pip check` senza problemi.
+- Prova usa e getta in `%TEMP%\step6probe` (fuori dal progetto): FastAPI 0.162.7 con starlette
+  1.10.0, `TestClient` con httpx 0.28.1, risposta `400` personalizzata, `422` di validazione,
+  `/openapi.json` (OpenAPI 3.1.0) e `/docs` raggiungibili.
+- Test: `pytest` → 490 passed, 19 deselected (nessun codice cambiato).
+- Problemi aperti: rischi nella specifica §14 (due processi in locale, cronologia dal chiamante,
+  turni lunghi); il README cambierà al punto 5, quando cambiano i comandi d'avvio.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

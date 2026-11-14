@@ -14,3 +14,9 @@ tzdata==2026.5
 pydantic==2.14.1
 # Server FastMCP e client stdio (lezione 5)
 fastmcp==4.1.6
+# Agente come servizio HTTP con OpenAPI generata (lezione 6, Step 6)
+fastapi==0.162.7
+# Server ASGI che avvia il servizio dell'agente (già indiretta di fastmcp)
+uvicorn==0.54.0
+# Client HTTP della CLI e controllo di /v1/models; usato anche da TestClient (già indiretta)
+httpx==0.28.1
