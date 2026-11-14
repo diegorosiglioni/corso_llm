@@ -7,9 +7,10 @@ from langchain_core.messages import AIMessage, SystemMessage
 
 import assistant.__main__ as entry
 from assistant.__main__ import main
+from assistant.commands import PromptCommands
 from assistant.config import DEFAULT_PREFERENCES_FILE, DEFAULT_SCOPE_FILE, load_config
 from assistant.graph import SYSTEM_PROMPT
-from assistant.mcp_client import ALLOWED_MCP_TOOLS, ToolSpec
+from assistant.mcp_client import ALLOWED_MCP_TOOLS, PromptSpec, ToolSpec
 from assistant.preferences import (
     DEFAULT_PREFERENCES,
     PREFERENCES_URI,
@@ -45,18 +46,19 @@ def test_missing_config_exits_with_1(capsys, monkeypatch):
 
 def test_startup_wires_the_modules(capsys, monkeypatch):
     received = []
-    monkeypatch.setattr(entry, "run", received.append)
+    monkeypatch.setattr(entry, "run", lambda session, **kw: received.append((session, kw)))
     assert main(VALID) == 0
-    assert len(received) == 1 and isinstance(received[0], Session)
+    assert len(received) == 1 and isinstance(received[0][0], Session)
+    assert isinstance(received[0][1]["commands"], PromptCommands)
     assert (
         "Assistente del laboratorio — modello google/gemma-4-e2b su http://localhost:1234/v1. "
-        "Scrivi 'esci' per uscire."
+        "Scrivi /prompts per i prompt disponibili, 'esci' per uscire."
     ) in capsys.readouterr().out
 
 
 def test_library_http_logs_hidden_at_info(monkeypatch, caplog):
     caplog.set_level(logging.INFO)  # as in the app, where the root is at INFO
-    monkeypatch.setattr(entry, "run", lambda session: None)
+    monkeypatch.setattr(entry, "run", lambda session, **kw: None)
     main(VALID)
     for library in ("httpx", "httpx2", "openai", "mcp", "fastmcp"):
         assert logging.getLogger(library).getEffectiveLevel() == logging.WARNING, library
@@ -65,7 +67,7 @@ def test_library_http_logs_hidden_at_info(monkeypatch, caplog):
 def test_all_tools_reach_the_model(monkeypatch):
     received = []
     monkeypatch.setattr(entry, "create_model", lambda config, tools: received.append(tools))
-    monkeypatch.setattr(entry, "run", lambda session: None)
+    monkeypatch.setattr(entry, "run", lambda session, **kw: None)
     assert main(VALID) == 0
     assert [t.name for t in received[0]] == ["get_current_time", *ALLOWED_MCP_TOOLS]
 
@@ -104,7 +106,7 @@ def test_name_collision_exits_1(capsys, monkeypatch):
 
 
 def test_notes_folder_is_created(tmp_path, monkeypatch):
-    monkeypatch.setattr(entry, "run", lambda session: None)
+    monkeypatch.setattr(entry, "run", lambda session, **kw: None)
     main({**VALID, "NOTES_DB": str(tmp_path / "sub" / "n.sqlite3")})
     assert (tmp_path / "sub").is_dir()
 
@@ -118,7 +120,7 @@ def test_router_model_and_scope_reach_the_graph(monkeypatch):
     monkeypatch.setattr(
         entry, "build_graph", lambda *args, **kwargs: received.append(kwargs) or "graph"
     )
-    monkeypatch.setattr(entry, "run", lambda session: None)
+    monkeypatch.setattr(entry, "run", lambda session, **kw: None)
     assert main(VALID) == 0
     assert received[0]["router_model"] is router
     assert received[0]["scope"] == load_config(VALID).scope
@@ -126,7 +128,7 @@ def test_router_model_and_scope_reach_the_graph(monkeypatch):
 
 def test_scope_file_is_logged(monkeypatch, caplog):
     caplog.set_level(logging.INFO)
-    monkeypatch.setattr(entry, "run", lambda session: None)
+    monkeypatch.setattr(entry, "run", lambda session, **kw: None)
     main(VALID)
     assert f"scope_file={DEFAULT_SCOPE_FILE}" in caplog.text
 
@@ -151,7 +153,7 @@ def test_reviewer_model_and_max_reviews_reach_the_graph(monkeypatch, env, expect
     monkeypatch.setattr(
         entry, "build_graph", lambda *args, **kwargs: received.append(kwargs) or "graph"
     )
-    monkeypatch.setattr(entry, "run", lambda session: None)
+    monkeypatch.setattr(entry, "run", lambda session, **kw: None)
     assert main({**VALID, **env}) == 0
     assert received[0]["reviewer_model"] is reviewer
     assert received[0]["max_reviews"] == expected
@@ -164,7 +166,7 @@ def test_graph_built_by_main_goes_through_the_reviewer(monkeypatch):
     )
     monkeypatch.setattr(entry, "create_router_model", lambda config: ConversationRouter())
     monkeypatch.setattr(entry, "create_reviewer_model", lambda config: reviewer)
-    monkeypatch.setattr(entry, "run", lambda session: replies.append(session.send("Ciao")))
+    monkeypatch.setattr(entry, "run", lambda session, **kw: replies.append(session.send("Ciao")))
     assert main(VALID) == 0
     assert replies == ["Ciao!"]
     assert len(reviewer.calls) == 1
@@ -172,7 +174,7 @@ def test_graph_built_by_main_goes_through_the_reviewer(monkeypatch):
 
 def test_max_reviews_is_logged(monkeypatch, caplog):
     caplog.set_level(logging.INFO)
-    monkeypatch.setattr(entry, "run", lambda session: None)
+    monkeypatch.setattr(entry, "run", lambda session, **kw: None)
     main(VALID)
     assert f"scope_file={DEFAULT_SCOPE_FILE} max_reviews=2" in caplog.text
 
@@ -190,7 +192,7 @@ def test_summary_model_and_thresholds_reach_the_graph(monkeypatch, env, maximum,
     monkeypatch.setattr(
         entry, "build_graph", lambda *args, **kwargs: received.append(kwargs) or "graph"
     )
-    monkeypatch.setattr(entry, "run", lambda session: None)
+    monkeypatch.setattr(entry, "run", lambda session, **kw: None)
     assert main({**VALID, **env}) == 0
     assert received[0]["summary_model"] is summarizer
     assert received[0]["summary_max_messages"] == maximum
@@ -206,7 +208,7 @@ def test_graph_built_by_main_goes_through_the_summary_node(monkeypatch, caplog):
     monkeypatch.setattr(entry, "create_router_model", lambda config: ConversationRouter())
     monkeypatch.setattr(entry, "create_reviewer_model", lambda config: ApprovingReviewer())
     monkeypatch.setattr(entry, "create_summary_model", lambda config: FakeModel([]))
-    monkeypatch.setattr(entry, "run", lambda session: replies.append(session.send("Ciao")))
+    monkeypatch.setattr(entry, "run", lambda session, **kw: replies.append(session.send("Ciao")))
     assert main(VALID) == 0
     assert replies == ["Ciao!"]
     assert "node=summary messages=1/20 skipped=below_threshold next_node=router" in caplog.text
@@ -214,7 +216,7 @@ def test_graph_built_by_main_goes_through_the_summary_node(monkeypatch, caplog):
 
 def test_summary_thresholds_are_logged(monkeypatch, caplog):
     caplog.set_level(logging.INFO)
-    monkeypatch.setattr(entry, "run", lambda session: None)
+    monkeypatch.setattr(entry, "run", lambda session, **kw: None)
     main(VALID)
     assert (
         f"scope_file={DEFAULT_SCOPE_FILE} max_reviews=2 "
@@ -233,7 +235,7 @@ def _server_args(monkeypatch, env) -> list[str]:
         return FakeMcpClient(MCP_SPECS)
 
     monkeypatch.setattr(entry, "McpClient", fake_client)
-    monkeypatch.setattr(entry, "run", lambda session: None)
+    monkeypatch.setattr(entry, "run", lambda session, **kw: None)
     assert main(env) == 0
     return received[0]
 
@@ -266,7 +268,7 @@ def test_resource_is_read_once_in_a_session_of_many_turns(monkeypatch):  # CA-49
     monkeypatch.setattr(entry, "create_reviewer_model", lambda config: ApprovingReviewer())
     replies = []
     monkeypatch.setattr(
-        entry, "run", lambda session: replies.extend([session.send("Ciao"), session.send("Ciao")])
+        entry, "run", lambda session, **kw: replies.extend([session.send("Ciao"), session.send("Ciao")])
     )
     assert main(VALID) == 0
     assert replies == ["Hi!", "Bye!"]
@@ -281,7 +283,7 @@ def test_resource_is_read_before_the_first_question(monkeypatch):
     client = _with_resource(monkeypatch)
     reads_at_start = []
     monkeypatch.setattr(
-        entry, "run", lambda session: reads_at_start.append(list(client.resource_reads))
+        entry, "run", lambda session, **kw: reads_at_start.append(list(client.resource_reads))
     )
     assert main(VALID) == 0
     assert reads_at_start == [[PREFERENCES_URI]]
@@ -291,7 +293,7 @@ def test_resource_does_not_reach_bind_tools(monkeypatch):  # RF-41
     _with_resource(monkeypatch)
     received = []
     monkeypatch.setattr(entry, "create_model", lambda config, tools: received.append(tools))
-    monkeypatch.setattr(entry, "run", lambda session: None)
+    monkeypatch.setattr(entry, "run", lambda session, **kw: None)
     assert main(VALID) == 0
     assert [t.name for t in received[0]] == ["get_current_time", *ALLOWED_MCP_TOOLS]
 
@@ -302,7 +304,7 @@ def test_preferences_text_reaches_the_graph(monkeypatch):
     monkeypatch.setattr(
         entry, "build_graph", lambda *args, **kwargs: received.append(kwargs) or "graph"
     )
-    monkeypatch.setattr(entry, "run", lambda session: None)
+    monkeypatch.setattr(entry, "run", lambda session, **kw: None)
     assert main(VALID) == 0
     assert received[0]["preferences"] == preferences_prompt(
         Preferences("inglese", "America/New_York", "sintetico")
@@ -316,7 +318,7 @@ def test_unavailable_resource_starts_with_the_defaults(monkeypatch, caplog):  # 
         entry, "build_graph", lambda *args, **kwargs: received.append(kwargs) or "graph"
     )
     started = []
-    monkeypatch.setattr(entry, "run", started.append)
+    monkeypatch.setattr(entry, "run", lambda session, **kw: started.append(session))
     assert main(VALID) == 0
     assert len(started) == 1  # the session starts anyway
     assert received[0]["preferences"] == preferences_prompt(DEFAULT_PREFERENCES)
@@ -329,9 +331,33 @@ def test_unavailable_resource_starts_with_the_defaults(monkeypatch, caplog):  # 
 
 def test_preferences_file_is_logged(monkeypatch, caplog):
     caplog.set_level(logging.INFO)
-    monkeypatch.setattr(entry, "run", lambda session: None)
+    monkeypatch.setattr(entry, "run", lambda session, **kw: None)
     main(VALID)
     assert (
         "summary_max_messages=20 summary_keep_messages=6 "
         f"preferences_file={Path(DEFAULT_PREFERENCES_FILE).resolve()}"
     ) in caplog.text
+
+
+# --- prompt commands (lesson 6, step 5) ---
+
+def test_prompts_command_uses_the_session_client(monkeypatch, caplog):  # CA-56
+    caplog.set_level(logging.INFO)
+    spec = PromptSpec("spiega", "Spiega un argomento al livello scelto.", ())
+    client = FakeMcpClient(MCP_SPECS, prompts={"spiega": (spec, lambda arguments: [])})
+    monkeypatch.setattr(entry, "McpClient", lambda *a, **k: client)
+    monkeypatch.setattr(entry, "create_model", lambda config, tools: FakeModel([]))
+    lists_at_start, outputs = [], []
+
+    def fake_run(session, commands):
+        lists_at_start.append(client.prompt_lists)
+        outputs.append(commands.handle("/prompts").output)
+
+    monkeypatch.setattr(entry, "run", fake_run)
+    assert main(VALID) == 0
+    assert lists_at_start == [0]  # prompts/list only when the user asks for it
+    assert client.prompt_lists == 1 and client.prompt_gets == []
+    assert outputs[0].startswith(
+        "Prompt disponibili:\n- spiega: Spiega un argomento al livello scelto."
+    )
+    assert "prompts/list count=1 names=spiega" in caplog.text

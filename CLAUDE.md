@@ -8,7 +8,8 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
 
 ## Struttura e comandi
 - Codice in `assistant/`: `config.py`, `model.py`, `tools.py`, `router.py`, `reviewer.py`,
-  `summary.py`, `preferences.py`, `graph.py`, `session.py`, `terminal.py`; ambito del router in
+  `summary.py`, `preferences.py`, `graph.py`, `session.py`, `terminal.py`, `commands.py`
+  (comandi della CLI che cominciano con `/`); ambito del router in
   `assistant/data/scope.txt` (sostituibile con `SCOPE_FILE`); preferenze dell'utente (resource MCP
   `utente://preferenze`) in `assistant/data/preferenze.json` (sostituibile con `PREFERENCES_FILE`);
   logica pura degli strumenti MCP in `units.py`,

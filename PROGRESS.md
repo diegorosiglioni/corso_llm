@@ -415,6 +415,57 @@ Decisioni:
 - `pytest` → 423 passed, 17 deselected.
 - Problemi aperti: nessuno nuovo. I prompt non sono ancora usati dalla CLI (punti 4–5).
 
+### Punto 4 · Terminale: comando `/prompts` — piano
+
+1. `assistant/commands.py` (specifica §5): `CommandResult(output)`, `PromptCommands(client)` con
+   `handle(text)`; `/prompts` (parola senza distinzione di maiuscole) → `client.list_prompts()`,
+   elenco nel formato della specifica, `Il server MCP non offre prompt.` se vuoto; con altre parole →
+   `Errore nel comando: il comando /prompts non ha argomenti.`; `PromptUnavailableError` →
+   `Errore: prompt non disponibili (<motivo>).`; ogni altro testo con `/` → `Comando sconosciuto`.
+   Log `prompts/list count=… names=…`, `prompts/list status=unavailable error="…"`,
+   `prompt_command status=rejected reason="…"`.
+2. `terminal.run(session, read, write, commands=None)`: testo con `/` → `commands.handle`, output
+   scritto; `commands=None` → `Comandi non disponibili.`
+3. `__main__._converse`: `run(session, commands=PromptCommands(client))`; benvenuto con `/prompts`.
+4. Test: `tests/test_commands.py` (elenco con e senza argomenti, nessun prompt, non disponibile,
+   maiuscole, argomenti in più, comando sconosciuto, righe di log esatte, nessuna chiamata
+   `prompts/get`); `test_terminal.py` (comando ai comandi, sessione mai chiamata, `commands=None`);
+   `test_main.py` (comandi sul client della sessione, benvenuto, `prompts/list` solo dopo il
+   comando). Poi `pytest` completo.
+
+Decisioni:
+- `/prompt` resta «Comando sconosciuto» fino al punto 5, che lo aggiunge con `send_messages`;
+  `CommandResult` riceve il campo `messages` al punto 5, quando serve (niente codice senza uso).
+- Messaggio del comando sconosciuto: `Comando sconosciuto: '<parola>'. Scrivi /prompts per l'elenco
+  dei prompt.` (la specifica fissa solo «Comando sconosciuto»; il rimando vale anche dopo il punto 5).
+- Il comando sconosciuto non scrive righe di log: la specifica elenca solo le righe dei prompt, e
+  non è una richiesta di prompt.
+- Il rifiuto di `/prompts` con argomenti scrive `prompt_command status=rejected`, come gli altri
+  errori di comando della specifica §5.
+
+### Punto 4 · Terminale: comando `/prompts` — fatto
+
+- Implementati `assistant/commands.py` (`CommandResult`, `format_prompts`, `PromptCommands`),
+  `terminal.run(..., commands=None)` (testo con `/` mai al modello) e in `__main__.py` i comandi sul
+  client della sessione e il nuovo benvenuto; README, sezione d'avvio, con una riga sui comandi.
+- Decisioni prese durante l'esecuzione: un prompt o un argomento senza descrizione si mostra senza
+  «: » finale; `/` solo o un testo con `/` dentro la frase («quanto fa 6 / 3?») seguono la regola
+  «comincia con `/`» (il primo è un comando sconosciuto, il secondo una domanda); in `test_main.py`
+  i `run` finti accettano `**kw` (`commands=` passato da `_converse`).
+- Test nuovi: `test_commands.py` (15: elenco con descrizioni e argomenti, senza argomenti né
+  descrizioni, nessun prompt, maiuscole, `prompts/list` non disponibile con WARNING, righe di log
+  esatte, `/prompts` con argomenti rifiutato senza chiamare il client, comando sconosciuto senza
+  chiamate né log, `prompts/get` mai chiamato), `test_terminal.py` (+5), `test_main.py` (+1:
+  `prompts/list` solo dopo il comando, sul client della sessione; benvenuto e `PromptCommands`
+  controllati in `test_startup_wires_the_modules`).
+- `pytest` → 444 passed, 17 deselected.
+- Prova di avvio con il server MCP reale (LM Studio non usato: nessuna domanda al modello),
+  `/prompts`, `/PROMPTS altro`, `/promt`, `esci` in pipe: elenco dei due prompt come nella specifica
+  §5, `prompts/list count=2 names=spiega,riassumi_conversazione`, rifiuto con `prompt_command
+  status=rejected`, «Comando sconosciuto: '/promt'…», exit 0.
+- Problemi aperti: `/prompt` dà ancora «Comando sconosciuto» (arriva al punto 5); la riga d'uso
+  dell'elenco lo cita già.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

@@ -28,7 +28,7 @@ streaming facoltativo). Si fa solo ciò che chiede la traccia (decisione dell'ut
 - [x] Specifica dello Step 5 in `docs/superpowers/specs/` e requisiti §13 (sintassi di `/prompts` e `/prompt nome chiave=valore` con valori tra virgolette, messaggi d'errore, righe di log)
 - [x] Server MCP: prompt `spiega(argomento, livello="base")` e `riassumi_conversazione(stile)`; test di `prompts/list` (nome, descrizione, argomenti) e `prompts/get`
 - [x] Client MCP: metodi sincroni `list_prompts` e `get_prompt` in `mcp_client.py` e nel `FakeMcpClient`; test con il server reale via stdio
-- [ ] Terminale: comando `/prompts` che mostra nome, descrizione e argomenti di ogni prompt; test con client finto
+- [x] Terminale: comando `/prompts` che mostra nome, descrizione e argomenti di ogni prompt; test con client finto
 - [ ] Terminale: comando `/prompt nome chiave=valore` con controllo rispetto a `prompts/list` (argomenti obbligatori mancanti o sconosciuti bloccano la richiesta senza chiamare il modello); i messaggi ottenuti entrano nella cronologia e passano dal grafo (router, strumenti, revisore); log con prompt, argomenti e messaggi ricevuti; test con client e modello finti
 - [ ] Prova reale Step 5: `/prompt spiega argomento="Model Context Protocol" livello=base` dà una risposta adeguata e `riassumi_conversazione` riassume i turni della sessione; README aggiornato
 

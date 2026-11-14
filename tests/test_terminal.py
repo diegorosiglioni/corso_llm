@@ -1,7 +1,8 @@
 import pytest
 
+from assistant.commands import CommandResult, PromptCommands
 from assistant.terminal import run
-from conftest import lm_studio_error
+from conftest import MCP_SPECS, FakeMcpClient, lm_studio_error
 
 
 def inputs(*lines):
@@ -35,10 +36,22 @@ class FakeSession:
         return outcome
 
 
-def execute(session, *lines):
+class FakeCommands:
+    """Records the commands and answers with the scripted outputs."""
+
+    def __init__(self, *outputs):
+        self._outputs = list(outputs)
+        self.texts = []
+
+    def handle(self, text):
+        self.texts.append(text)
+        return CommandResult(self._outputs.pop(0))
+
+
+def execute(session, *lines, commands=None):
     outputs = []
     read = inputs(*lines)
-    run(session, read=read, write=outputs.append)
+    run(session, read=read, write=outputs.append, commands=commands)
     return outputs, read
 
 
@@ -95,3 +108,46 @@ def test_lm_studio_error_and_continue():
 def test_other_exceptions_not_caught():
     with pytest.raises(RuntimeError):
         execute(FakeSession(RuntimeError("difetto")), "ciao")
+
+
+# --- commands (lesson 6, step 5) ---
+
+def test_command_goes_to_the_commands_not_to_the_model():  # CA-56
+    session, commands = FakeSession(), FakeCommands("elenco")
+    outputs, _ = execute(session, "  /prompts  ", "ciao", commands=commands)
+    assert commands.texts == ["/prompts"]
+    assert session.questions == ["ciao"]
+    assert outputs == ["elenco", "Assistente> risposta a ciao", "Arrivederci!"]
+
+
+def test_unknown_command_with_the_real_commands():
+    session = FakeSession()
+    client = FakeMcpClient(MCP_SPECS)
+    outputs, _ = execute(session, "/promt", commands=PromptCommands(client))
+    assert outputs == [
+        "Comando sconosciuto: '/promt'. Scrivi /prompts per l'elenco dei prompt.",
+        "Arrivederci!",
+    ]
+    assert session.questions == [] and client.prompt_lists == 0
+
+
+def test_prompts_with_the_real_commands():
+    session = FakeSession()
+    client = FakeMcpClient(MCP_SPECS)
+    outputs, _ = execute(session, "/PROMPTS", commands=PromptCommands(client))
+    assert outputs == ["Il server MCP non offre prompt.", "Arrivederci!"]
+    assert session.questions == [] and client.prompt_lists == 1
+
+
+def test_command_without_commands():
+    session = FakeSession()
+    outputs, _ = execute(session, "/prompts", "esci")
+    assert outputs == ["Comandi non disponibili.", "Arrivederci!"]
+    assert session.questions == []
+
+
+def test_slash_inside_a_question_is_not_a_command():
+    session, commands = FakeSession(), FakeCommands()
+    execute(session, "quanto fa 6 / 3?", commands=commands)
+    assert session.questions == ["quanto fa 6 / 3?"]
+    assert commands.texts == []

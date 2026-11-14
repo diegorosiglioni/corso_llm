@@ -1,5 +1,5 @@
 """Startup: configuration → logging → MCP client → models (agent, router, reviewer, summary) →
-graph → session → terminal."""
+graph → session → terminal with the prompt commands."""
 
 import logging
 import os
@@ -8,6 +8,7 @@ from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
 
+from assistant.commands import PromptCommands
 from assistant.config import ConfigError, load_config
 from assistant.graph import build_graph
 from assistant.mcp_client import (
@@ -107,9 +108,9 @@ def _converse(config, client) -> int:
     session = Session(graph)
     print(
         f"Assistente del laboratorio — modello {config.model} su {config.base_url}. "
-        "Scrivi 'esci' per uscire."
+        "Scrivi /prompts per i prompt disponibili, 'esci' per uscire."
     )
-    run(session)
+    run(session, commands=PromptCommands(client))
     return 0
 
 

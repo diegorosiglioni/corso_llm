@@ -111,6 +111,9 @@ Con LM Studio avviato, il modello caricato e le variabili impostate:
 Si conversa al prompt `Tu>`. La sessione termina con `esci`, con Ctrl+Z seguito da Invio
 (fine input su Windows) o con Ctrl+C. La cronologia vale solo per la sessione in corso.
 La conversazione va su stdout, i log su stderr.
+Il testo che comincia con `/` è un comando e non arriva al modello: `/prompts` elenca i prompt del
+server MCP (nome, descrizione e argomenti, log `prompts/list count=… names=…`); un comando
+sconosciuto dà «Comando sconosciuto».
 
 Per una prova non interattiva si possono passare le domande in ingresso:
 
