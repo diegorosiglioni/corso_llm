@@ -224,3 +224,33 @@ def test_preferences_file_default_and_override():
 def test_missing_preferences_file_is_not_a_config_error(tmp_path):
     missing = str(tmp_path / "manca.json")
     assert load_config({**VALID, "PREFERENCES_FILE": missing}).preferences_file == missing
+
+
+# --- HTTP service (lesson 6, step 6) ---
+
+def test_agent_address_default_and_override():
+    config = load_config(VALID)
+    assert (config.agent_host, config.agent_port) == ("127.0.0.1", 8000)
+    config = load_config({**VALID, "AGENT_HOST": " 0.0.0.0 ", "AGENT_PORT": " 8080 "})
+    assert (config.agent_host, config.agent_port) == ("0.0.0.0", 8080)
+    config = load_config({**VALID, "AGENT_HOST": "  ", "AGENT_PORT": ""})
+    assert (config.agent_host, config.agent_port) == ("127.0.0.1", 8000)
+
+
+@pytest.mark.parametrize("value", ["1", "65535"])
+def test_agent_port_limits_accepted(value):
+    assert load_config({**VALID, "AGENT_PORT": value}).agent_port == int(value)
+
+
+@pytest.mark.parametrize("value", ["abc", "0", "-1", "65536", "80.5"])
+def test_invalid_agent_port(value):
+    assert error({**VALID, "AGENT_PORT": value}) == (
+        f"AGENT_PORT deve essere un intero tra 1 e 65535, ricevuto '{value}'."
+    )
+
+
+def test_agent_port_problem_listed_with_the_others():
+    assert error({"AGENT_PORT": "0"}) == (
+        "Manca LMSTUDIO_BASE_URL. Manca LMSTUDIO_MODEL. "
+        "AGENT_PORT deve essere un intero tra 1 e 65535, ricevuto '0'."
+    )

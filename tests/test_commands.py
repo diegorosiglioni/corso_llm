@@ -11,6 +11,7 @@ from assistant.commands import (
     PromptListError,
     PromptRejectedError,
     PromptRequestError,
+    available_prompts,
     parse_prompt_command,
     resolve_prompt,
 )
@@ -112,6 +113,24 @@ def test_empty_list_is_logged(caplog):
     caplog.set_level(logging.INFO)
     PromptCommands(client_with()).handle("/prompts")
     assert [r.getMessage() for r in caplog.records] == ["prompts/list count=0 names="]
+
+
+def test_available_prompts_returns_the_list(caplog):  # shared by the CLI and GET /prompts
+    caplog.set_level(logging.INFO)
+    assert available_prompts(client_with(EXPLAIN, SUMMARY)) == [EXPLAIN, SUMMARY]
+    assert [r.getMessage() for r in caplog.records] == [
+        "prompts/list count=2 names=spiega,riassumi_conversazione"
+    ]
+
+
+def test_available_prompts_unavailable(caplog):
+    caplog.set_level(logging.INFO)
+    with pytest.raises(PromptListError) as raised:
+        available_prompts(PromptListFails(MCP_SPECS))
+    assert str(raised.value) == "prompt non disponibili (sessione MCP chiusa)"
+    assert [(r.levelno, r.getMessage()) for r in caplog.records] == [
+        (logging.WARNING, 'prompts/list status=unavailable error="sessione MCP chiusa"'),
+    ]
 
 
 def test_list_with_arguments_is_rejected(caplog):

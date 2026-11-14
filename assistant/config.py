@@ -10,6 +10,8 @@ LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 DEFAULT_NOTES_DB = "data/notes.sqlite3"
 DEFAULT_SCOPE_FILE = str(Path(__file__).parent / "data" / "scope.txt")
 DEFAULT_PREFERENCES_FILE = str(Path(__file__).parent / "data" / "preferenze.json")
+DEFAULT_AGENT_HOST = "127.0.0.1"  # not reachable from other computers
+DEFAULT_AGENT_PORT = 8000
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,8 @@ class Config:
     # PREFERENCES_FILE: not read here, a missing file must not stop the startup (the MCP
     # server reads it, the host falls back to the defaults).
     preferences_file: str = DEFAULT_PREFERENCES_FILE
+    agent_host: str = DEFAULT_AGENT_HOST  # AGENT_HOST  (address of the HTTP service)
+    agent_port: int = DEFAULT_AGENT_PORT  # AGENT_PORT  (integer 1…65535)
 
 
 class ConfigError(Exception):
@@ -118,10 +122,24 @@ def load_config(env: Mapping[str, str]) -> Config:
         if not scope:
             problems.append(f"SCOPE_FILE vuoto: '{scope_file}'.")
 
+    agent_port = DEFAULT_AGENT_PORT
+    port_text = read("AGENT_PORT")
+    if port_text:
+        try:
+            agent_port = int(port_text)
+        except ValueError:
+            agent_port = 0
+        if not 1 <= agent_port <= 65535:
+            problems.append(
+                f"AGENT_PORT deve essere un intero tra 1 e 65535, ricevuto '{port_text}'."
+            )
+
     if problems:
         raise ConfigError(" ".join(problems))
     return Config(
         base_url, model, max_steps, log_level, notes_db, scope_file, scope, max_reviews,
         summary_max_messages, summary_keep_messages,
         read("PREFERENCES_FILE") or DEFAULT_PREFERENCES_FILE,
+        read("AGENT_HOST") or DEFAULT_AGENT_HOST,
+        agent_port,
     )

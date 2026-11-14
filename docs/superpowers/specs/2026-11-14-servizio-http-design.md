@@ -198,6 +198,15 @@ Aggiunte del punto 3 (modalità autonoma): `kind` vale `none` o `both` per una r
 conforme allo schema (`422`) è rifiutato da FastAPI prima dell'endpoint e non scrive righe `api`. Il
 testo di `message` arriva al grafo senza gli spazi iniziali e finali, come nel terminale.
 
+Aggiunte del punto 4 (modalità autonoma): anche le righe di risposta di `/status` e `/prompts`
+terminano con `duration_ms=` (stesso formato di `/chat`; `/status` può durare fino al timeout di
+`GET /models`); `/prompts` riuscito scrive `api response=prompts status=200 count=<n>`; un `500`
+scrive la stessa riga degli altri errori a livello ERROR, con il traceback; nessuna riga
+`api request=` per `/status` e `/prompts` (non hanno corpo). La riga d'avvio del servizio (§8)
+aggiunge `model=<id> base_url=<url>` e usa il logger `assistant.service`. L'elenco dei prompt per
+CLI, `POST /chat` e `GET /prompts` viene da una sola funzione, `available_prompts(client)` in
+`commands.py` (`PromptListError` «prompt non disponibili (…)»).
+
 ## 8. Servizio (`assistant/service.py`)
 
 Stessa sequenza dell'avvio attuale: configurazione (`load_config`, più `AGENT_HOST` e `AGENT_PORT`),

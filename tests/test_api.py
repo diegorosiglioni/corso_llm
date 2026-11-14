@@ -2,13 +2,24 @@ import json
 import logging
 import re
 
+import httpx2
+import openai
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 
 from assistant.api import create_app
 from assistant.mcp_client import PromptArgument, PromptMessage, PromptSpec
-from conftest import MCP_SPECS, FakeMcpClient, FakeModel, PromptListFails, fake_graph, tool_call
+from assistant.tools import ToolUnavailableError
+from conftest import (
+    MCP_SPECS,
+    FakeMcpClient,
+    FakeModel,
+    PromptListFails,
+    fake_graph,
+    lm_studio_error,
+    tool_call,
+)
 
 TOKYO = {"timezone": "Asia/Tokyo", "datetime": "2026-10-27T00:47:12+09:00"}
 EXPLAIN = PromptSpec("spiega", "Spiega un argomento.", (
@@ -25,10 +36,19 @@ def mcp_client(messages_for=explain_text) -> FakeMcpClient:
     return FakeMcpClient(MCP_SPECS, prompts={"spiega": (EXPLAIN, messages_for)})
 
 
-def api(model=None, client=None, **graph_options) -> TestClient:
+MODEL_ID = "google/gemma-4-e2b"
+
+
+def model_ok() -> tuple[bool, str]:
+    return True, ""
+
+
+def api(model=None, client=None, model_status=model_ok, **graph_options) -> TestClient:
     """Service on a fake graph; the default model fails if it is ever called."""
     graph = fake_graph(FakeModel([]) if model is None else model, **graph_options)
-    return TestClient(create_app(graph=graph, client=client or mcp_client()))
+    return TestClient(create_app(
+        graph=graph, client=client or mcp_client(), model_id=MODEL_ID, model_status=model_status,
+    ))
 
 
 def api_lines(caplog) -> list[str]:
@@ -357,8 +377,8 @@ def test_openapi_documents_the_chat_endpoint():
     assert operation["requestBody"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/ChatRequest"
     }
-    assert set(operation["responses"]) == {"200", "400", "422", "502", "503"}
-    for code in ("400", "502", "503"):
+    assert set(operation["responses"]) == {"200", "400", "422", "500", "502", "503"}
+    for code in ("400", "500", "502", "503"):
         schema = operation["responses"][code]["content"]["application/json"]["schema"]
         assert schema == {"$ref": "#/components/schemas/ErrorBody"}
     schemas = document["components"]["schemas"]
@@ -375,3 +395,201 @@ def test_docs_page_is_served():
     response = api().get("/docs")
     assert response.status_code == 200
     assert "swagger" in response.text.lower()
+
+
+# --- LM Studio and unexpected errors (specification §6, CA-63) ---
+
+LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
+
+
+def lm_studio_timeout() -> openai.APITimeoutError:
+    return openai.APITimeoutError(request=httpx2.Request("POST", LM_STUDIO_URL))
+
+
+def lm_studio_status_error() -> openai.InternalServerError:
+    request = httpx2.Request("POST", LM_STUDIO_URL)
+    return openai.InternalServerError(
+        "Model unloaded", response=httpx2.Response(500, request=request), body=None
+    )
+
+
+def lm_studio_generic_error() -> openai.APIError:
+    return openai.APIError("risposta inattesa", httpx2.Request("POST", LM_STUDIO_URL), body=None)
+
+
+@pytest.mark.parametrize(("error", "status", "code", "detail"), [
+    (lm_studio_error(), 503, "model_unavailable", "LM Studio non raggiungibile: Connection error."),
+    (lm_studio_timeout(), 503, "model_unavailable",
+     "LM Studio non raggiungibile: Request timed out."),
+    (lm_studio_status_error(), 502, "model_error",
+     "LM Studio non ha risposto correttamente: Model unloaded"),
+    (lm_studio_generic_error(), 502, "model_error",
+     "LM Studio non ha risposto correttamente: risposta inattesa"),
+], ids=["connection", "timeout", "status", "generic"])
+def test_lm_studio_errors(error, status, code, detail, caplog):
+    caplog.set_level(logging.INFO)
+    history = [{"role": "user", "content": "d1"}, {"role": "assistant", "content": "r1"}]
+    response = api(FakeModel([error])).post("/chat", json={"message": "ciao", "history": history})
+    assert (response.status_code, response.json()) == (status, {"error": code, "detail": detail})
+    records = [r for r in caplog.records if r.name == "assistant.api"]
+    assert records[-1].levelno == logging.WARNING
+    assert without_duration(records[-1].getMessage()) == (
+        f"api response=chat status={status} error={code} "
+        f"detail={json.dumps(detail, ensure_ascii=False)}"
+    )
+
+
+def test_lm_studio_error_during_a_prompt_turn():
+    response = api(FakeModel([lm_studio_error()])).post("/chat", json={
+        "prompt": {"name": "spiega", "arguments": {"argomento": "MCP"}}
+    })
+    assert (response.status_code, response.json()["error"]) == (503, "model_unavailable")
+
+
+def test_unexpected_error_is_500_with_the_traceback_only_in_the_log(caplog):
+    caplog.set_level(logging.INFO)
+    response = api(FakeModel([RuntimeError("segreto interno")])).post(
+        "/chat", json={"message": "ciao"}
+    )
+    assert (response.status_code, response.json()) == (500, {
+        "error": "internal_error", "detail": "errore interno dell'agente; dettagli nel log"
+    })
+    assert "segreto interno" not in response.text
+    record = [r for r in caplog.records if r.name == "assistant.api"][-1]
+    assert record.levelno == logging.ERROR
+    assert record.exc_info and isinstance(record.exc_info[1], RuntimeError)
+    assert without_duration(record.getMessage()) == (
+        "api response=chat status=500 error=internal_error "
+        "detail=\"errore interno dell'agente; dettagli nel log\""
+    )
+
+
+# --- GET /prompts (CA-64) ---
+
+def test_prompts_lists_the_mcp_prompts(caplog):
+    caplog.set_level(logging.INFO)
+    client = mcp_client()
+    response = api(client=client).get("/prompts")
+    assert response.status_code == 200
+    assert response.json() == [{
+        "name": "spiega", "description": "Spiega un argomento.", "arguments": [
+            {"name": "argomento", "description": "Argomento.", "required": True},
+            {"name": "livello", "description": "Livello.", "required": False},
+        ],
+    }]
+    assert client.prompt_lists == 1 and client.prompt_gets == []
+    assert "prompts/list count=1 names=spiega" in [r.getMessage() for r in caplog.records]
+    assert without_duration(api_lines(caplog)[-1]) == "api response=prompts status=200 count=1"
+
+
+def test_prompts_without_prompts():
+    response = api(client=FakeMcpClient(MCP_SPECS)).get("/prompts")
+    assert (response.status_code, response.json()) == (200, [])
+
+
+def test_prompts_unavailable(caplog):
+    caplog.set_level(logging.INFO)
+    response = api(client=PromptListFails(MCP_SPECS)).get("/prompts")
+    assert (response.status_code, response.json()) == (503, {
+        "error": "mcp_unavailable", "detail": "prompt non disponibili (sessione MCP chiusa)"
+    })
+    record = [r for r in caplog.records if r.name == "assistant.api"][-1]
+    assert record.levelno == logging.WARNING
+    assert without_duration(record.getMessage()) == (
+        "api response=prompts status=503 error=mcp_unavailable "
+        "detail=\"prompt non disponibili (sessione MCP chiusa)\""
+    )
+
+
+def test_prompts_unexpected_error_is_500():
+    class Broken(FakeMcpClient):
+        def list_prompts(self):
+            raise RuntimeError("guasto")
+
+    response = api(client=Broken(MCP_SPECS)).get("/prompts")
+    assert (response.status_code, response.json()["error"]) == (500, "internal_error")
+
+
+# --- GET /status (CA-64) ---
+
+class ToolListFails(FakeMcpClient):
+    """FakeMcpClient whose tools/list fails as with a closed MCP session."""
+
+    def list_tools(self):
+        raise ToolUnavailableError("sessione MCP chiusa")
+
+
+MODEL_DOWN = "LM Studio non raggiungibile su http://localhost:1234/v1"
+MCP_OK = {"status": "ok", "detail": "7 strumenti"}
+MCP_DOWN = {"status": "unavailable", "detail": "sessione MCP chiusa"}
+MODEL_UP = {"status": "ok", "id": MODEL_ID, "detail": ""}
+MODEL_GONE = {"status": "unavailable", "id": MODEL_ID, "detail": MODEL_DOWN}
+
+
+def model_down() -> tuple[bool, str]:
+    return False, MODEL_DOWN
+
+
+@pytest.mark.parametrize(("client_type", "model_status", "code", "mcp", "model"), [
+    (FakeMcpClient, model_ok, 200, MCP_OK, MODEL_UP),
+    (FakeMcpClient, model_down, 503, MCP_OK, MODEL_GONE),
+    (ToolListFails, model_ok, 503, MCP_DOWN, MODEL_UP),
+    (ToolListFails, model_down, 503, MCP_DOWN, MODEL_GONE),
+], ids=["all-ok", "model-down", "mcp-down", "both-down"])
+def test_status_combinations(client_type, model_status, code, mcp, model, caplog):
+    caplog.set_level(logging.INFO)
+    response = api(client=client_type(MCP_SPECS), model_status=model_status).get("/status")
+    assert response.status_code == code
+    assert response.json() == {
+        "status": "ok" if code == 200 else "degraded", "agent": "ok", "mcp": mcp, "model": model,
+    }
+    record = [r for r in caplog.records if r.name == "assistant.api"][-1]
+    assert record.levelno == (logging.INFO if code == 200 else logging.WARNING)
+    assert without_duration(record.getMessage()) == (
+        f"api response=status status={code} mcp={mcp['status']} model={model['status']}"
+    )
+
+
+def test_status_checks_again_at_every_request():
+    answers = [(False, MODEL_DOWN), (True, "")]
+    service = api(model_status=lambda: answers.pop(0))
+    assert service.get("/status").status_code == 503
+    assert service.get("/status").status_code == 200
+
+
+def test_status_calls_neither_the_model_nor_the_prompts():
+    client = mcp_client()
+    assert api(client=client).get("/status").status_code == 200  # the FakeModel([]) is unused
+    assert client.prompt_lists == 0 and client.calls == []
+
+
+def test_status_unexpected_error_is_500():
+    def broken():
+        raise RuntimeError("guasto")
+
+    response = api(model_status=broken).get("/status")
+    assert (response.status_code, response.json()["error"]) == (500, "internal_error")
+
+
+# --- OpenAPI of /prompts and /status ---
+
+def test_openapi_documents_prompts_and_status():
+    document = api().get("/openapi.json").json()
+    assert {"/chat", "/prompts", "/status"} <= set(document["paths"])
+    prompts = document["paths"]["/prompts"]["get"]["responses"]
+    assert set(prompts) == {"200", "500", "503"}
+    assert prompts["200"]["content"]["application/json"]["schema"]["items"] == {
+        "$ref": "#/components/schemas/PromptInfo"
+    }
+    assert prompts["503"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ErrorBody"
+    }
+    status = document["paths"]["/status"]["get"]["responses"]
+    assert set(status) == {"200", "500", "503"}
+    for code in ("200", "503"):
+        assert status[code]["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/StatusBody"
+        }
+    schemas = document["components"]["schemas"]
+    for name in ("PromptInfo", "PromptArgumentInfo", "StatusBody", "McpStatus", "ModelStatus"):
+        assert name in schemas

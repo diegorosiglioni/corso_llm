@@ -147,13 +147,13 @@ def to_messages(received: list[PromptMessage]) -> list[BaseMessage]:
     return [ROLES[message.role](message.text) for message in received]
 
 
-def _specs(client) -> list[PromptSpec]:
-    """prompts/list, logged in both outcomes; PromptUnavailableError goes to the caller."""
+def available_prompts(client) -> list[PromptSpec]:
+    """prompts/list, logged in both outcomes; a failure becomes PromptListError."""
     try:
         specs = client.list_prompts()
     except PromptUnavailableError as error:
         log.warning("prompts/list status=unavailable error=%s", _json(str(error)))
-        raise
+        raise PromptListError(f"prompt non disponibili ({error})") from error
     log.info("prompts/list count=%d names=%s", len(specs), ",".join(spec.name for spec in specs))
     return specs
 
@@ -168,10 +168,7 @@ def resolve_prompt(client, name: str, arguments: dict[str, str]) -> list[BaseMes
     Raises PromptRejectedError, PromptListError or PromptGetError; prompts/get is called only
     for a request that matches prompts/list.
     """
-    try:
-        specs = _specs(client)
-    except PromptUnavailableError as error:
-        raise PromptListError(f"prompt non disponibili ({error})") from error
+    specs = available_prompts(client)
     problem = check_request(specs, name, arguments)
     if problem:
         _rejected(problem)
@@ -215,9 +212,9 @@ class PromptCommands:
 
     def _list(self) -> CommandResult:
         try:
-            specs = _specs(self._client)
-        except PromptUnavailableError as error:
-            return CommandResult(f"Errore: prompt non disponibili ({error}).")
+            specs = available_prompts(self._client)
+        except PromptListError as error:
+            return CommandResult(f"Errore: {error}.")
         return CommandResult(format_prompts(specs))
 
     def _prompt(self, text: str) -> CommandResult:

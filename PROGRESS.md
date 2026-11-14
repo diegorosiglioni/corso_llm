@@ -749,6 +749,76 @@ Decisioni:
   `python -m assistant.service` al punto 4; README invariato (il servizio non si avvia ancora da riga
   di comando), si aggiorna al punto 5.
 
+### Punto 4 · Stato, prompt, errori e avvio del servizio — piano
+
+1. `assistant/model.py`: `check_model(config, http=None) -> (ok, detail)` con `GET <base_url>/models`
+   (timeout 5 s): non raggiungibile, codice diverso da 200, risposta non valida, modello assente.
+2. `assistant/commands.py`: `available_prompts(client)` (ex `_specs`, ora pubblica) che dà
+   `PromptListError("prompt non disponibili (…)")`; la usano `resolve_prompt`, `/prompts` della CLI
+   e `GET /prompts`.
+3. `assistant/api.py`: `create_app(*, graph, client, model_id, model_status)`; `GET /status`
+   (`tools/list` per MCP, `model_status()` per il modello, `200`/`503` con lo stesso corpo, riga
+   `api response=status …`); `GET /prompts` (`200` elenco, `503 mcp_unavailable`); in `/chat`
+   `APIConnectionError` → `503 model_unavailable`, altro `openai.APIError` → `502 model_error`;
+   qualsiasi altra eccezione in ogni endpoint → `500 internal_error` con traceback a ERROR.
+4. `assistant/config.py`: `AGENT_HOST` (predefinito `127.0.0.1`, non vuoto) e `AGENT_PORT`
+   (predefinita `8000`, intero 1…65535).
+5. `assistant/service.py`: configurazione, logging, client MCP, strumenti, preferenze, modelli,
+   grafo, `create_app`, riga `api listening=…`, `uvicorn.run(..., access_log=False,
+   log_config=None)`; errori di configurazione e di MCP → stderr ed exit 1.
+6. Test: `test_model.py` (`check_model` con `httpx.MockTransport`), `test_commands.py`,
+   `test_api.py` (ogni riga della tabella §6, `/status` in tutte le combinazioni, `/prompts`,
+   OpenAPI con i tre percorsi, righe di log), `test_config.py`, `test_service.py` (nuovo, MCP e
+   `uvicorn.run` sostituiti). Poi `pytest` completo.
+
+Decisioni:
+- `service.py` ripete per ora l'avvio di `__main__.py` (logging, strumenti, modelli, grafo): al
+  punto 5 `__main__.py` diventa il client HTTP e quel codice esce da lì; spostarlo ora avrebbe
+  obbligato a riscrivere due volte `test_main.py`.
+- Stato MCP con `tools/list` (come la specifica §1): `detail` «N strumenti» con il numero pubblicato
+  dal server.
+- `GET /status` e `GET /prompts` scrivono solo la riga di risposta (come l'esempio della specifica
+  §7); `/status` a INFO con `200`, a WARNING con `503`.
+- `APITimeoutError` deriva da `APIConnectionError` in `openai`: un solo `except` per il `503`.
+
+### Punto 4 · Stato, prompt, errori e avvio del servizio — fatto
+
+- Implementati `check_model` in `model.py`; `available_prompts` in `commands.py` (al posto di
+  `_specs`, usata da `resolve_prompt`, dal `/prompts` della CLI e da `GET /prompts`); in `api.py`
+  `create_app(*, graph, client, model_id, model_status)`, `GET /prompts`, `GET /status`, gli errori
+  `model_unavailable` (`503`), `model_error` (`502`) e `internal_error` (`500`, aiuto `_answer`
+  comune ai tre endpoint), modelli `PromptInfo`, `PromptArgumentInfo`, `StatusBody`, `McpStatus`,
+  `ModelStatus` nell'OpenAPI; `AGENT_HOST`/`AGENT_PORT` in `config.py` e `.env.example`;
+  `assistant/service.py` (`python -m assistant.service`). README (variabili e breve sezione «Servizio
+  HTTP dell'agente»), `CLAUDE.md` (struttura), specifica §7 con le aggiunte del punto.
+- Decisioni prese durante l'esecuzione (sostituiscono la terza decisione del piano): le righe di
+  risposta di `/status` e `/prompts` hanno anche `duration_ms=` (un controllo del modello può durare
+  secondi); `/prompts` riuscito → `api response=prompts status=200 count=N`; un `500` usa la stessa
+  riga degli altri errori a ERROR con traceback; la riga d'avvio aggiunge `model=` e `base_url=` e
+  usa il logger `assistant.service` (con `python -m` `__name__` sarebbe `__main__`).
+- Test nuovi: `test_api.py` (+18: quattro errori di LM Studio con codice, `detail` e riga WARNING,
+  errore di LM Studio in un turno da prompt, `500` senza dettagli nella risposta e con traceback nel
+  log; `/prompts` con elenco, vuoto, `503` e `500`; `/status` nelle quattro combinazioni con righe e
+  livelli, nuovo controllo a ogni richiesta, nessuna chiamata a modello e prompt, `500`; OpenAPI con i
+  tre percorsi e gli schemi), `test_model.py` (+12, `check_model` con `httpx.MockTransport` e su
+  una porta chiusa), `test_config.py` (+9), `test_commands.py` (+2), `test_service.py` (nuovo, 11:
+  indirizzo predefinito e da ambiente, configurazione non valida, MCP non avviato, discovery fallita,
+  nomi doppi, percorsi assoluti al server MCP, librerie silenziose, LM Studio non contattato
+  all'avvio, app passata a uvicorn che risponde a `/status`, `/prompts` e `/chat` con le preferenze
+  lette una sola volta). Test esistenti invariati tranne l'aiuto `api()` e i codici attesi
+  dall'OpenAPI di `/chat` (ora con `500`).
+- `pytest` → 645 passed, 19 deselected.
+- Prova d'avvio da Git Bash con il server MCP reale e LM Studio volutamente irraggiungibile
+  (`LMSTUDIO_BASE_URL=http://127.0.0.1:1/v1`, `AGENT_PORT=8765`, note in `%TEMP%`): righe `tools=…`,
+  `resources/read … status=ok`, `api listening=…`, avvio di uvicorn; `GET /status` → `503`
+  `degraded`, MCP `ok` «7 strumenti», modello `unavailable` «LM Studio non raggiungibile su
+  http://127.0.0.1:1/v1»; `GET /prompts` → `200` con i due prompt; `POST /chat` → `503
+  model_unavailable` «LM Studio non raggiungibile: Connection error.»; `/openapi.json` con `/chat`,
+  `/prompts`, `/status`. Servizio fermato con `taskkill`.
+- Problemi aperti: `__main__.py` ripete ancora l'avvio di `service.py` fino al punto 5 (CLI client);
+  `/status` con LM Studio attivo e la sezione completa del README (due processi, Docker) ai punti 5 e
+  6; su Windows una porta chiusa fa durare `/status` circa 2,5 s (tentativi di connessione di httpx).
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

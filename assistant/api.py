@@ -9,9 +9,12 @@ the 422 of FastAPI for a body that does not match the schema.
 import json
 import logging
 import time
+from collections.abc import Callable
+from dataclasses import asdict
 from typing import Annotated, Any, Literal
 
-from fastapi import FastAPI
+import openai
+from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse
 from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,8 +24,10 @@ from assistant.commands import (
     PromptGetError,
     PromptListError,
     PromptRejectedError,
+    available_prompts,
     resolve_prompt,
 )
+from assistant.tools import ToolUnavailableError
 
 log = logging.getLogger(__name__)
 
@@ -122,16 +127,67 @@ class ErrorBody(BaseModel):
     detail: str = Field(description="Messaggio in italiano.")
 
 
+class PromptArgumentInfo(BaseModel):
+    name: str = Field(description="Nome dell'argomento.")
+    description: str = Field(description="Descrizione dell'argomento.")
+    required: bool = Field(description="true se l'argomento è obbligatorio.")
+
+
+class PromptInfo(BaseModel):
+    name: str = Field(description="Nome del prompt.")
+    description: str = Field(description="Descrizione del prompt.")
+    arguments: list[PromptArgumentInfo] = Field(description="Argomenti del prompt.")
+
+
+class McpStatus(BaseModel):
+    status: Literal["ok", "unavailable"] = Field(description="Esito di tools/list.")
+    detail: str = Field(description="Numero di strumenti oppure motivo, in italiano.")
+
+
+class ModelStatus(BaseModel):
+    status: Literal["ok", "unavailable"] = Field(description="Esito di GET /models di LM Studio.")
+    id: str = Field(description="Identificativo del modello configurato.")
+    detail: str = Field(description="Motivo, in italiano; vuoto se il modello è disponibile.")
+
+
+class StatusBody(BaseModel):
+    status: Literal["ok", "degraded"] = Field(
+        description="ok se server MCP e modello sono disponibili, altrimenti degraded."
+    )
+    agent: Literal["ok"] = Field(description="Il servizio dell'agente risponde.")
+    mcp: McpStatus
+    model: ModelStatus
+
+
+INTERNAL_ERROR = {"model": ErrorBody, "description": "Errore imprevisto (internal_error)."}
+
 CHAT_ERRORS = {
     400: {"model": ErrorBody, "description": (
         "Richiesta non valida (invalid_request), cronologia non valida (invalid_history) o prompt "
         "rifiutato dal controllo dell'host (prompt_rejected)."
     )},
+    500: INTERNAL_ERROR,
     502: {"model": ErrorBody, "description": (
-        "Prompt non ottenibile dal server MCP o non utilizzabile (prompt_unavailable)."
+        "Prompt non ottenibile dal server MCP o non utilizzabile (prompt_unavailable), oppure "
+        "errore di LM Studio (model_error)."
     )},
+    503: {"model": ErrorBody, "description": (
+        "Elenco dei prompt non disponibile (mcp_unavailable) o LM Studio non raggiungibile "
+        "(model_unavailable)."
+    )},
+}
+
+PROMPTS_ERRORS = {
+    500: INTERNAL_ERROR,
     503: {"model": ErrorBody, "description": "Elenco dei prompt non disponibile (mcp_unavailable)."},
 }
+
+STATUS_RESPONSES = {
+    500: INTERNAL_ERROR,
+    503: {"model": StatusBody, "description": "Server MCP o modello non disponibili (degraded)."},
+}
+
+INTERNAL_DETAIL = "errore interno dell'agente; dettagli nel log"
 
 
 class ApiError(Exception):
@@ -188,7 +244,15 @@ def _chat(graph, client, request: ChatRequest) -> dict:
     if request.message is not None and not request.message.strip():
         raise ApiError(400, "invalid_request", "il campo 'message' è vuoto")
     history = _history(request)  # before the prompt: a bad history calls nothing
-    result = run_turn(graph, history, request.summary, _opening(client, request))
+    opening = _opening(client, request)
+    try:
+        result = run_turn(graph, history, request.summary, opening)
+    except openai.APIConnectionError as error:  # APITimeoutError included
+        raise ApiError(503, "model_unavailable", f"LM Studio non raggiungibile: {error}") from None
+    except openai.APIError as error:
+        raise ApiError(
+            502, "model_error", f"LM Studio non ha risposto correttamente: {error}"
+        ) from None
     return {
         "reply": result.reply,
         "tools_used": result.tools_used,
@@ -197,11 +261,32 @@ def _chat(graph, client, request: ChatRequest) -> dict:
     }
 
 
-def _log_error(endpoint: str, error: ApiError, started: float) -> None:
+def _mcp_status(client) -> dict:
+    try:
+        tools = client.list_tools()
+    except ToolUnavailableError as error:
+        return {"status": "unavailable", "detail": str(error)}
+    return {"status": "ok", "detail": f"{len(tools)} strumenti"}
+
+
+def _status(client, model_id: str, model_status: Callable[[], tuple[bool, str]]) -> dict:
+    mcp = _mcp_status(client)
+    model_ok, model_detail = model_status()
+    model = {"status": "ok" if model_ok else "unavailable", "id": model_id, "detail": model_detail}
+    ok = mcp["status"] == "ok" and model_ok
+    return {"status": "ok" if ok else "degraded", "agent": "ok", "mcp": mcp, "model": model}
+
+
+def _log_error(endpoint: str, error: ApiError, started: float, exc_info: bool = False) -> None:
+    """4xx at INFO, 5xx at WARNING, 500 at ERROR (with the traceback when `exc_info`)."""
+    if error.status == 500:
+        level = logging.ERROR
+    else:
+        level = logging.INFO if error.status < 500 else logging.WARNING
     log.log(
-        logging.INFO if error.status < 500 else logging.WARNING,
-        "api response=%s status=%d error=%s detail=%s duration_ms=%d",
+        level, "api response=%s status=%d error=%s detail=%s duration_ms=%d",
         endpoint, error.status, error.code, _json(error.detail), _elapsed_ms(started),
+        exc_info=exc_info,
     )
 
 
@@ -209,8 +294,31 @@ def _elapsed_ms(started: float) -> int:
     return round((time.monotonic() - started) * 1000)
 
 
-def create_app(*, graph, client) -> FastAPI:
-    """App on the compiled `graph` and the MCP `client` (real or fake)."""
+def _answer(endpoint: str, work: Callable[[float], Any]):
+    """Result of `work(started)` (which logs its own success), or the logged error response.
+
+    An unexpected exception becomes 500 internal_error, with the traceback in the log only.
+    """
+    started = time.monotonic()
+    try:
+        return work(started)
+    except ApiError as error:
+        _log_error(endpoint, error, started)
+        return error.response()
+    except Exception:
+        error = ApiError(500, "internal_error", INTERNAL_DETAIL)
+        _log_error(endpoint, error, started, exc_info=True)
+        return error.response()
+
+
+def create_app(
+    *, graph, client, model_id: str, model_status: Callable[[], tuple[bool, str]]
+) -> FastAPI:
+    """App on the compiled `graph` and the MCP `client` (real or fake).
+
+    `model_id` is the configured model; `model_status()` returns (ok, Italian detail), for
+    example `lambda: check_model(config)`.
+    """
     app = FastAPI(title=TITLE, description=DESCRIPTION)
 
     @app.post(
@@ -227,21 +335,66 @@ def create_app(*, graph, client) -> FastAPI:
         ),
     )
     def chat(request: ChatRequest):
-        started = time.monotonic()
         log.info(
             "api request=chat kind=%s history=%d summary_chars=%d",
             _kind(request), len(request.history), len(request.summary),
         )
-        try:
+
+        def work(started: float) -> dict:
             body = _chat(graph, client, request)
-        except ApiError as error:
-            _log_error("chat", error, started)
-            return error.response()
-        log.info(
-            "api response=chat status=200 tools=%s reply_chars=%d history=%d duration_ms=%d",
-            ",".join(str(tool["name"]) for tool in body["tools_used"]),
-            len(body["reply"]), len(body["history"]), _elapsed_ms(started),
-        )
-        return body
+            log.info(
+                "api response=chat status=200 tools=%s reply_chars=%d history=%d duration_ms=%d",
+                ",".join(str(tool["name"]) for tool in body["tools_used"]),
+                len(body["reply"]), len(body["history"]), _elapsed_ms(started),
+            )
+            return body
+
+        return _answer("chat", work)
+
+    @app.get(
+        "/prompts",
+        response_model=list[PromptInfo],
+        responses=PROMPTS_ERRORS,
+        summary="Prompt MCP disponibili",
+        description="Il contenuto di prompts/list del server MCP: nome, descrizione e argomenti.",
+    )
+    def prompts():
+        def work(started: float) -> list[dict]:
+            try:
+                specs = available_prompts(client)
+            except PromptListError as error:
+                raise ApiError(503, "mcp_unavailable", str(error)) from None
+            log.info(
+                "api response=prompts status=200 count=%d duration_ms=%d",
+                len(specs), _elapsed_ms(started),
+            )
+            return [asdict(spec) for spec in specs]
+
+        return _answer("prompts", work)
+
+    @app.get(
+        "/status",
+        response_model=StatusBody,
+        responses=STATUS_RESPONSES,
+        summary="Stato dell'agente",
+        description=(
+            "Controlla il server MCP (tools/list) e LM Studio (GET /models, il modello configurato "
+            "deve esserci): 200 se entrambi sono disponibili, 503 con lo stesso corpo altrimenti."
+        ),
+    )
+    def status(response: Response):
+        def work(started: float) -> dict:
+            body = _status(client, model_id, model_status)
+            ok = body["status"] == "ok"
+            response.status_code = 200 if ok else 503
+            log.log(
+                logging.INFO if ok else logging.WARNING,
+                "api response=status status=%d mcp=%s model=%s duration_ms=%d",
+                response.status_code, body["mcp"]["status"], body["model"]["status"],
+                _elapsed_ms(started),
+            )
+            return body
+
+        return _answer("status", work)
 
     return app

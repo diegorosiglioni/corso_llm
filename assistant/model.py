@@ -1,5 +1,6 @@
 """Connection to the model served by LM Studio through its OpenAI-compatible API."""
 
+import httpx
 import openai
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool
@@ -63,3 +64,28 @@ def create_reviewer_model(config: Config) -> Runnable:
 def create_summary_model(config: Config) -> Runnable:
     """Same model as the agent, without tools: free text."""
     return _chat(config)
+
+
+CHECK_TIMEOUT = 5.0  # GET /models does not load the model
+
+
+def check_model(config: Config, http: httpx.Client | None = None) -> tuple[bool, str]:
+    """(True, "") if LM Studio answers GET <base_url>/models and lists the configured model;
+    otherwise (False, Italian reason). `http` replaces the HTTP client in the tests."""
+    url = f"{config.base_url.rstrip('/')}/models"
+    try:
+        if http is None:
+            response = httpx.get(url, timeout=CHECK_TIMEOUT)
+        else:
+            response = http.get(url, timeout=CHECK_TIMEOUT)
+    except httpx.HTTPError:
+        return False, f"LM Studio non raggiungibile su {config.base_url}"
+    if response.status_code != 200:
+        return False, f"LM Studio ha risposto {response.status_code} a GET /models"
+    try:
+        ids = [entry["id"] for entry in response.json()["data"]]
+    except (ValueError, KeyError, TypeError):
+        return False, "risposta di GET /models non valida"
+    if config.model not in ids:
+        return False, f"modello '{config.model}' non presente in /models"
+    return True, ""

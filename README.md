@@ -74,6 +74,8 @@ L'applicazione legge variabili d'ambiente e il file con l'ambito dell'assistente
 | `NOTES_DB` | no | `data/notes.sqlite3` | file SQLite delle note, relativo alla cartella di avvio |
 | `SCOPE_FILE` | no | `assistant/data/scope.txt` del pacchetto | file di testo (UTF-8) con l'ambito dell'assistente; un percorso relativo vale dalla cartella di avvio |
 | `PREFERENCES_FILE` | no | `assistant/data/preferenze.json` del pacchetto | file JSON delle preferenze dell'utente, letto dal server MCP (sezione «Preferenze dell'utente»); un percorso relativo vale dalla cartella di avvio; un file mancante non blocca l'avvio |
+| `AGENT_HOST` | no | `127.0.0.1` | indirizzo su cui ascolta il servizio HTTP dell'agente (`0.0.0.0` per accettare connessioni da altri computer o container) |
+| `AGENT_PORT` | no | `8000` | porta del servizio HTTP dell'agente (intero tra 1 e 65535) |
 
 `.env.example` è il modello versionato; la copia reale `.env` resta fuori da Git ed è letta da
 Docker Compose:
@@ -126,6 +128,23 @@ Per una prova non interattiva si possono passare le domande in ingresso:
 ```powershell
 "Mi chiamo Paolo", "Come mi chiamo?", "esci" | .\.venv\Scripts\python.exe -m assistant
 ```
+
+### Servizio HTTP dell'agente (in costruzione, Step 6)
+
+Lo stesso grafo è disponibile come servizio HTTP senza stato (FastAPI), con le stesse variabili
+più `AGENT_HOST` e `AGENT_PORT`:
+
+```powershell
+.\.venv\Scripts\python.exe -m assistant.service
+```
+
+La riga `api listening=http://127.0.0.1:8000 docs=/docs …` nel log indica che il servizio è pronto;
+si ferma con Ctrl+C. Il documento OpenAPI è su `http://127.0.0.1:8000/openapi.json` e la pagina
+interattiva su `http://127.0.0.1:8000/docs`. Endpoint: `POST /chat` (un turno: `message` oppure
+`prompt`, più `history` e `summary` ricevuti dal turno precedente), `GET /prompts` (prompt MCP) e
+`GET /status` (`200` se server MCP e modello sono disponibili, `503` con il motivo altrimenti).
+LM Studio spento non impedisce l'avvio: lo segnalano `/status` e `/chat` (`503 model_unavailable`).
+La CLI usa ancora il grafo in processo; diventerà un client del servizio nel punto successivo.
 
 ## Router: domande in ambito e fuori ambito
 

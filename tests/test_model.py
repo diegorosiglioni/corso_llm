@@ -1,3 +1,4 @@
+import httpx
 import openai
 import pytest
 from langchain_openai import ChatOpenAI
@@ -7,6 +8,7 @@ from pydantic import ValidationError
 
 from assistant.config import load_config
 from assistant.model import (
+    check_model,
     create_reviewer_model,
     create_router_model,
     create_summary_model,
@@ -70,3 +72,70 @@ def test_create_reviewer_model_needs_no_server():
 def test_create_summary_model_needs_no_server():
     model = create_summary_model(load_config(VALID))
     assert isinstance(model, ChatOpenAI) and model.model_name == "google/gemma-4-e2b"
+
+
+# --- check_model: GET <base_url>/models ---
+
+def lm_studio(handler) -> httpx.Client:
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def models(*ids) -> dict:
+    return {"object": "list", "data": [{"id": i, "object": "model"} for i in ids]}
+
+
+def test_check_model_ok_and_request():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json=models("altro", "google/gemma-4-e2b"))
+
+    assert check_model(load_config(VALID), lm_studio(handler)) == (True, "")
+    [request] = requests
+    assert (request.method, str(request.url)) == ("GET", "http://localhost:1234/v1/models")
+    assert request.extensions["timeout"]["connect"] == 5.0
+
+
+def test_check_model_with_a_trailing_slash():
+    urls = []
+
+    def handler(request):
+        urls.append(str(request.url))
+        return httpx.Response(200, json=models("google/gemma-4-e2b"))
+
+    config = load_config({**VALID, "LMSTUDIO_BASE_URL": "http://localhost:1234/v1/"})
+    assert check_model(config, lm_studio(handler)) == (True, "")
+    assert urls == ["http://localhost:1234/v1/models"]
+
+
+@pytest.mark.parametrize(("response", "detail"), [
+    (httpx.Response(200, json=models("altro")),
+     "modello 'google/gemma-4-e2b' non presente in /models"),
+    (httpx.Response(200, json=models()), "modello 'google/gemma-4-e2b' non presente in /models"),
+    (httpx.Response(500, text="errore"), "LM Studio ha risposto 500 a GET /models"),
+    (httpx.Response(200, text="non json"), "risposta di GET /models non valida"),
+    (httpx.Response(200, json={"oggetti": []}), "risposta di GET /models non valida"),
+    (httpx.Response(200, json={"data": ["google/gemma-4-e2b"]}),
+     "risposta di GET /models non valida"),
+    (httpx.Response(200, json=[1, 2]), "risposta di GET /models non valida"),
+], ids=["absent", "empty", "status", "not-json", "no-data", "strings", "list"])
+def test_check_model_problems(response, detail):
+    assert check_model(load_config(VALID), lm_studio(lambda request: response)) == (False, detail)
+
+
+@pytest.mark.parametrize("error", [
+    httpx.ConnectError("rifiutata"), httpx.ReadTimeout("scaduto"),
+], ids=["connect", "timeout"])
+def test_check_model_unreachable(error):
+    def handler(request):
+        raise error
+
+    assert check_model(load_config(VALID), lm_studio(handler)) == (
+        False, "LM Studio non raggiungibile su http://localhost:1234/v1"
+    )
+
+
+def test_check_model_without_a_client_on_a_closed_port():
+    config = load_config({**VALID, "LMSTUDIO_BASE_URL": "http://127.0.0.1:1/v1"})
+    assert check_model(config) == (False, "LM Studio non raggiungibile su http://127.0.0.1:1/v1")
