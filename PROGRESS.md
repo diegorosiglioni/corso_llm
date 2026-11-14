@@ -175,6 +175,58 @@ Decisioni:
 - `pytest` → 330 passed, 15 deselected.
 - Problemi aperti: nessuno nuovo. Il client non è ancora usato dall'host (punto 4).
 
+### Punto 4 · Host: preferenze nel prompt dell'agente — piano
+
+1. `preferences.py`: `Preferences`, `DEFAULT_PREFERENCES`, `STYLES`, `FieldProblem`,
+   `parse_preferences`, `preferences_prompt`, `with_preferences`, `load_preferences(client)` con le
+   righe `resources/read …` della specifica §5.
+2. `graph.py`: `SYSTEM_PROMPT` ritoccato (lingua e stile dalle preferenze, niente esempio
+   `Europe/Rome`); `build_graph(..., preferences: str)` obbligatorio per nome; `llm_node` usa
+   `with_summary(with_preferences(SYSTEM_PROMPT, preferences), summary)`.
+3. `__main__.py`: `load_preferences(client)` dopo la discovery; `preferences=preferences_prompt(...)`;
+   riga di avvio con `preferences_file=…`.
+4. `conftest.py`: `fake_graph(..., preferences="")`; `test_real.py`: `open_session` passa le
+   preferenze lette dalla resource (file predefinito), per non rompere le prove reali.
+5. Test: `test_preferences.py` (validazione, testo, `load_preferences` con `FakeMcpClient`),
+   `test_graph.py` (ordine preferenze → `SYSTEM_PROMPT` → riassunto; router e revisore senza),
+   `test_main.py` (una sola lettura in più turni, strumenti invariati, resource assente →
+   predefiniti e WARNING, riga di avvio). Poi `pytest` completo.
+
+Decisioni:
+- In `test_real.py` le preferenze arrivano già ora da `load_preferences` sul file predefinito: le
+  prove reali restano eseguibili; il parametro del file temporaneo arriva al punto 5 (CA-50, CA-51).
+- `FieldProblem` come `NamedTuple`: confrontabile nei test e leggibile nel log.
+
+### Punto 4 · Host — fatto
+
+- Implementati in `preferences.py` `Preferences`, `DEFAULT_PREFERENCES`, `STYLES`, `FieldProblem`,
+  `parse_preferences`, `preferences_prompt`, `with_preferences`, `load_preferences`; in `graph.py`
+  `SYSTEM_PROMPT` ritoccato e `build_graph(..., preferences=)`; in `__main__.py` lettura una sola
+  volta dopo la discovery e riga di avvio con `preferences_file=` (percorso assoluto);
+  `fake_graph(..., preferences="")`; `open_session` di `test_real.py` passa le preferenze lette dal
+  file predefinito.
+- Decisioni prese durante l'esecuzione:
+  - `load_preferences` importa `ResourceUnavailableError` dentro la funzione: `mcp_server.py`
+    importa `preferences.py` e così il sottoprocesso del server non carica il client né
+    `langchain_core` (verificato con `sys.modules`).
+  - Riga `problem=missing` senza `value=` (non c'è un valore da mostrare); `fallback=` scrive la
+    lingua in JSON come le altre righe.
+  - `timezone` confrontato esattamente (spazi non tolti), come lo strumento orologio; `language` e
+    `style` dopo aver tolto gli spazi, come da specifica.
+  - In `test_main.py` l'import di `langchain_core.messages` è salito prima di `assistant.*`
+    (minore rimandato dello Step 2, toccato perché si aggiungeva `SystemMessage`).
+- Test nuovi: `test_preferences.py` (+34: validazione campo per campo, testo, ordine, caricamento
+  con `FakeMcpClient` e righe di log esatte), `test_graph.py` (+5: preferenze in cima, poi
+  `SYSTEM_PROMPT`, poi il riassunto; su ogni chiamata del turno; router, revisore e riassunto senza),
+  `test_main.py` (+6: una sola lettura in due turni e prima della prima domanda, strumenti di
+  `bind_tools` invariati, testo al grafo, resource assente → predefiniti e un WARNING, riga di avvio).
+- `pytest` → 375 passed, 15 deselected; `pytest -m real --collect-only` raccoglie le 15 prove.
+- Prova di avvio con il server reale (LM Studio non usato, `esci` in pipe): `event=resource_read`,
+  `resources/read … status=ok language="italiano" timezone=Europe/Rome style=sintetico`; con
+  `PREFERENCES_FILE` inesistente WARNING `status=unavailable … fallback=defaults`, exit 0.
+- Problemi aperti: l'effetto sul modello (fuso, lingua, stile) e le 15 prove reali con il nuovo
+  `SYSTEM_PROMPT` restano da verificare al punto 5 con LM Studio. README e `CLAUDE.md` al punto 5.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

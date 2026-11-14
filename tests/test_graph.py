@@ -628,3 +628,48 @@ def test_graph_starts_with_the_summary_node():
     assert {(e.source, e.target) for e in drawn.edges} >= {
         ("__start__", "summary"), ("summary", "router")
     }
+
+
+# --- preferences (lesson 6, step 4) ---
+
+PREFERENCES = "Preferenze dell'utente (resource utente://preferenze):\n- lingua delle risposte: inglese."
+
+
+def test_system_prompt_follows_the_preferences():
+    first = SYSTEM_PROMPT.splitlines()[0]
+    assert "preferenze dell'utente" in first and "italiano" not in first
+    assert "Europe/Rome" not in SYSTEM_PROMPT
+
+
+def test_preferences_on_top_of_the_agent_prompt():  # CA-49
+    model = FakeModel([AIMessage("Hi!")])
+    start_turn(model, preferences=PREFERENCES)
+    assert model.calls[0][0] == SystemMessage(f"{PREFERENCES}\n\n{SYSTEM_PROMPT}")
+
+
+def test_preferences_then_prompt_then_summary():  # CA-49
+    model = FakeModel([AIMessage("You are Paolo.")])
+    summarized_turn(
+        FakeModel([AIMessage("L'utente si chiama Paolo.")]), seven(), model=model,
+        preferences=PREFERENCES,
+    )
+    assert model.calls[0][0] == SystemMessage(
+        f"{PREFERENCES}\n\n{SYSTEM_PROMPT}\n\nRiassunto della conversazione precedente:\n"
+        "L'utente si chiama Paolo."
+    )
+
+
+def test_preferences_reach_neither_router_nor_reviewer_nor_summary():  # RF-41
+    router, reviewer = ConversationRouter(), ApprovingReviewer()
+    summarizer = FakeModel([AIMessage("S")])
+    summarized_turn(
+        summarizer, five(), router=router, reviewer=reviewer, preferences=PREFERENCES,
+    )
+    for messages in (router.calls[0], reviewer.calls[0], summarizer.calls[0]):
+        assert all("Preferenze dell'utente" not in m.text for m in messages)
+
+
+def test_preferences_on_every_agent_call_of_the_turn():
+    model = FakeModel([tool_call(), AIMessage("Sono le 10.")])
+    start_turn(model, preferences=PREFERENCES)
+    assert [call[0].text.startswith(PREFERENCES) for call in model.calls] == [True, True]

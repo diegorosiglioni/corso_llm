@@ -20,7 +20,7 @@ streaming facoltativo). Si fa solo ciò che chiede la traccia (decisione dell'ut
 - [x] Specifica dello Step 4 in `docs/superpowers/specs/` e requisiti §12 in `docs/superpowers/requisiti.md` (formato del file delle preferenze, valori predefiniti, variabile d'ambiente del percorso, righe di log), con le scelte del progettista annotate
 - [x] Server MCP: resource `utente://preferenze` (`application/json`) con lingua delle risposte, fuso orario predefinito e stile (sintetico o dettagliato), letta da un file `preferenze.json` di esempio; test che la resource compare in `resources/list` e non in `tools/list`
 - [x] Client MCP: metodo sincrono `read_resource` in `mcp_client.py` e nel `FakeMcpClient` di `conftest.py`; test con il server reale via stdio, resource leggibile e resource assente
-- [ ] Host: lettura della resource una sola volta a inizio sessione e testo in cima al prompt di sistema dell'agente; resource non disponibile → valori predefiniti e WARNING nel log; log `resources/read` separato da quelli dei tool; la resource non entra in `bind_tools`; test con client finto
+- [x] Host: lettura della resource una sola volta a inizio sessione e testo in cima al prompt di sistema dell'agente; resource non disponibile → valori predefiniti e WARNING nel log; log `resources/read` separato da quelli dei tool; la resource non entra in `bind_tools`; test con client finto
 - [ ] Prova reale Step 4 (marcatore `real`, LM Studio attivo): «Che ore sono?» con fuso predefinito `America/New_York` usa quel fuso senza chiederlo; cambio di lingua o stile nel file cambia la risposta della sessione successiva; README aggiornato (sezione preferenze e diagnosi)
 
 ## Step 5 · Prompt MCP: comandi riusabili nella CLI

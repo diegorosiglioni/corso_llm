@@ -24,6 +24,7 @@ from assistant.model import (
     create_router_model,
     create_summary_model,
 )
+from assistant.preferences import load_preferences, preferences_prompt
 from assistant.reviewer import is_feedback
 from assistant.session import Session
 from assistant.summary import is_user_question
@@ -61,6 +62,7 @@ def open_session(config, db, wrap_agent=None):
             summary_model=create_summary_model(config),
             summary_max_messages=config.summary_max_messages,
             summary_keep_messages=config.summary_keep_messages,
+            preferences=preferences_prompt(load_preferences(client)),
         )
         yield Session(graph), client
 

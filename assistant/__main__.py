@@ -23,6 +23,7 @@ from assistant.model import (
     create_router_model,
     create_summary_model,
 )
+from assistant.preferences import load_preferences, preferences_prompt
 from assistant.session import Session
 from assistant.terminal import run
 from assistant.tools import ToolUnavailableError, create_current_time_tool
@@ -81,10 +82,13 @@ def _converse(config, client) -> int:
     )
 
     log.info(
-        "scope_file=%s max_reviews=%d summary_max_messages=%d summary_keep_messages=%d",
+        "scope_file=%s max_reviews=%d summary_max_messages=%d summary_keep_messages=%d "
+        "preferences_file=%s",
         config.scope_file, config.max_reviews,
         config.summary_max_messages, config.summary_keep_messages,
+        Path(config.preferences_file).resolve(),
     )
+    preferences = load_preferences(client)  # once per session, before the first question
 
     model = create_model(config, tools)
     graph = build_graph(
@@ -98,6 +102,7 @@ def _converse(config, client) -> int:
         summary_model=create_summary_model(config),
         summary_max_messages=config.summary_max_messages,
         summary_keep_messages=config.summary_keep_messages,
+        preferences=preferences_prompt(preferences),
     )
     session = Session(graph)
     print(

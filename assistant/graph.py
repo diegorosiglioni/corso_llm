@@ -28,6 +28,7 @@ from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
+from assistant.preferences import with_preferences
 from assistant.reviewer import (
     ReviewDecision,
     ReviewerOutputError,
@@ -48,9 +49,9 @@ from assistant.tools import ToolUnavailableError
 log = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """\
-Sei l'assistente del laboratorio. Rispondi in italiano, in modo breve.
+Sei l'assistente del laboratorio. Rispondi nella lingua e nello stile indicati nelle preferenze dell'utente.
 Usa gli strumenti invece di inventare i risultati:
-- get_current_time per data e ora, con un fuso IANA (per esempio Europe/Rome);
+- get_current_time per data e ora, con un fuso IANA;
 - convert_units per le conversioni di unità di misura;
 - calculate per i calcoli aritmetici;
 - search_catalog per cercare corsi, get_item per il dettaglio di un corso dato il codice;
@@ -130,10 +131,16 @@ def build_graph(
     summary_model: Runnable,
     summary_max_messages: int,
     summary_keep_messages: int,
+    preferences: str,
 ):
-    """Returns the compiled graph: summary, router, refusal, llm, tools, limit and reviewer."""
+    """Returns the compiled graph: summary, router, refusal, llm, tools, limit and reviewer.
+
+    `preferences` is the text of preferences_prompt, put at the top of the agent's system prompt
+    only (router, reviewer and summary do not get it); "" leaves the prompt as it is.
+    """
     by_name = {tool.name: tool for tool in tools}
     router_prompt = ROUTER_PROMPT.format(scope=scope)
+    agent_prompt = with_preferences(SYSTEM_PROMPT, preferences)
 
     def summary_node(state: State) -> dict:
         """Once per turn, before the router: compresses the old turns over the threshold."""
@@ -188,7 +195,7 @@ def build_graph(
     def llm_node(state: State) -> dict:
         step = state["steps"] + 1
         log.info("step=%d/%d node=llm", step, max_steps)
-        system = SystemMessage(with_summary(SYSTEM_PROMPT, state.get("summary", "")))
+        system = SystemMessage(with_summary(agent_prompt, state.get("summary", "")))
         reply = model.invoke([system] + state["messages"])
         if getattr(reply, "invalid_tool_calls", None):
             log.warning(

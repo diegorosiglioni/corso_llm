@@ -1,15 +1,24 @@
+import json
 import logging
 from pathlib import Path
 
 import pytest
+from langchain_core.messages import AIMessage, SystemMessage
 
 import assistant.__main__ as entry
 from assistant.__main__ import main
 from assistant.config import DEFAULT_PREFERENCES_FILE, DEFAULT_SCOPE_FILE, load_config
+from assistant.graph import SYSTEM_PROMPT
 from assistant.mcp_client import ALLOWED_MCP_TOOLS, ToolSpec
+from assistant.preferences import (
+    DEFAULT_PREFERENCES,
+    PREFERENCES_URI,
+    Preferences,
+    preferences_prompt,
+    with_preferences,
+)
 from assistant.session import Session
 from assistant.tools import ToolUnavailableError
-from langchain_core.messages import AIMessage
 
 from conftest import MCP_SPECS, ApprovingReviewer, ConversationRouter, FakeMcpClient, FakeModel
 
@@ -237,3 +246,92 @@ def test_server_gets_the_default_preferences_file(monkeypatch):
 def test_server_gets_an_absolute_preferences_file(monkeypatch, tmp_path):
     args = _server_args(monkeypatch, {**VALID, "PREFERENCES_FILE": "p.json"})  # cwd is tmp_path
     assert args[args.index("--preferences-file") + 1] == str((tmp_path / "p.json").resolve())
+
+
+NEW_YORK = json.dumps({"language": "inglese", "timezone": "America/New_York", "style": "sintetico"})
+
+
+def _with_resource(monkeypatch, text=NEW_YORK) -> FakeMcpClient:
+    """main() gets a fake client that publishes the preferences; returned to inspect the reads."""
+    client = FakeMcpClient(MCP_SPECS, resources={PREFERENCES_URI: text})
+    monkeypatch.setattr(entry, "McpClient", lambda *a, **k: client)
+    return client
+
+
+def test_resource_is_read_once_in_a_session_of_many_turns(monkeypatch):  # CA-49
+    client = _with_resource(monkeypatch)
+    model = FakeModel([AIMessage("Hi!"), AIMessage("Bye!")])
+    monkeypatch.setattr(entry, "create_model", lambda config, tools: model)
+    monkeypatch.setattr(entry, "create_router_model", lambda config: ConversationRouter())
+    monkeypatch.setattr(entry, "create_reviewer_model", lambda config: ApprovingReviewer())
+    replies = []
+    monkeypatch.setattr(
+        entry, "run", lambda session: replies.extend([session.send("Ciao"), session.send("Ciao")])
+    )
+    assert main(VALID) == 0
+    assert replies == ["Hi!", "Bye!"]
+    assert client.resource_reads == [PREFERENCES_URI]
+    expected = with_preferences(SYSTEM_PROMPT, preferences_prompt(
+        Preferences("inglese", "America/New_York", "sintetico")
+    ))
+    assert [call[0] for call in model.calls] == [SystemMessage(expected)] * 2
+
+
+def test_resource_is_read_before_the_first_question(monkeypatch):
+    client = _with_resource(monkeypatch)
+    reads_at_start = []
+    monkeypatch.setattr(
+        entry, "run", lambda session: reads_at_start.append(list(client.resource_reads))
+    )
+    assert main(VALID) == 0
+    assert reads_at_start == [[PREFERENCES_URI]]
+
+
+def test_resource_does_not_reach_bind_tools(monkeypatch):  # RF-41
+    _with_resource(monkeypatch)
+    received = []
+    monkeypatch.setattr(entry, "create_model", lambda config, tools: received.append(tools))
+    monkeypatch.setattr(entry, "run", lambda session: None)
+    assert main(VALID) == 0
+    assert [t.name for t in received[0]] == ["get_current_time", *ALLOWED_MCP_TOOLS]
+
+
+def test_preferences_text_reaches_the_graph(monkeypatch):
+    _with_resource(monkeypatch)
+    received = []
+    monkeypatch.setattr(
+        entry, "build_graph", lambda *args, **kwargs: received.append(kwargs) or "graph"
+    )
+    monkeypatch.setattr(entry, "run", lambda session: None)
+    assert main(VALID) == 0
+    assert received[0]["preferences"] == preferences_prompt(
+        Preferences("inglese", "America/New_York", "sintetico")
+    )
+
+
+def test_unavailable_resource_starts_with_the_defaults(monkeypatch, caplog):  # RF-42
+    caplog.set_level(logging.INFO)
+    received = []
+    monkeypatch.setattr(  # the autouse fake client has no resources
+        entry, "build_graph", lambda *args, **kwargs: received.append(kwargs) or "graph"
+    )
+    started = []
+    monkeypatch.setattr(entry, "run", started.append)
+    assert main(VALID) == 0
+    assert len(started) == 1  # the session starts anyway
+    assert received[0]["preferences"] == preferences_prompt(DEFAULT_PREFERENCES)
+    warnings = [
+        r.getMessage() for r in caplog.records
+        if r.levelno == logging.WARNING and r.name == "assistant.preferences"
+    ]
+    assert len(warnings) == 1 and "status=unavailable" in warnings[0]
+
+
+def test_preferences_file_is_logged(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    monkeypatch.setattr(entry, "run", lambda session: None)
+    main(VALID)
+    assert (
+        "summary_max_messages=20 summary_keep_messages=6 "
+        f"preferences_file={Path(DEFAULT_PREFERENCES_FILE).resolve()}"
+    ) in caplog.text

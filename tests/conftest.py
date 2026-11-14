@@ -55,9 +55,12 @@ class ApprovingReviewer:
 
 def fake_graph(
     model, tools=None, max_steps=5, router=None, scope=TEST_SCOPE, reviewer=None, max_reviews=2,
-    summary_model=None, summary_max_messages=20, summary_keep_messages=6,
+    summary_model=None, summary_max_messages=20, summary_keep_messages=6, preferences="",
 ):
-    """Graph with fake models; the default summary model fails if it is ever called."""
+    """Graph with fake models; the default summary model fails if it is ever called.
+
+    `preferences=""` keeps the agent's system prompt equal to SYSTEM_PROMPT.
+    """
     if tools is None:
         tools = [create_current_time_tool(lambda: FIXED_NOW)]
     if router is None:
@@ -69,6 +72,7 @@ def fake_graph(
         router_model=router, scope=scope, reviewer_model=reviewer, max_reviews=max_reviews,
         summary_model=FakeModel([]) if summary_model is None else summary_model,
         summary_max_messages=summary_max_messages, summary_keep_messages=summary_keep_messages,
+        preferences=preferences,
     )
 
 
