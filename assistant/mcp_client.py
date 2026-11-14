@@ -14,7 +14,7 @@ from pathlib import Path
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 from langchain_core.tools import BaseTool, StructuredTool
-from mcp.types import TextResourceContents
+from mcp.types import TextContent, TextResourceContents
 
 from assistant.config import DEFAULT_PREFERENCES_FILE
 from assistant.tools import ToolUnavailableError
@@ -33,6 +33,32 @@ class ToolSpec:
     input_schema: dict
 
 
+@dataclass(frozen=True)
+class PromptArgument:
+    """An argument of a prompt as published by prompts/list."""
+
+    name: str
+    description: str
+    required: bool
+
+
+@dataclass(frozen=True)
+class PromptSpec:
+    """A prompt as published by the server with prompts/list."""
+
+    name: str
+    description: str
+    arguments: tuple[PromptArgument, ...]
+
+
+@dataclass(frozen=True)
+class PromptMessage:
+    """A text message returned by prompts/get; role is "user" or "assistant"."""
+
+    role: str
+    text: str
+
+
 class McpStartupError(Exception):
     """The MCP server could not be started or did not complete the handshake."""
 
@@ -41,6 +67,14 @@ class ResourceUnavailableError(Exception):
     """A resource could not be read: MCP error, closed session, timeout or no text content.
 
     Kept apart from ToolUnavailableError: resources are not tools, in the code and in the logs.
+    """
+
+
+class PromptUnavailableError(Exception):
+    """A prompt could not be listed or obtained: MCP error (unknown prompt, value rejected by the
+    server), closed session, timeout or non-text content.
+
+    Kept apart from ToolUnavailableError and ResourceUnavailableError, as in the logs.
     """
 
 
@@ -153,14 +187,43 @@ class McpClient:
 
     def read_resource(self, uri: str) -> str:
         """Text of the resource (resources/read); binary contents are ignored."""
-        try:
-            contents = self._submit(lambda client: client.read_resource(uri))
-        except ToolUnavailableError as error:
-            raise ResourceUnavailableError(str(error)) from error
+        contents = self._submit_as(
+            ResourceUnavailableError, lambda client: client.read_resource(uri)
+        )
         texts = [c.text for c in contents if isinstance(c, TextResourceContents)]
         if not texts:
             raise ResourceUnavailableError("nessun contenuto testuale")
         return "".join(texts)
+
+    def list_prompts(self) -> list[PromptSpec]:
+        """Prompts published with prompts/list; missing fields become "", () and False."""
+        prompts = self._submit_as(PromptUnavailableError, lambda client: client.list_prompts())
+        return [
+            PromptSpec(p.name, p.description or "", tuple(
+                PromptArgument(a.name, a.description or "", bool(a.required))
+                for a in p.arguments or ()
+            ))
+            for p in prompts
+        ]
+
+    def get_prompt(self, name: str, arguments: dict[str, str]) -> list[PromptMessage]:
+        """Messages of the prompt (prompts/get); only text contents are accepted."""
+        result = self._submit_as(
+            PromptUnavailableError, lambda client: client.get_prompt(name, arguments)
+        )
+        messages = []
+        for number, message in enumerate(result.messages, start=1):
+            if not isinstance(message.content, TextContent):
+                raise PromptUnavailableError(f"contenuto non testuale nel messaggio {number}")
+            messages.append(PromptMessage(message.role, message.content.text))
+        return messages
+
+    def _submit_as(self, error_type: type[Exception], request):
+        """Like `_submit`, but connection problems become `error_type` with the same reason."""
+        try:
+            return self._submit(request)
+        except ToolUnavailableError as error:
+            raise error_type(str(error)) from error
 
     def _submit(self, request):
         """Runs `request(client)` on the session loop; connection problems → ToolUnavailableError."""

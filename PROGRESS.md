@@ -370,6 +370,51 @@ Decisioni:
 - Problemi aperti: nessuno nuovo. I prompt non sono ancora usati dal client né dalla CLI (punti
   3–5); README e `CLAUDE.md` si aggiornano al punto 6, come da piano dello step.
 
+### Punto 3 · Client MCP: `list_prompts` e `get_prompt` — piano
+
+1. `mcp_client.py` (specifica §4): dataclass `PromptArgument`, `PromptSpec`, `PromptMessage`;
+   `PromptUnavailableError(Exception)`; `McpClient.list_prompts()` (descrizioni assenti → `""`,
+   argomenti assenti → `()`, `required` assente → `False`) e `get_prompt(name, arguments)`
+   (contenuto non `TextContent` → `PromptUnavailableError("contenuto non testuale nel messaggio
+   <n>")`); `ToolUnavailableError` di `_submit` → `PromptUnavailableError` con lo stesso motivo.
+2. `tests/conftest.py`: `FakeMcpClient(..., prompts=None)` con nome → (`PromptSpec`, funzione
+   `arguments → list[PromptMessage]`); `list_prompts`/`get_prompt` registrati in `prompt_lists` e
+   `prompt_gets`; nome sconosciuto o `ValueError` della funzione → `PromptUnavailableError`.
+3. Test in `tests/test_mcp_client.py`: via stdio `list_prompts` (i due prompt, descrizioni,
+   argomenti, `livello` facoltativo), `get_prompt` (`spiega` col testo di `explain_prompt`, default
+   `base`; `riassumi_conversazione`), valore rifiutato (messaggio italiano del server), prompt
+   inesistente, dopo la chiusura → `PromptUnavailableError`; la sessione resta usabile dopo un
+   errore; contenuto non testuale e campi assenti con `_submit` sostituito; eccezione distinta da
+   `ToolUnavailableError` e `ResourceUnavailableError`; `FakeMcpClient` con e senza prompt. Poi
+   `pytest` completo.
+
+Decisioni:
+- Numerazione dei messaggi in «contenuto non testuale nel messaggio <n>» a partire da 1: è un
+  messaggio per l'utente, come `message=1/1` nei log della specifica §5.
+- `FakeMcpClient.get_prompt` registra la chiamata anche quando fallisce (come `resource_reads`):
+  i test dei comandi devono poter dire se `prompts/get` è stato tentato.
+- Un `required=None` del server diventa `False` (`bool(...)`), come chiede la specifica per il campo
+  assente.
+
+### Punto 3 · Client MCP — fatto
+
+- Implementati in `mcp_client.py` `PromptArgument`, `PromptSpec`, `PromptMessage`,
+  `PromptUnavailableError`, `McpClient.list_prompts` e `get_prompt`; in `conftest.py`
+  `FakeMcpClient(..., prompts=…)` con `list_prompts`, `get_prompt`, `prompt_lists` e `prompt_gets`.
+- Miglioramento: aiuto `_submit_as(error_type, request)` che converte `ToolUnavailableError`
+  nell'eccezione di resource o prompt; ora lo usano anche `read_resource`, `list_prompts` e
+  `get_prompt` (il blocco `try/except` era ripetuto tre volte). `_submit` invariato: i test lo
+  sostituiscono con un `lambda request: …`.
+- Test nuovi in `test_mcp_client.py` (+15): via stdio `list_prompts` (due prompt con descrizioni e
+  argomenti, `livello` facoltativo), `get_prompt` di `spiega` (testo di `explain_prompt`, default
+  `base`) e di `riassumi_conversazione`, valore rifiutato col messaggio italiano del server (la
+  sessione resta usabile per prompt e strumenti), prompt inesistente, obbligatorio mancante, dopo la
+  chiusura; campi assenti → `""`, `()`, `False`, contenuto non testuale nel messaggio 2, ruoli e
+  ordine conservati (con `_submit` sostituito); eccezioni distinte; `FakeMcpClient` con prompt
+  registrati, nome sconosciuto, `ValueError`, senza prompt.
+- `pytest` → 423 passed, 17 deselected.
+- Problemi aperti: nessuno nuovo. I prompt non sono ancora usati dalla CLI (punti 4–5).
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

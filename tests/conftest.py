@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 import httpx2
@@ -5,7 +6,14 @@ import openai
 from langchain_core.messages import AIMessage, BaseMessage
 
 from assistant.graph import build_graph
-from assistant.mcp_client import McpStartupError, ResourceUnavailableError, ToolSpec
+from assistant.mcp_client import (
+    McpStartupError,
+    PromptMessage,
+    PromptSpec,
+    PromptUnavailableError,
+    ResourceUnavailableError,
+    ToolSpec,
+)
 from assistant.reviewer import ReviewDecision
 from assistant.router import RouteDecision
 from assistant.tools import create_current_time_tool
@@ -97,17 +105,24 @@ class FakeMcpClient:
     """Stands in for McpClient: publishes `specs`, records calls and answers {"ok": True}.
 
     `resources` maps URI → text; any other URI is unavailable. Reads go to `resource_reads`.
+    `prompts` maps name → (PromptSpec, function arguments → list[PromptMessage]); an unknown
+    name or a ValueError of the function is unavailable. Calls go to `prompt_lists` (a count)
+    and `prompt_gets`, failed ones included.
     """
 
     def __init__(
         self, specs: list[ToolSpec], fail_on_enter: bool = False,
         resources: dict[str, str] | None = None,
+        prompts: dict[str, tuple[PromptSpec, Callable[[dict], list[PromptMessage]]]] | None = None,
     ):
         self._specs = list(specs)
         self._fail_on_enter = fail_on_enter
         self._resources = dict(resources or {})
+        self._prompts = dict(prompts or {})
         self.calls: list[tuple[str, dict]] = []
         self.resource_reads: list[str] = []
+        self.prompt_lists = 0
+        self.prompt_gets: list[tuple[str, dict]] = []
 
     def __enter__(self):
         if self._fail_on_enter:
@@ -129,6 +144,19 @@ class FakeMcpClient:
         if uri not in self._resources:
             raise ResourceUnavailableError(f"Resource not found: {uri!r}")
         return self._resources[uri]
+
+    def list_prompts(self) -> list[PromptSpec]:
+        self.prompt_lists += 1
+        return [spec for spec, _ in self._prompts.values()]
+
+    def get_prompt(self, name: str, arguments: dict) -> list[PromptMessage]:
+        self.prompt_gets.append((name, dict(arguments)))
+        if name not in self._prompts:
+            raise PromptUnavailableError(f"Unknown prompt: '{name}'")
+        try:
+            return self._prompts[name][1](dict(arguments))
+        except ValueError as error:
+            raise PromptUnavailableError(str(error)) from error
 
 
 def lm_studio_error() -> openai.APIConnectionError:
