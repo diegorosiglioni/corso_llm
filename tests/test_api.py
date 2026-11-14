@@ -8,16 +8,17 @@ import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 
-from assistant.api import create_app
 from assistant.mcp_client import PromptArgument, PromptMessage, PromptSpec
 from assistant.tools import ToolUnavailableError
 from conftest import (
     MCP_SPECS,
+    MODEL_ID,
     FakeMcpClient,
     FakeModel,
     PromptListFails,
-    fake_graph,
+    fake_service,
     lm_studio_error,
+    model_ok,
     tool_call,
 )
 
@@ -36,19 +37,9 @@ def mcp_client(messages_for=explain_text) -> FakeMcpClient:
     return FakeMcpClient(MCP_SPECS, prompts={"spiega": (EXPLAIN, messages_for)})
 
 
-MODEL_ID = "google/gemma-4-e2b"
-
-
-def model_ok() -> tuple[bool, str]:
-    return True, ""
-
-
 def api(model=None, client=None, model_status=model_ok, **graph_options) -> TestClient:
-    """Service on a fake graph; the default model fails if it is ever called."""
-    graph = fake_graph(FakeModel([]) if model is None else model, **graph_options)
-    return TestClient(create_app(
-        graph=graph, client=client or mcp_client(), model_id=MODEL_ID, model_status=model_status,
-    ))
+    """Service on a fake graph with the prompt 'spiega'; the default model fails if called."""
+    return fake_service(model, client or mcp_client(), model_status, **graph_options)
 
 
 def api_lines(caplog) -> list[str]:

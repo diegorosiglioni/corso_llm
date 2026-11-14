@@ -2,18 +2,43 @@
 name: assistente-laboratorio
 
 services:
-  assistant:
+  # Servizio HTTP dell'agente: grafo, server MCP (sottoprocesso stdio) e note.
+  agent:
     build: .
+    command: ["python", "-m", "assistant.service"]
     env_file: .env
     environment:
       # LM Studio sull'host; per un'altra porta o un altro host impostare LMSTUDIO_BASE_URL_DOCKER nel .env.
       LMSTUDIO_BASE_URL: ${LMSTUDIO_BASE_URL_DOCKER:-http://host.docker.internal:1234/v1}
+      AGENT_HOST: 0.0.0.0
+      AGENT_PORT: "8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    stdin_open: true
-    tty: true
+    ports:
+      - "127.0.0.1:8000:8000"  # solo da questo computer (OpenAPI su http://127.0.0.1:8000/docs)
+    healthcheck:
+      # Pronto quando /status risponde, con qualsiasi codice: LM Studio spento dà 503 ma l'agente c'è.
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://127.0.0.1:8000/status', timeout=10)"]
+      # Ogni 2 s durante l'avvio, poi ogni 30 s (ogni controllo scrive una riga nel log dell'agente).
+      start_period: 60s
+      start_interval: 2s
+      interval: 30s
+      timeout: 15s
+      retries: 3
     volumes:
       - notes-data:/app/data
+
+  # CLI, client dell'agente: docker compose run --rm assistant (avvia anche agent).
+  assistant:
+    build: .
+    env_file: .env
+    environment:
+      AGENT_URL: http://agent:8000
+    depends_on:
+      agent:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
 
 volumes:
   notes-data: {}

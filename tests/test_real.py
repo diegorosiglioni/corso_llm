@@ -15,7 +15,7 @@ import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
 from assistant.catalog import DEFAULT_CATALOG_PATH
-from assistant.commands import PromptCommands
+from assistant.commands import PromptCommands, resolve_prompt
 from assistant.config import DEFAULT_PREFERENCES_FILE, ConfigError, load_config
 from assistant.graph import build_graph
 from assistant.mcp_client import McpClient, create_mcp_tools, server_command
@@ -377,10 +377,11 @@ REFUSAL = "Mi dispiace, questa domanda è fuori dal mio ambito"
 
 
 def send_prompt(session, client, text: str) -> str:
-    """A /prompt command as the terminal runs it: the messages go to the session as a turn."""
-    result = PromptCommands(client).handle(text)
-    assert result.messages, result.output
-    return session.send_messages(result.messages)
+    """A /prompt command as CLI and service run it: syntax in the CLI, host check and
+    prompts/get in the service, then the messages go to the graph as a turn."""
+    result = PromptCommands(None).handle(text)  # /prompt never calls the agent client
+    assert result.prompt, result.output
+    return session.send_messages(resolve_prompt(client, *result.prompt))
 
 
 def prompt_get_lines(caplog, name: str) -> list[str]:

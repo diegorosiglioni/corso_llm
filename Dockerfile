@@ -16,4 +16,7 @@ COPY assistant/ assistant/
 RUN mkdir /app/data && chown assistant /app/data
 
 USER assistant
+# Porta del servizio dell'agente (python -m assistant.service, servizio agent di compose.yaml).
+EXPOSE 8000
+# Predefinito: la CLI, client del servizio (AGENT_URL).
 CMD ["python", "-m", "assistant"]

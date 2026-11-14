@@ -1,11 +1,18 @@
 import pytest
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage
 
+from assistant.api_client import AgentClient, AgentError, RemoteSession
 from assistant.commands import CommandResult, PromptCommands
-from assistant.mcp_client import PromptArgument, PromptSpec
-from assistant.session import Session
+from assistant.mcp_client import PromptArgument, PromptMessage, PromptSpec
 from assistant.terminal import run
-from conftest import MCP_SPECS, FakeMcpClient, FakeModel, fake_graph, lm_studio_error
+from conftest import MCP_SPECS, FakeMcpClient, FakeModel, fake_service, lm_studio_error
+
+MODEL_DOWN = AgentError("model_unavailable", "LM Studio non raggiungibile: Connection error.")
+
+
+def agent(model=None, client=None) -> AgentClient:
+    """Client of the real app of the service on a fake graph (no network)."""
+    return AgentClient("http://agente.test", http=fake_service(model, client))
 
 
 def inputs(*lines):
@@ -30,15 +37,15 @@ class FakeSession:
     def __init__(self, *outcomes):
         self._outcomes = list(outcomes)
         self.questions = []
-        self.message_lists = []
+        self.prompts = []
 
     def send(self, text):
         self.questions.append(text)
         return self._next(f"risposta a {text}")
 
-    def send_messages(self, messages):
-        self.message_lists.append(list(messages))
-        return self._next(f"risposta a {messages[-1].content}")
+    def send_prompt(self, name, arguments):
+        self.prompts.append((name, arguments))
+        return self._next(f"risposta al prompt {name}")
 
     def _next(self, default):
         outcome = self._outcomes.pop(0) if self._outcomes else default
@@ -107,14 +114,34 @@ def test_text_sent_without_spaces():
     assert session.questions == ["ciao"]
 
 
-def test_lm_studio_error_and_continue():
-    session = FakeSession(lm_studio_error(), "eccomi")
+def test_agent_error_and_continue():  # CA-66
+    session = FakeSession(MODEL_DOWN, "eccomi")
     outputs, _ = execute(session, "prima", "seconda")
     assert outputs == [
-        "Errore: LM Studio non ha risposto correttamente (Connection error.). Riprova.",
+        "Errore: LM Studio non raggiungibile: Connection error. Riprova.",
         "Assistente> eccomi",
         "Arrivederci!",
     ]
+
+
+def test_agent_unreachable_during_the_session():
+    session = FakeSession(AgentError("agent_unreachable", "agente non raggiungibile su http://x"))
+    outputs, _ = execute(session, "ciao")
+    assert outputs == ["Errore: agente non raggiungibile su http://x. Riprova.", "Arrivederci!"]
+
+
+def test_service_error_keeps_the_history():  # CA-66, with the real app of the service
+    model = FakeModel([AIMessage("Ciao!"), lm_studio_error(), AIMessage("Eccomi.")])
+    session = RemoteSession(agent(model))
+    outputs, _ = execute(session, "ciao", "seconda", "terza")
+    assert outputs == [
+        "Assistente> Ciao!",
+        "Errore: LM Studio non raggiungibile: Connection error. Riprova.",
+        "Assistente> Eccomi.",
+        "Arrivederci!",
+    ]
+    assert [m.content for m in model.calls[2][1:]] == ["ciao", "Ciao!", "terza"]
+    assert [m["content"] for m in session.history] == ["ciao", "Ciao!", "terza", "Eccomi."]
 
 
 def test_other_exceptions_not_caught():
@@ -135,7 +162,7 @@ def test_command_goes_to_the_commands_not_to_the_model():  # CA-56
 def test_unknown_command_with_the_real_commands():
     session = FakeSession()
     client = FakeMcpClient(MCP_SPECS)
-    outputs, _ = execute(session, "/promt", commands=PromptCommands(client))
+    outputs, _ = execute(session, "/promt", commands=PromptCommands(agent(client=client)))
     assert outputs == [
         "Comando sconosciuto: '/promt'. Scrivi /prompts per l'elenco dei prompt.",
         "Arrivederci!",
@@ -146,7 +173,7 @@ def test_unknown_command_with_the_real_commands():
 def test_prompts_with_the_real_commands():
     session = FakeSession()
     client = FakeMcpClient(MCP_SPECS)
-    outputs, _ = execute(session, "/PROMPTS", commands=PromptCommands(client))
+    outputs, _ = execute(session, "/PROMPTS", commands=PromptCommands(agent(client=client)))
     assert outputs == ["Il server MCP non offre prompt.", "Arrivederci!"]
     assert session.questions == [] and client.prompt_lists == 1
 
@@ -158,44 +185,72 @@ def test_command_without_commands():
     assert session.questions == []
 
 
-def test_prompt_messages_go_to_the_session():  # CA-57
+def test_prompt_goes_to_the_session():  # CA-57
     session = FakeSession("Il protocollo MCP…")
-    messages = [HumanMessage("Spiegami MCP.")]
-    commands = FakeCommands(CommandResult(messages=messages))
+    commands = FakeCommands(CommandResult(prompt=("spiega", {"argomento": "MCP"})))
     outputs, _ = execute(session, "/prompt spiega argomento=MCP", commands=commands)
     assert commands.texts == ["/prompt spiega argomento=MCP"]
-    assert session.message_lists == [messages] and session.questions == []
+    assert session.prompts == [("spiega", {"argomento": "MCP"})] and session.questions == []
     assert outputs == ["Assistente> Il protocollo MCP…", "Arrivederci!"]
 
 
-def test_lm_studio_error_after_a_prompt_and_continue():
-    session = FakeSession(lm_studio_error(), "eccomi")
-    commands = FakeCommands(CommandResult(messages=[HumanMessage("Spiegami MCP.")]))
+def test_agent_error_after_a_prompt_and_continue():
+    session = FakeSession(MODEL_DOWN, "eccomi")
+    commands = FakeCommands(CommandResult(prompt=("spiega", {"argomento": "MCP"})))
     outputs, _ = execute(session, "/prompt spiega argomento=MCP", "ancora", commands=commands)
     assert outputs == [
-        "Errore: LM Studio non ha risposto correttamente (Connection error.). Riprova.",
+        "Errore: LM Studio non raggiungibile: Connection error. Riprova.",
         "Assistente> eccomi",
         "Arrivederci!",
     ]
 
 
-def test_blocked_prompt_never_reaches_the_model():  # CA-57
+def test_prompt_rejected_by_the_service():
+    reason = "argomenti obbligatori mancanti per 'spiega': 'argomento'"
+    session = FakeSession(AgentError("prompt_rejected", reason))
+    commands = FakeCommands(CommandResult(prompt=("spiega", {})))
+    outputs, _ = execute(session, "/prompt spiega", commands=commands)
+    assert outputs == [
+        f"Errore nel comando: {reason}. Scrivi /prompts per l'elenco dei prompt.",
+        "Arrivederci!",
+    ]
+
+
+def test_blocked_prompt_never_reaches_the_model():  # CA-57, CA-66
     model = FakeModel([])  # any call would fail: no scripted replies
-    session = Session(fake_graph(model))
     spec = PromptSpec("spiega", "", (PromptArgument("argomento", "", True),))
     client = FakeMcpClient(MCP_SPECS, prompts={"spiega": (spec, lambda a: [])})
+    service = agent(model, client)
+    session = RemoteSession(service)
     outputs, _ = execute(
         session, "/prompt spiega livello=base", "/prompt spiega argomento=MCP",
-        commands=PromptCommands(client),
+        "/prompt spiega argomento=", commands=PromptCommands(service),
     )
     assert outputs == [
         "Errore nel comando: argomenti sconosciuti per 'spiega': 'livello' (attesi: argomento). "
         "Scrivi /prompts per l'elenco dei prompt.",
-        "Errore: il prompt 'spiega' non è utilizzabile (nessun messaggio).",
+        "Errore: il prompt 'spiega' non è utilizzabile (nessun messaggio). Riprova.",
+        "Errore nel comando: argomento senza valore: 'argomento'. "
+        "Uso: /prompt nome chiave=valore (valori con spazi tra virgolette doppie).",
         "Arrivederci!",
     ]
-    assert model.calls == [] and session.messages == []
+    assert model.calls == [] and session.history == []
     assert client.prompt_gets == [("spiega", {"argomento": "MCP"})]
+    assert client.prompt_lists == 2  # the syntax error never reached the service
+
+
+def test_prompt_through_the_service():  # CA-66
+    spec = PromptSpec("spiega", "", (PromptArgument("argomento", "", True),))
+    client = FakeMcpClient(
+        MCP_SPECS, prompts={"spiega": (spec, lambda a: [PromptMessage("user", "Spiegami MCP.")])}
+    )
+    model = FakeModel([AIMessage("MCP è un protocollo.")])
+    service = agent(model, client)
+    session = RemoteSession(service)
+    outputs, _ = execute(session, "/prompt spiega argomento=MCP", commands=PromptCommands(service))
+    assert outputs == ["Assistente> MCP è un protocollo.", "Arrivederci!"]
+    assert model.calls[0][-1].content == "Spiegami MCP."
+    assert [m["content"] for m in session.history] == ["Spiegami MCP.", "MCP è un protocollo."]
 
 
 def test_slash_inside_a_question_is_not_a_command():

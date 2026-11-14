@@ -1,10 +1,12 @@
-"""CLI commands that start with "/": the MCP prompts are activated by the user, not by the model.
+"""MCP prompts, activated by the user and not by the model: the commands of the CLI and the host
+check of the service.
 
-/prompts lists the prompts of the MCP server (prompts/list). /prompt nome chiave=valore checks
-the request against prompts/list, asks the server for the messages (prompts/get) and returns them
-for the graph. Any other text that starts with "/" is an unknown command. No command calls the
-model directly: the messages of /prompt go to the session like a question.
-resolve_prompt does the host check and prompts/get for both the CLI and the HTTP service.
+In the CLI (PromptCommands, a client of the agent service): /prompts lists the prompts of the MCP
+server (GET /prompts); /prompt nome chiave=valore checks the syntax here and returns name and
+arguments, that the terminal sends to the agent as a turn (POST /chat). Any other text that
+starts with "/" is an unknown command. No command calls the model directly.
+In the service: available_prompts and resolve_prompt do prompts/list, the host check against it
+and prompts/get, and give the messages for the graph.
 """
 
 import json
@@ -14,6 +16,7 @@ from dataclasses import dataclass
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
+from assistant.api_client import AgentError
 from assistant.mcp_client import PromptMessage, PromptSpec, PromptUnavailableError
 
 log = logging.getLogger(__name__)
@@ -26,10 +29,11 @@ LIST_HINT = "Scrivi /prompts per l'elenco dei prompt."
 
 @dataclass(frozen=True)
 class CommandResult:
-    """What the terminal does after a command: show `output` or send `messages` to the graph."""
+    """What the terminal does after a command: show `output`, or open a turn with the MCP prompt
+    `prompt` = (name, arguments)."""
 
     output: str | None = None
-    messages: list[BaseMessage] | None = None
+    prompt: tuple[str, dict[str, str]] | None = None
 
 
 class CommandSyntaxError(ValueError):
@@ -194,10 +198,10 @@ def resolve_prompt(client, name: str, arguments: dict[str, str]) -> list[BaseMes
 
 
 class PromptCommands:
-    """Handles the commands of the CLI with the MCP client of the session."""
+    """Handles the commands of the CLI with the client of the agent service (AgentClient)."""
 
-    def __init__(self, client):
-        self._client = client
+    def __init__(self, agent):
+        self._agent = agent
 
     def handle(self, text: str) -> CommandResult:
         """`text` starts with "/"; the command word ignores case."""
@@ -212,22 +216,19 @@ class PromptCommands:
 
     def _list(self) -> CommandResult:
         try:
-            specs = available_prompts(self._client)
-        except PromptListError as error:
-            return CommandResult(f"Errore: {error}.")
+            specs = self._agent.prompts()
+        except AgentError as error:
+            return CommandResult(f"Errore: {error.phrase}.")
         return CommandResult(format_prompts(specs))
 
     def _prompt(self, text: str) -> CommandResult:
+        """Only the syntax is checked here: the service checks the request against
+        prompts/list (error prompt_rejected) before prompts/get."""
         try:
             name, arguments = parse_prompt_command(text)
         except CommandSyntaxError as error:
             return self._rejected(str(error), USAGE)
-        try:
-            return CommandResult(messages=resolve_prompt(self._client, name, arguments))
-        except PromptRejectedError as error:  # already logged by resolve_prompt
-            return CommandResult(f"Errore nel comando: {error}. {LIST_HINT}")
-        except PromptRequestError as error:
-            return CommandResult(f"Errore: {error}.")
+        return CommandResult(prompt=(name, arguments))
 
     @staticmethod
     def _rejected(reason: str, hint: str = "") -> CommandResult:

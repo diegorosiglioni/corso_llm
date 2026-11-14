@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -7,9 +8,20 @@ from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 
 import assistant.service as service
-from assistant.config import load_config
-from assistant.mcp_client import ALLOWED_MCP_TOOLS, ToolSpec
-from assistant.preferences import PREFERENCES_URI, parse_preferences, preferences_prompt
+from assistant.config import DEFAULT_PREFERENCES_FILE, DEFAULT_SCOPE_FILE, load_config
+from assistant.mcp_client import (
+    ALLOWED_MCP_TOOLS,
+    PromptArgument,
+    PromptMessage,
+    PromptSpec,
+    ToolSpec,
+)
+from assistant.preferences import (
+    DEFAULT_PREFERENCES,
+    PREFERENCES_URI,
+    parse_preferences,
+    preferences_prompt,
+)
 from assistant.service import main
 from assistant.tools import ToolUnavailableError
 from conftest import MCP_SPECS, ApprovingReviewer, ConversationRouter, FakeMcpClient, FakeModel
@@ -172,3 +184,151 @@ def test_served_app_uses_graph_mcp_and_model_check(mcp, monkeypatch):
     assert mcp.resource_reads == [PREFERENCES_URI]
     expected = preferences_prompt(parse_preferences(json.dumps(NEW_YORK))[0])
     assert all(call[0].content.startswith(expected) for call in agent.calls)
+
+
+# --- graph wiring (from test_main.py, when the CLI became a client: step 6, point 5) ---
+
+def graph_options(monkeypatch, env=VALID) -> dict:
+    """Keyword arguments given by main() to build_graph."""
+    received = []
+    monkeypatch.setattr(
+        service, "build_graph", lambda *args, **kwargs: received.append(kwargs) or "graph"
+    )
+    assert main(env) == 0
+    return received[0]
+
+
+def test_all_tools_reach_the_model(mcp, server, monkeypatch):  # RF-41: not the resource
+    received = []
+    monkeypatch.setattr(service, "create_model", lambda config, tools: received.append(tools))
+    assert main(VALID) == 0
+    assert [t.name for t in received[0]] == ["get_current_time", *ALLOWED_MCP_TOOLS]
+
+
+def test_router_model_and_scope_reach_the_graph(mcp, server, monkeypatch):
+    router = object()
+    monkeypatch.setattr(service, "create_router_model", lambda config: router)
+    options = graph_options(monkeypatch)
+    assert options["router_model"] is router
+    assert options["scope"] == load_config(VALID).scope
+
+
+@pytest.mark.parametrize(("env", "expected"), [({}, 2), ({"MAX_REVIEWS": "3"}, 3)])
+def test_reviewer_model_and_max_reviews_reach_the_graph(mcp, server, monkeypatch, env, expected):
+    reviewer = object()
+    monkeypatch.setattr(service, "create_reviewer_model", lambda config: reviewer)
+    options = graph_options(monkeypatch, {**VALID, **env})
+    assert options["reviewer_model"] is reviewer
+    assert options["max_reviews"] == expected
+
+
+@pytest.mark.parametrize(("env", "maximum", "keep"), [
+    ({}, 20, 6),
+    ({"SUMMARY_MAX_MESSAGES": "8", "SUMMARY_KEEP_MESSAGES": "3"}, 8, 3),
+])
+def test_summary_model_and_thresholds_reach_the_graph(mcp, server, monkeypatch, env, maximum, keep):
+    summarizer = object()
+    monkeypatch.setattr(service, "create_summary_model", lambda config: summarizer)
+    options = graph_options(monkeypatch, {**VALID, **env})
+    assert options["summary_model"] is summarizer
+    assert options["summary_max_messages"] == maximum
+    assert options["summary_keep_messages"] == keep
+
+
+def test_preferences_text_reaches_the_graph(mcp, server, monkeypatch):
+    assert graph_options(monkeypatch)["preferences"] == preferences_prompt(
+        parse_preferences(json.dumps(NEW_YORK))[0]
+    )
+
+
+def test_unavailable_resource_starts_with_the_defaults(server, monkeypatch, tmp_path, caplog):
+    caplog.set_level(logging.INFO)  # RF-42
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(service, "McpClient", lambda *a, **k: FakeMcpClient(MCP_SPECS))
+    monkeypatch.setattr(service, "build_graph", lambda *args, **kwargs: "graph")
+    assert main(VALID) == 0
+    assert len(server.runs) == 1  # the service starts anyway
+    warnings = [
+        r.getMessage() for r in caplog.records
+        if r.levelno == logging.WARNING and r.name == "assistant.preferences"
+    ]
+    assert len(warnings) == 1 and "status=unavailable" in warnings[0]
+
+
+def test_unavailable_resource_gives_the_default_preferences(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(service, "McpClient", lambda *a, **k: FakeMcpClient(MCP_SPECS))
+    monkeypatch.setattr(service.uvicorn, "run", FakeUvicorn())
+    assert graph_options(monkeypatch)["preferences"] == preferences_prompt(DEFAULT_PREFERENCES)
+
+
+def test_configuration_is_logged(mcp, server, caplog):
+    caplog.set_level(logging.INFO)
+    main(VALID)
+    assert (
+        f"scope_file={DEFAULT_SCOPE_FILE} max_reviews=2 "
+        "summary_max_messages=20 summary_keep_messages=6 "
+        f"preferences_file={Path(DEFAULT_PREFERENCES_FILE).resolve()}"
+    ) in caplog.text
+
+
+def node_names(lines: list[str]) -> list[str]:
+    """The node of each line of the graph ("step=1/5 node=llm" has it in second position)."""
+    return [line.split()[0] if line.startswith("node=") else line.split()[1] for line in lines]
+
+
+def served_chat(monkeypatch, agent: FakeModel, body: dict) -> dict:
+    """POST /chat to the app served by main(), with fake models that route and approve."""
+    monkeypatch.setattr(service, "create_model", lambda config, tools: agent)
+    monkeypatch.setattr(service, "create_router_model", lambda config: ConversationRouter())
+    monkeypatch.setattr(service, "create_reviewer_model", lambda config: ApprovingReviewer())
+    monkeypatch.setattr(service, "create_summary_model", lambda config: FakeModel([]))
+    answers = []
+    monkeypatch.setattr(service.uvicorn, "run", FakeUvicorn(
+        lambda app: answers.append(TestClient(app).post("/chat", json=body))
+    ))
+    assert main(VALID) == 0
+    assert answers[0].status_code == 200, answers[0].json()
+    return answers[0].json()
+
+
+def test_turn_goes_through_summary_router_agent_and_reviewer(mcp, monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    body = served_chat(monkeypatch, FakeModel([AIMessage("Ciao!")]), {"message": "Ciao"})
+    assert body["reply"] == "Ciao!"
+    lines = [r.getMessage() for r in caplog.records if r.name == "assistant.graph"]
+    assert lines[0] == "node=summary messages=1/20 skipped=below_threshold next_node=router"
+    assert node_names(lines) == ["node=summary", "node=router", "node=llm", "node=reviewer"]
+
+
+def test_prompt_goes_through_the_graph(monkeypatch, tmp_path, caplog):  # CA-57, RF-49
+    caplog.set_level(logging.INFO)
+    monkeypatch.chdir(tmp_path)
+    text = "Spiegami Model Context Protocol a livello base: con parole semplici."
+    spec = PromptSpec("spiega", "Spiega un argomento al livello scelto.", (
+        PromptArgument("argomento", "", True), PromptArgument("livello", "", False),
+    ))
+    client = FakeMcpClient(
+        MCP_SPECS, prompts={"spiega": (spec, lambda a: [PromptMessage("user", text)])}
+    )
+    monkeypatch.setattr(service, "McpClient", lambda *a, **k: client)
+    agent = FakeModel([AIMessage("MCP è un protocollo aperto.")])
+    body = served_chat(monkeypatch, agent, {"prompt": {
+        "name": "spiega", "arguments": {"argomento": "Model Context Protocol", "livello": "base"},
+    }})
+    assert body["reply"] == "MCP è un protocollo aperto."
+    assert [m["content"] for m in body["history"]] == [text, "MCP è un protocollo aperto."]
+    assert agent.calls[0][-1].content == text
+    lines = [
+        r.getMessage() for r in caplog.records
+        if r.name in ("assistant.commands", "assistant.graph")
+    ]
+    start = lines.index("prompts/list count=1 names=spiega")
+    assert lines[start + 1] == (
+        'prompts/get name=spiega arguments={"argomento": "Model Context Protocol", '
+        '"livello": "base"} status=ok messages=1'
+    )
+    assert lines[start + 2].startswith("prompts/get name=spiega message=1/1 role=user text=")
+    assert node_names(lines[start + 3:]) == [
+        "node=summary", "node=router", "node=llm", "node=reviewer"
+    ]

@@ -819,6 +819,89 @@ Decisioni:
   `/status` con LM Studio attivo e la sezione completa del README (due processi, Docker) ai punti 5 e
   6; su Windows una porta chiusa fa durare `/status` circa 2,5 s (tentativi di connessione di httpx).
 
+### Punto 5 · CLI come client dell'API HTTP — piano
+
+1. `assistant/config.py`: `ClientConfig(agent_url, log_level)` e `load_client_config(env)`
+   (`AGENT_URL` predefinito `http://127.0.0.1:8000`, `http://`/`https://`, senza `/` finale;
+   `LOG_LEVEL` come oggi); `configure_logging` spostata qui da `service.py` (la usano servizio e CLI).
+2. `assistant/api_client.py` (specifica §9): `AgentError(code, detail)`, `AgentClient(base_url,
+   http=None)` con `status()`, `prompts()`, `chat(history, summary, *, message=None, prompt=None)`,
+   `close()`/context manager; `RemoteSession(agent)` con `send`, `send_prompt`, `history`, `summary`.
+3. `assistant/commands.py`: `CommandResult(output, prompt)` (al posto di `messages`); `PromptCommands(agent)`
+   con `/prompts` → `agent.prompts()` + `format_prompts`, `/prompt` → `parse_prompt_command` e
+   `CommandResult(prompt=(name, arguments))`. `resolve_prompt` e il resto restano per il servizio.
+4. `assistant/terminal.py`: `result.prompt` → `session.send_prompt`; `AgentError` al posto di
+   `openai.APIError` (`prompt_rejected` → «Errore nel comando: … Scrivi /prompts …»).
+5. `assistant/__main__.py`: CLI client (configurazione, logging, `GET /status`, avvisi, benvenuto,
+   `run(RemoteSession, PromptCommands)`); il codice d'avvio del grafo esce da qui (resta in `service.py`).
+6. Docker: `EXPOSE 8000`; `compose.yaml` con `agent` (servizio, healthcheck) e `assistant` (CLI,
+   `AGENT_URL=http://agent:8000`, `depends_on: service_healthy`); `.env.example` con `AGENT_URL`.
+7. Test: `test_api_client.py` (nuovo: `TestClient` dell'app con grafo finto e `httpx.MockTransport`),
+   `test_commands.py`, `test_terminal.py`, `test_main.py` riscritto per la CLI client (CA-66),
+   `test_config.py`; i test di cablaggio del grafo di `test_main.py` (router, revisore, riassunto,
+   preferenze, prompt nel grafo) passano a `test_service.py`; `test_real.py` usa `resolve_prompt` per
+   i prompt (stesso percorso del servizio). Poi `pytest` completo, prova a mano servizio + CLI con LM
+   Studio e `docker compose config`/avvio dei due servizi.
+8. README (avvio in due terminali, Docker, diagnosi, variabili) e `CLAUDE.md` (struttura e comandi).
+
+Decisioni:
+- `configure_logging` in `config.py`: la CLI non deve importare `service.py` (FastAPI, uvicorn, grafo)
+  solo per il logging; un modulo in più per una funzione non serve.
+- Errori del client: trasporto (connessione rifiutata, nome sconosciuto) → `agent_unreachable`
+  «agente non raggiungibile su <url>»; tempo scaduto → `agent_timeout` «l'agente non ha risposto
+  entro N s»; risposta d'errore con `{"error", "detail"}` → quei valori; altra risposta inattesa →
+  `bad_response` «risposta inattesa dell'agente (HTTP N)».
+- `GET /status` con `503` e corpo di stato non è un errore per il client: `status()` restituisce il
+  corpo e la CLI mostra gli avvisi.
+- Nel terminale ogni `AgentError` diverso da `prompt_rejected` dà «Errore: <detail>. Riprova.» (un
+  solo formato; la specifica §9 ometteva «Riprova.» per gli errori del prompt, che però si possono
+  davvero riprovare). Il punto finale del `detail` non si raddoppia.
+- All'avvio un `AgentError` qualsiasi su `/status` (anche `500`) → messaggio su stderr ed exit 1; per
+  l'agente non raggiungibile si aggiunge come avviarlo.
+
+### Punto 5 · CLI come client dell'API HTTP — fatto
+
+- Implementati `assistant/api_client.py` (`AgentClient`, `AgentError` con `phrase`, `RemoteSession`);
+  in `config.py` `ClientConfig`, `load_client_config`, `DEFAULT_AGENT_URL`, `configure_logging` e
+  `QUIET_LIBRARIES` (tolti da `service.py`); `commands.py` con `CommandResult(output, prompt)` e
+  `PromptCommands(agent)` (solo sintassi nella CLI); `terminal.py` con `send_prompt` e `AgentError`;
+  `__main__.py` riscritto come client (nessun grafo, MCP o modello nella CLI). Docker: `EXPOSE 8000`,
+  `compose.yaml` con `agent` (healthcheck su `/status`, porta `127.0.0.1:8000`, volume delle note) e
+  `assistant` (CLI, `depends_on: service_healthy`); `.env.example` con `AGENT_URL`. README (avvio in
+  due terminali, API, Docker, diagnosi), `CLAUDE.md` (struttura e comandi), specifica §10 con le
+  aggiunte del punto.
+- Decisioni prese durante l'esecuzione: `healthcheck` con `start_interval: 2s` e `interval: 30s` (con
+  5 s fissi il log dell'agente si riempiva di righe `/status`); `fake_service` in `conftest.py` (app
+  vera su grafo finto, usata da `test_api.py`, `test_api_client.py`, `test_commands.py`,
+  `test_terminal.py`, `test_main.py`); avviso di Starlette sul `timeout` col `TestClient` filtrato in
+  `pytest.ini`; in `test_real.py` i prompt passano da `parse_prompt_command` + `resolve_prompt`, lo
+  stesso percorso di CLI e servizio.
+- Test: `test_api_client.py` (nuovo, 34: stato `200`/`503`/`500`/inattesi, agente non raggiungibile
+  anche su porta chiusa, tempo scaduto, timeout per endpoint, prompt e forme sbagliate, chat con
+  messaggio, prompt, rifiuto, LM Studio spento, corpo inviato, `RemoteSession` che conserva cronologia
+  e riassunto solo dopo un `200`); `test_main.py` riscritto (12, CA-66: configurazione, URL, benvenuto,
+  cronologia nella CLI, `/prompts` e `/prompt` attraverso il servizio, agente non raggiungibile ed
+  errore `500` all'avvio → exit 1, avvisi con stato `degraded`); i test di cablaggio del grafo
+  spostati da `test_main.py` a `test_service.py` (+12: strumenti, router, revisore, riassunto,
+  preferenze anche non disponibili, riga di configurazione, turno e prompt attraverso i quattro nodi);
+  `test_commands.py` (i rifiuti dell'host ora su `resolve_prompt`, +1 agente non raggiungibile),
+  `test_terminal.py` (+5), `test_config.py` (+10).
+- `pytest` → 689 passed, 19 deselected; `pip check` senza problemi; prove reali `test_explain_prompt`
+  e `test_summary_prompt` (aiuto cambiato) → 2 passed in 6 min con LM Studio.
+- Prove a mano con LM Studio (`google/gemma-4-e2b`): servizio + CLI da Git Bash su porta 8765
+  («Quanto fa 17 * 23?» → «17 * 23 fa 391.» con `calculate` nel log del servizio, `/prompts`,
+  `/prompt spiega livello=base` rifiutato dal servizio con `400 prompt_rejected`, cronologia
+  mantenuta; CLI senza servizio → exit 1); da PowerShell i comandi del README (`Invoke-RestMethod`
+  di `/status` e `/chat` con `tools_used` di `calculate`, `curl.exe`, CLI con domande in ingresso,
+  CLI senza servizio → exit 1); Docker: `docker compose build`, `docker compose run --rm -T
+  assistant` («391» con `calculate` nei log di `agent`), `docker compose ps` con `agent (healthy)`,
+  `/status` `200` e `/openapi.json` dall'host, `docker compose run --rm -T -e LMSTUDIO_MODEL= agent`
+  → «Manca LMSTUDIO_MODEL.» ed exit 1, LM Studio raggiungibile dal container; poi `docker compose
+  down`.
+- Problemi aperti: prove reali formali CA-67…CA-69 al punto 6; `/status` in locale dura circa 3 s
+  anche con LM Studio attivo (`localhost` su Windows prova prima `::1`; in Docker 10–40 ms); le
+  prove del README precedenti allo Step 6 mostrano ancora `__main__` nei log (annotato nel testo).
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

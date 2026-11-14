@@ -3,8 +3,10 @@ from datetime import datetime, timezone
 
 import httpx2
 import openai
+from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, BaseMessage
 
+from assistant.api import create_app
 from assistant.graph import build_graph
 from assistant.mcp_client import (
     McpStartupError,
@@ -171,3 +173,20 @@ def lm_studio_error() -> openai.APIConnectionError:
     return openai.APIConnectionError(
         request=httpx2.Request("POST", "http://localhost:1234/v1/chat/completions")
     )
+
+
+MODEL_ID = "google/gemma-4-e2b"
+
+
+def model_ok() -> tuple[bool, str]:
+    return True, ""
+
+
+def fake_service(model=None, client=None, model_status=model_ok, **graph_options) -> TestClient:
+    """The real app of the agent service on a fake graph and a fake MCP client, without a
+    network; the default model fails if it is ever called."""
+    graph = fake_graph(FakeModel([]) if model is None else model, **graph_options)
+    return TestClient(create_app(
+        graph=graph, client=client or FakeMcpClient(MCP_SPECS), model_id=MODEL_ID,
+        model_status=model_status,
+    ))

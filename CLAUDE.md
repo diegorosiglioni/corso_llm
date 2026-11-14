@@ -11,17 +11,21 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
   `summary.py`, `preferences.py`, `graph.py`, `agent.py` (turno senza stato e messaggi in JSON),
   `api.py` (app FastAPI del servizio HTTP dell'agente: `/chat`, `/prompts`, `/status`),
   `service.py` (avvio del servizio con `python -m assistant.service`, `AGENT_HOST`/`AGENT_PORT`),
-  `session.py` (che usa `agent.py`), `terminal.py`, `commands.py`
-  (comandi della CLI che cominciano con `/`); ambito del router in
+  `api_client.py` (client HTTP della CLI: `AgentClient`, `AgentError`, `RemoteSession`),
+  `session.py` (sessione in processo che usa `agent.py`, per prove reali e test), `terminal.py`,
+  `commands.py` (comandi della CLI che cominciano con `/`, controllo dell'host dei prompt usato dal
+  servizio); `__main__.py` è la CLI, client del servizio (`AGENT_URL`); ambito del router in
   `assistant/data/scope.txt` (sostituibile con `SCOPE_FILE`); preferenze dell'utente (resource MCP
   `utente://preferenze`) in `assistant/data/preferenze.json` (sostituibile con `PREFERENCES_FILE`);
   logica pura degli strumenti MCP in `units.py`,
   `calculator.py`, `catalog.py` (dati in `assistant/data/catalog.json`), `notes.py`; testi dei
   prompt MCP `spiega` e `riassumi_conversazione` in `prompts.py`; server
   FastMCP in `mcp_server.py`, client sincrono e adattatore in `mcp_client.py`. Solo
-  `__main__.py` collega i moduli.
+  `service.py` collega grafo, MCP e modelli; `__main__.py` collega client HTTP e terminale.
 - Test in `tests/`; il modello finto (`FakeModel`), il router finto (`ConversationRouter`), il
-  revisore finto (`ApprovingReviewer`), il client MCP finto (`FakeMcpClient`) e gli aiuti comuni sono in `conftest.py`. I test MCP avviano il server
+  revisore finto (`ApprovingReviewer`), il client MCP finto (`FakeMcpClient`), il servizio finto
+  (`fake_service`: l'app vera su un grafo finto, con `TestClient`) e gli aiuti comuni sono in
+  `conftest.py`. I test MCP avviano il server
   reale via stdio. Le prove con LM Studio stanno in `test_real.py` (marcatore `real`).
 - Note in SQLite: in locale `NOTES_DB` (default `data/notes.sqlite3`, ignorato da Git), in
   Docker il volume `notes-data`.
@@ -31,8 +35,10 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
   - ambiente: `py -3.13 -m venv .venv` e `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`
   - test senza modello: `.\.venv\Scripts\python.exe -m pytest`
   - prove reali (LM Studio attivo, variabili impostate; circa 30 minuti): `.\.venv\Scripts\python.exe -m pytest -m real -v`
-  - avvio locale: `.\.venv\Scripts\python.exe -m assistant`
-  - Docker: `docker compose build` e `docker compose run --rm assistant` (non `up`)
+  - avvio locale, in due terminali: servizio `.\.venv\Scripts\python.exe -m assistant.service`
+    (variabili di LM Studio), poi CLI `.\.venv\Scripts\python.exe -m assistant`
+  - Docker: `docker compose build` e `docker compose run --rm assistant` (non `up`; avvia anche il
+    servizio `agent`, che resta attivo fino a `docker compose down`)
 
 ## Obiettivo
 Un'applicazione da terminale in Python che conversa con un modello locale e:

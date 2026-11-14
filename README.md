@@ -13,6 +13,9 @@ di sistema. All'avvio l'applicazione legge dal server MCP la resource `utente://
 delle risposte, fuso orario predefinito, stile) e la mette in cima al prompt di sistema dell'agente.
 Il server MCP offre anche due prompt riusabili, `spiega` e `riassumi_conversazione`, che l'utente
 richiama dal terminale con i comandi `/prompts` e `/prompt`.
+Grafo, server MCP e modelli girano in un **servizio HTTP dell'agente** (FastAPI, senza stato,
+documentato con OpenAPI); il terminale è un **client** di quel servizio e conserva cronologia e
+riassunto della conversazione.
 
 Requisiti e specifica: [`docs/superpowers/`](docs/superpowers/).
 
@@ -56,7 +59,9 @@ ripetere le verifiche e rigenerarlo.
 Non richiedono LM Studio né la rete: il modello è sostituito da un modello finto con risposte
 programmate (anche per router e revisore). I test del server MCP lo avviano davvero come
 sottoprocesso stdio, con l'archivio delle note in una cartella temporanea (circa 1 s per test).
-Esito al 2026-11-14: `375 passed, 17 deselected` (le 17 deselezionate sono le prove reali).
+Il servizio HTTP si prova con l'app vera su un grafo finto, senza rete (`TestClient`), e la CLI
+parla con quella stessa app. Esito al 2026-11-14: `689 passed, 19 deselected` (le 19 deselezionate
+sono le prove reali).
 
 ## Configurazione
 
@@ -76,6 +81,10 @@ L'applicazione legge variabili d'ambiente e il file con l'ambito dell'assistente
 | `PREFERENCES_FILE` | no | `assistant/data/preferenze.json` del pacchetto | file JSON delle preferenze dell'utente, letto dal server MCP (sezione «Preferenze dell'utente»); un percorso relativo vale dalla cartella di avvio; un file mancante non blocca l'avvio |
 | `AGENT_HOST` | no | `127.0.0.1` | indirizzo su cui ascolta il servizio HTTP dell'agente (`0.0.0.0` per accettare connessioni da altri computer o container) |
 | `AGENT_PORT` | no | `8000` | porta del servizio HTTP dell'agente (intero tra 1 e 65535) |
+| `AGENT_URL` | no | `http://127.0.0.1:8000` | indirizzo del servizio dell'agente per la CLI (`http://` o `https://`) |
+
+Il servizio dell'agente (`python -m assistant.service`) legge tutte le variabili tranne
+`AGENT_URL`; la CLI (`python -m assistant`) legge solo `AGENT_URL` e `LOG_LEVEL`.
 
 `.env.example` è il modello versionato; la copia reale `.env` resta fuori da Git ed è letta da
 Docker Compose:
@@ -96,55 +105,85 @@ $env:LMSTUDIO_MODEL = "google/gemma-4-e2b"
 ```
 
 Se manca una variabile obbligatoria, un valore non è valido o il file dell'ambito manca o è vuoto,
-l'applicazione non parte, elenca i problemi su stderr ed esce con codice 1:
+il servizio non parte, elenca i problemi su stderr ed esce con codice 1 (lo stesso fa la CLI con
+`AGENT_URL` o `LOG_LEVEL` non validi):
 
 ```powershell
 Remove-Item Env:LMSTUDIO_MODEL
-.\.venv\Scripts\python.exe -m assistant
+.\.venv\Scripts\python.exe -m assistant.service
 $LASTEXITCODE    # 1
 ```
 
 ## Avvio locale
 
-Con LM Studio avviato, il modello caricato e le variabili impostate:
+Servono due terminali PowerShell nella radice della repository: uno per il servizio dell'agente,
+uno per la CLI.
 
-```powershell
-.\.venv\Scripts\python.exe -m assistant
-```
-
-Si conversa al prompt `Tu>`. La sessione termina con `esci`, con Ctrl+Z seguito da Invio
-(fine input su Windows) o con Ctrl+C. La cronologia vale solo per la sessione in corso.
-La conversazione va su stdout, i log su stderr.
-Il testo che comincia con `/` è un comando e non arriva al modello: `/prompts` elenca i prompt del
-server MCP (nome, descrizione e argomenti, log `prompts/list count=… names=…`);
-`/prompt nome chiave=valore` richiama un prompt (valori con spazi tra virgolette doppie, per esempio
-`/prompt spiega argomento="Model Context Protocol" livello=base`): un argomento obbligatorio
-mancante o sconosciuto blocca la richiesta senza chiamare il modello, altrimenti i messaggi del
-prompt entrano nella cronologia e passano dal grafo come una domanda (log `prompts/get …`). Un
-comando sconosciuto dà «Comando sconosciuto». Dettagli nella sezione «Prompt MCP: comandi della CLI».
-
-Per una prova non interattiva si possono passare le domande in ingresso:
-
-```powershell
-"Mi chiamo Paolo", "Come mi chiamo?", "esci" | .\.venv\Scripts\python.exe -m assistant
-```
-
-### Servizio HTTP dell'agente (in costruzione, Step 6)
-
-Lo stesso grafo è disponibile come servizio HTTP senza stato (FastAPI), con le stesse variabili
-più `AGENT_HOST` e `AGENT_PORT`:
+**1. Servizio dell'agente** (LM Studio avviato, modello caricato, variabili di LM Studio impostate):
 
 ```powershell
 .\.venv\Scripts\python.exe -m assistant.service
 ```
 
 La riga `api listening=http://127.0.0.1:8000 docs=/docs …` nel log indica che il servizio è pronto;
-si ferma con Ctrl+C. Il documento OpenAPI è su `http://127.0.0.1:8000/openapi.json` e la pagina
-interattiva su `http://127.0.0.1:8000/docs`. Endpoint: `POST /chat` (un turno: `message` oppure
-`prompt`, più `history` e `summary` ricevuti dal turno precedente), `GET /prompts` (prompt MCP) e
-`GET /status` (`200` se server MCP e modello sono disponibili, `503` con il motivo altrimenti).
-LM Studio spento non impedisce l'avvio: lo segnalano `/status` e `/chat` (`503 model_unavailable`).
-La CLI usa ancora il grafo in processo; diventerà un client del servizio nel punto successivo.
+si ferma con Ctrl+C. Il servizio avvia il server MCP, legge le preferenze e tiene aperti i modelli,
+ma non conserva nessuna conversazione. I log del grafo, degli strumenti e di MCP compaiono qui, con
+una riga per ogni richiesta e risposta HTTP (`api request=chat …`, `api response=chat status=200
+tools=calculate … duration_ms=…`). LM Studio spento non impedisce l'avvio: lo segnalano `/status` e
+le risposte della conversazione.
+
+**2. CLI** (non servono le variabili di LM Studio; `AGENT_URL` solo se il servizio non è su
+`http://127.0.0.1:8000`):
+
+```powershell
+.\.venv\Scripts\python.exe -m assistant
+```
+
+All'avvio la CLI chiede `GET /status`: se il servizio non risponde esce con codice 1 e «Agente non
+disponibile: agente non raggiungibile su http://127.0.0.1:8000. Avvia il servizio con: python -m
+assistant.service»; se il server MCP o il modello non sono disponibili mostra «Attenzione: …» e apre
+comunque la conversazione.
+
+Si conversa al prompt `Tu>`. La sessione termina con `esci`, con Ctrl+Z seguito da Invio
+(fine input su Windows) o con Ctrl+C. La cronologia (e l'eventuale riassunto) vive nella CLI e vale
+solo per la sessione in corso: a ogni turno la CLI la manda al servizio e riceve quella aggiornata.
+La conversazione va su stdout, i log su stderr.
+Il testo che comincia con `/` è un comando e non arriva al modello: `/prompts` elenca i prompt del
+server MCP (nome, descrizione e argomenti); `/prompt nome chiave=valore` richiama un prompt (valori
+con spazi tra virgolette doppie, per esempio
+`/prompt spiega argomento="Model Context Protocol" livello=base`): un errore di sintassi lo blocca
+la CLI, un argomento obbligatorio mancante o sconosciuto lo blocca il servizio, in entrambi i casi
+senza chiamare il modello; altrimenti i messaggi del prompt entrano nella cronologia e passano dal
+grafo come una domanda. Un comando sconosciuto dà «Comando sconosciuto». Dettagli nella sezione
+«Prompt MCP: comandi della CLI».
+
+Per una prova non interattiva si possono passare le domande in ingresso (con il servizio avviato):
+
+```powershell
+"Mi chiamo Paolo", "Come mi chiamo?", "esci" | .\.venv\Scripts\python.exe -m assistant
+```
+
+### API HTTP dell'agente
+
+Il documento OpenAPI è su `http://127.0.0.1:8000/openapi.json` e la pagina interattiva su
+`http://127.0.0.1:8000/docs`. Endpoint:
+
+- `POST /chat`: un turno, aperto da `message` oppure da `prompt` (`{"name", "arguments"}`), con
+  `history` e `summary` ricevuti dal turno precedente; risponde con `reply`, `tools_used` (nome,
+  argomenti, risultato ed esito di ogni strumento eseguito), `history` e `summary` aggiornati.
+- `GET /prompts`: i prompt MCP (`prompts/list`).
+- `GET /status`: `200` se server MCP e modello sono disponibili, `503` con il motivo altrimenti.
+
+Gli errori hanno il corpo `{"error": "<codice>", "detail": "<messaggio>"}`: `400` richiesta,
+cronologia o prompt non validi; `502` errore di LM Studio o prompt non ottenibile; `503` LM Studio o
+server MCP non raggiungibili; `500` errore imprevisto (dettagli solo nel log). Un errore non cambia
+cronologia e riassunto del chiamante. Formato dei messaggi e tabella completa nella
+[specifica](docs/superpowers/specs/2026-11-14-servizio-http-design.md) (§4 e §6).
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/status
+Invoke-RestMethod http://127.0.0.1:8000/chat -Method Post -ContentType "application/json" -Body '{"message": "Quanto fa 17 * 23?"}'
+```
 
 ## Router: domande in ambito e fuori ambito
 
@@ -293,7 +332,9 @@ Tu> Assistente> Ti chiami Paolo.
 
 Il primo turno («Mi chiamo Paolo», «Ciao Paolo.») è uscito dalla cronologia: il nome arriva
 all'agente solo dal riassunto. Il testo del riassunto compare nel log solo con `LOG_LEVEL=DEBUG`
-(`node=summary summary="…"`). Con Docker la stessa prova si fa con
+(`node=summary summary="…"`). Con Docker le soglie sono variabili del servizio `agent`: si
+impostano nel `.env` e valgono dopo `docker compose down` e un nuovo `docker compose run --rm
+assistant` (sezione «Docker»). Prima dello Step 6 la prova si faceva con
 `docker compose run --rm -T -e SUMMARY_MAX_MESSAGES=4 -e SUMMARY_KEEP_MESSAGES=2 assistant`.
 
 Righe senza compressione e di ripiego, nel formato verificato dai test automatici (non osservate
@@ -324,15 +365,16 @@ Oltre ai sette strumenti, il server MCP espone una **resource** `utente://prefer
 | `timezone` | nome IANA, lo stesso controllo dello strumento orologio (es. `"America/New_York"`) | `"Europe/Rome"` |
 | `style` | `"sintetico"` (breve) o `"dettagliato"` (con spiegazioni ed esempi) | `"sintetico"` |
 
-- L'applicazione legge la resource **una sola volta**, all'avvio, prima della prima domanda
-  (`resources/read`), e mette in cima al prompt di sistema dell'agente un testo con lingua, fuso e
-  stile. Una modifica del file vale quindi dalla **sessione successiva**, senza toccare il codice.
+- Il servizio dell'agente legge la resource **una sola volta**, al suo avvio, prima della prima
+  domanda (`resources/read`), e mette in cima al prompt di sistema dell'agente un testo con lingua,
+  fuso e stile, uguale per tutte le conversazioni. Una modifica del file vale quindi dal **riavvio
+  del servizio**, senza toccare il codice (riavviare solo la CLI non basta).
 - Con un fuso predefinito, a «Che ore sono?» senza luogo l'agente chiama `get_current_time` con
   quel fuso invece di chiederlo.
 - La resource non è uno strumento: non compare in `tools/list` e il modello non la può chiamare.
   Router, revisore e riassunto non la ricevono.
 - Un campo mancante o non valido prende il suo predefinito (WARNING `field=…`) senza far perdere gli
-  altri; se la resource non è leggibile (file mancante, JSON non valido), la sessione parte con i tre
+  altri; se la resource non è leggibile (file mancante, JSON non valido), il servizio parte con i tre
   predefiniti e un WARNING `status=unavailable`.
 - Con Docker il file di esempio è nell'immagine: dopo averlo modificato serve `docker compose
   build`; in alternativa `PREFERENCES_FILE` indica un percorso dentro il container.
@@ -372,8 +414,8 @@ modello, come invece gli strumenti). Non compaiono in `tools/list` e non entrano
 
 Dal terminale:
 
-- `/prompts` elenca nome, descrizione e argomenti di ogni prompt (`prompts/list`, chiesto a ogni
-  comando):
+- `/prompts` elenca nome, descrizione e argomenti di ogni prompt (`GET /prompts` del servizio, che
+  chiede `prompts/list` a ogni comando):
 
   ```
   Prompt disponibili:
@@ -388,11 +430,14 @@ Dal terminale:
   l'apostrofo e `=` dentro le virgolette sono caratteri normali. Esempi:
   `/prompt spiega argomento="Model Context Protocol" livello=base`,
   `/prompt riassumi_conversazione stile=sintetico`.
-- Prima di chiedere il prompt l'host controlla la richiesta rispetto a `prompts/list`: nome
-  sconosciuto, argomento sconosciuto o obbligatorio mancante bloccano il comando con
-  «Errore nel comando: …» senza chiamare il server né il modello. Un valore non ammesso (per
-  esempio `livello=esperto`) lo rifiuta il server: «Errore: il prompt 'spiega' non è disponibile
-  (…)».
+- La CLI controlla solo la sintassi (virgolette, forma `chiave=valore`, argomenti ripetuti o
+  vuoti): un errore dà «Errore nel comando: … Uso: …» senza richieste al servizio. Poi manda nome e
+  argomenti al servizio (`POST /chat` con `prompt`), che prima di chiedere il prompt controlla la
+  richiesta rispetto a `prompts/list`: nome sconosciuto, argomento sconosciuto o obbligatorio
+  mancante bloccano il comando con «Errore nel comando: … Scrivi /prompts per l'elenco dei prompt.»
+  senza chiamare `prompts/get` né il modello. Un valore non ammesso (per esempio
+  `livello=esperto`) lo rifiuta il server MCP: «Errore: il prompt 'spiega' non è disponibile (…).
+  Riprova.».
 - I messaggi ottenuti entrano nella cronologia e fanno un turno normale: riassunto, router (l'ambito
   in `scope.txt` comprende spiegazioni di concetti e riassunti della conversazione), agente con gli
   strumenti, revisore.
@@ -416,8 +461,10 @@ INFO assistant.graph: node=router category=conversation reason="La richiesta rie
 INFO assistant.graph: node=reviewer review=1/2 coherent=true reason="La risposta riassume correttamente i punti essenziali della conversazione precedente come richiesto." next_node=end
 ```
 
-Un comando bloccato dall'host scrive `prompt_command status=rejected reason="…"`; un prompt
-rifiutato dal server `prompts/get … status=unavailable error="…"` (WARNING).
+Queste righe (prova del 2026-11-14, prima dello Step 6) oggi compaiono nel log del servizio
+dell'agente. Un comando bloccato scrive `prompt_command status=rejected reason="…"` (nel log della
+CLI per un errore di sintassi, in quello del servizio per il controllo rispetto a `prompts/list`); un
+prompt rifiutato dal server `prompts/get … status=unavailable error="…"` (WARNING).
 
 ## Prove reali con LM Studio
 
@@ -470,15 +517,18 @@ scoperto con `tools/list`; l'applicazione espone al modello solo i sette nomi at
   `data\notes.sqlite3`, oppure in Docker `docker volume rm assistente-laboratorio_notes-data`.
   `created_at` è in UTC.
 
-Se il server MCP non parte, l'applicazione esce con «Server MCP non avviato: <motivo>». Se il
-collegamento si interrompe durante la sessione, lo strumento risponde «Strumento non raggiungibile:
-… Riprova o riavvia l'assistente.»: non c'è riconnessione automatica, va riavviata l'applicazione.
+Se il server MCP non parte, il servizio dell'agente esce con «Server MCP non avviato: <motivo>». Se
+il collegamento si interrompe mentre il servizio è attivo, lo strumento risponde «Strumento non
+raggiungibile: … Riprova o riavvia l'assistente.» e `GET /status` risponde `503`: non c'è
+riconnessione automatica, va riavviato il servizio.
 
 In un turno il modello è chiamato al più `MAX_STEPS` volte; se all'ultimo passaggio chiede ancora
 uno strumento, il turno termina con «Ho raggiunto il limite di 5 passaggi senza una risposta
 finale.» e la sessione resta utilizzabile.
 
-A livello `INFO` i log su stderr mostrano all'avvio l'elenco degli strumenti con la variante, poi
+A livello `INFO` i log del servizio su stderr mostrano all'avvio l'elenco degli strumenti con la
+variante (riga `assistant.service: tools=[…]`; nella prova qui sotto, precedente allo Step 6, era
+`__main__`), poi
 ogni passaggio, ogni chiamata con variante e `call_id`, l'esito (`ok`, `tool_error`,
 `transport_error`; WARNING se diverso da `ok`) e il messaggio restituito al modello. Le righe del
 server MCP (`assistant.mcp_server`) si intercalano a quelle del grafo. Prova reale del 2026-11-09:
@@ -510,8 +560,17 @@ detto nel primo turno ritrovato dopo la compressione solo attraverso il riassunt
 
 ## Docker
 
-LM Studio resta sull'host; nel container gira solo l'applicazione. Compose legge `.env` (vedi
-«Configurazione») e nel container imposta `LMSTUDIO_BASE_URL` a
+LM Studio resta sull'host; Compose avvia due servizi dalla stessa immagine:
+
+- `agent`: il servizio HTTP dell'agente (`python -m assistant.service`, con il server MCP come
+  sottoprocesso nello stesso container e le note nel volume `notes-data`), pubblicato solo su
+  `http://127.0.0.1:8000` di questo computer (OpenAPI su `http://127.0.0.1:8000/docs`). Un
+  `healthcheck` lo dichiara pronto quando `GET /status` risponde, con qualsiasi codice (LM Studio
+  spento dà `503`, ma l'agente c'è).
+- `assistant`: la CLI, client dell'agente (`AGENT_URL=http://agent:8000`), avviata solo quando
+  `agent` è pronto.
+
+Compose legge `.env` (vedi «Configurazione») e in `agent` imposta `LMSTUDIO_BASE_URL` a
 `http://host.docker.internal:1234/v1`. Se LM Studio usa un'altra porta o un altro host, si imposta
 `LMSTUDIO_BASE_URL_DOCKER` nel `.env` (vedi `.env.example`).
 
@@ -521,21 +580,28 @@ docker compose build
 docker compose run --rm assistant
 ```
 
+`docker compose run --rm assistant` avvia anche `agent`, che resta attivo dopo l'uscita dalla CLI
+(una nuova sessione lo ritrova pronto) fino a `docker compose down`. I log dell'agente si leggono con
+`docker compose logs agent`; `docker compose ps` lo mostra `(healthy)`. Le variabili dell'agente
+(modello, soglie, ambito, preferenze) valgono dal suo avvio: dopo una modifica del `.env` servono
+`docker compose down` e un nuovo `docker compose run --rm assistant`.
+
 L'avvio interattivo si fa con `docker compose run --rm`: `docker compose up` non collega
 correttamente l'input del terminale. Per una prova non interattiva serve `-T`:
 
 ```powershell
 "Che ore sono a Tokyo?", "esci" | docker compose run --rm -T assistant
+docker compose logs agent
+docker compose down
 ```
 
 L'immagine (`python:3.13.18-slim-trixie`, fissata per digest nel `Dockerfile`) contiene solo il
 pacchetto `assistant` (con `assistant/data/catalog.json`, `assistant/data/scope.txt` e `assistant/data/preferenze.json`) e le dipendenze dell'applicazione, ed
-esegue come utente non root. Il server MCP gira nello stesso container, come sottoprocesso. Nel
-container l'orario dei log è in UTC; l'orario restituito dallo strumento dipende solo dal fuso
-richiesto.
+esegue come utente non root. Nel container l'orario dei log è in UTC; l'orario restituito dallo
+strumento dipende solo dal fuso richiesto.
 
-Le note stanno nel volume `notes-data`, montato in `/app/data`: una nota salvata in un
-`docker compose run --rm` si ritrova nel successivo. Il volume si elimina con
+Le note stanno nel volume `notes-data`, montato in `/app/data` del servizio `agent`: una nota
+salvata resta anche dopo `docker compose down`. Il volume si elimina con
 `docker volume rm assistente-laboratorio_notes-data`.
 
 ## Diagnosi
@@ -547,19 +613,28 @@ restituito dal server:
 (Invoke-RestMethod http://localhost:1234/v1/models).data.id
 ```
 
-**LM Studio non raggiungibile.** L'assistente risponde
-`Errore: LM Studio non ha risposto correttamente (Connection error.). Riprova.` e la sessione resta
-attiva: la domanda fallita non entra nella cronologia, quindi si può riprovare dopo aver avviato
-il server. Controllare che il server di LM Studio sia avviato e che `LMSTUDIO_BASE_URL` termini
-con `/v1`.
+**Agente non raggiungibile.** La CLI esce subito con «Agente non disponibile: agente non
+raggiungibile su http://127.0.0.1:8000. Avvia il servizio con: python -m assistant.service»: avviare
+il servizio in un altro terminale (o controllare `AGENT_URL`). Se il servizio si ferma durante la
+sessione, ogni domanda dà `Errore: agente non raggiungibile su http://127.0.0.1:8000. Riprova.` e
+la cronologia resta nella CLI: si può riprovare dopo averlo riavviato. Lo stato si controlla con
+`curl.exe -s http://127.0.0.1:8000/status`, che mostra il corpo anche con `503` (con `503`
+`Invoke-RestMethod` dà invece un errore di PowerShell).
+
+**LM Studio non raggiungibile.** All'avvio la CLI mostra «Attenzione: modello non disponibile (LM
+Studio non raggiungibile su …)»; ogni domanda risponde `Errore: LM Studio non raggiungibile:
+Connection error. Riprova.` e la sessione resta attiva: la domanda fallita non entra nella
+cronologia, quindi si può riprovare dopo aver avviato il server. Controllare che il server di LM
+Studio sia avviato e che `LMSTUDIO_BASE_URL` del servizio termini con `/v1`.
 
 **Contesto del modello superato.** Se la richiesta supera il contesto caricato in LM Studio
 (8192 token per `google/gemma-4-e2b` nella configurazione provata), l'assistente mostra
-`Errore: LM Studio non ha risposto correttamente (Error code: 400 - ... exceeds the available context size ...). Riprova.`
+`Errore: LM Studio non ha risposto correttamente: Error code: 400 - ... exceeds the available context size .... Riprova.`
 Se la causa è una sola domanda troppo lunga, basta riformularla: la domanda rifiutata non entra
 nella cronologia. Se invece è la cronologia della sessione a essere diventata troppo lunga, ogni
-domanda successiva fallirà allo stesso modo: chiudere con `esci` e riavviare l'assistente (la
-cronologia riparte da zero), oppure aumentare in LM Studio la lunghezza del contesto del modello.
+domanda successiva fallirà allo stesso modo: chiudere la CLI con `esci` e riavviarla (la cronologia
+vive nella CLI e riparte da zero; il servizio non va riavviato), oppure aumentare in LM Studio la
+lunghezza del contesto del modello.
 
 **Una domanda in ambito viene rifiutata (o il contrario).** Il motivo scritto dal router è nella
 riga `node=router … reason="…"`. Il router è un modello piccolo e classifica in base al testo di
@@ -578,8 +653,9 @@ ma non fa mai riscrivere.
 uri=utente://preferenze`: `status=ok` con i valori letti; `status=partial` preceduta da un WARNING
 `field=<campo> problem=missing|invalid` per ogni campo che ha preso il predefinito;
 `status=unavailable … fallback=defaults` se il file manca o non è JSON valido (il motivo è in
-`error="…"`, con il percorso). Il file si legge solo all'avvio: dopo una modifica va riavviata la
-sessione (con Docker anche `docker compose build`, se si cambia il file dell'immagine). La resource
+`error="…"`, con il percorso). Il file si legge solo all'avvio del servizio dell'agente: dopo una
+modifica va riavviato il servizio (con Docker `docker compose down`, e anche `docker compose build`
+se si cambia il file dell'immagine). La resource
 si legge da sola così (deve stampare il JSON del file):
 
 ```powershell
@@ -600,9 +676,10 @@ la descrizione dello stile sintetico «breve ed essenziale, in poche frasi» fac
 (dettagli nella §11 della [specifica](docs/superpowers/specs/2026-11-14-preferenze-design.md)). Dopo
 una modifica di `preferences.py` o del prompt si ripete `pytest -m real`.
 
-**Un `/prompt` non funziona.** Le righe del logger `assistant.commands` dicono dove si è fermato:
-`prompt_command status=rejected reason="…"` se l'host ha bloccato il comando (sintassi, nome o
-argomenti rispetto a `prompts/list`: il modello non è stato chiamato); `prompts/list
+**Un `/prompt` non funziona.** Le righe del logger `assistant.commands` (nel log della CLI per la
+sintassi, in quello del servizio per il resto, dopo `api request=chat kind=prompt name=…`) dicono
+dove si è fermato: `prompt_command status=rejected reason="…"` se il comando è stato bloccato
+(sintassi, nome o argomenti rispetto a `prompts/list`: il modello non è stato chiamato); `prompts/list
 status=unavailable` o `prompts/get … status=unavailable error="…"` se il server non ha risposto o ha
 rifiutato un valore; `prompts/get … status=ok` seguita da `message=1/1 … text="…"` con il testo
 mandato al grafo. Da lì in poi il turno ha le righe consuete di `summary`, `router`, agente e
@@ -613,11 +690,11 @@ richieste e i risultati ottenuti» 4 su 4 (dettagli nella §13 della
 [specifica](docs/superpowers/specs/2026-11-14-prompt-mcp-design.md)).
 
 **Più dettagli.** Con `$env:LOG_LEVEL = "DEBUG"` i log mostrano la traccia completa degli errori
-e le richieste HTTP verso LM Studio.
+e le richieste HTTP (del servizio verso LM Studio, della CLI verso il servizio).
 
 ### Strumenti MCP, livello per livello
 
-**1. Il processo del server non parte.** L'applicazione esce con «Server MCP non avviato: …» (per
+**1. Il processo del server non parte.** Il servizio dell'agente esce con «Server MCP non avviato: …» (per
 esempio «Connection closed»); il motivo dettagliato del sottoprocesso compare su stderr. Il server
 si può avviare a mano: con l'ingresso chiuso deve uscire subito con codice 0, altrimenti mostra
 l'errore (dipendenza mancante, modulo non trovato):
@@ -664,15 +741,16 @@ restituito si legge nel log, con lo stesso `call_id` della chiamata.
 **LM Studio non raggiungibile dal container.** Si verifica così:
 
 ```powershell
-docker compose run --rm -T assistant python -c "import urllib.request; print(urllib.request.urlopen('http://host.docker.internal:1234/v1/models').read()[:200])"
+docker compose run --rm -T agent python -c "import urllib.request; print(urllib.request.urlopen('http://host.docker.internal:1234/v1/models').read()[:200])"
 ```
 
 Deve stampare l'elenco dei modelli. Con Docker Desktop su Windows ha funzionato senza modificare
 LM Studio; se fallisce, attivare in LM Studio l'opzione per servire anche sulla rete locale.
 
-**Configurazione nel container.** Una variabile si può sovrascrivere per una sola esecuzione, per
-esempio per verificare il messaggio di configurazione mancante:
+**Configurazione nel container.** Una variabile dell'agente si può sovrascrivere per una sola
+esecuzione del servizio, per esempio per verificare il messaggio di configurazione mancante
+(«Configurazione non valida: Manca LMSTUDIO_MODEL.», codice 1):
 
 ```powershell
-docker compose run --rm -T -e LMSTUDIO_MODEL= assistant
+docker compose run --rm -T -e LMSTUDIO_MODEL= agent
 ```

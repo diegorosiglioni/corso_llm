@@ -15,7 +15,7 @@ from pathlib import Path
 import uvicorn
 
 from assistant.api import create_app
-from assistant.config import ConfigError, load_config
+from assistant.config import ConfigError, configure_logging, load_config
 from assistant.graph import build_graph
 from assistant.mcp_client import (
     ALLOWED_MCP_TOOLS,
@@ -35,20 +35,6 @@ from assistant.preferences import load_preferences, preferences_prompt
 from assistant.tools import ToolUnavailableError, create_current_time_tool
 
 log = logging.getLogger("assistant.service")  # not "__main__" with python -m
-
-# Libraries whose INFO logs (HTTP requests, protocol details) are hidden unless LOG_LEVEL=DEBUG.
-QUIET_LIBRARIES = ("httpx", "httpx2", "openai", "mcp", "fastmcp")  # openai 3.x uses httpx2
-
-
-def configure_logging(log_level: str) -> None:
-    logging.basicConfig(
-        stream=sys.stderr,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        level=log_level,
-    )
-    if log_level != "DEBUG":
-        for library in QUIET_LIBRARIES:
-            logging.getLogger(library).setLevel(logging.WARNING)
 
 
 def main(env: Mapping[str, str] = os.environ) -> int:

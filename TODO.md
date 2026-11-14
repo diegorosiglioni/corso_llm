@@ -38,7 +38,7 @@ streaming facoltativo). Si fa solo ciò che chiede la traccia (decisione dell'ut
 - [x] Modulo dell'agente separato dall'interfaccia: funzione senza stato che riceve messaggio, cronologia e riassunto e restituisce risposta, strumenti usati, cronologia e riassunto aggiornati; serializzazione JSON dei messaggi; test con il grafo simulato
 - [x] Endpoint HTTP di conversazione (messaggio e cronologia in ingresso, risposta e strumenti usati in uscita) con OpenAPI consultabile; test dell'API con il grafo simulato
 - [x] Endpoint di stato (agente, server MCP e modello raggiungibili) ed errori comprensibili con codice HTTP quando modello o strumenti non sono disponibili; test con modello e client MCP finti
-- [ ] CLI come client dell'API HTTP (stesso comportamento del terminale attuale, comandi `/prompts` e `/prompt` compresi); test con l'API simulata; README e CLAUDE.md aggiornati con i nuovi comandi di avvio
+- [x] CLI come client dell'API HTTP (stesso comportamento del terminale attuale, comandi `/prompts` e `/prompt` compresi); test con l'API simulata; README e CLAUDE.md aggiornati con i nuovi comandi di avvio
 - [ ] Prova reale Step 6: chiamata HTTP con uno strumento (risposta e traccia nei log), stessa risposta da CLI e API, OpenAPI consultabile; esiti nel diario
 
 ## Step 7 · Back-end: API e salvataggio delle chat

@@ -1,17 +1,23 @@
-"""Configuration read from environment variables and from the scope file they point to.
+"""Configuration read from environment variables and from the scope file they point to, and the
+logging setup shared by the service and the CLI.
 
 The preferences file is only located here: the MCP server reads it."""
 
+import logging
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
+# Libraries whose INFO logs (HTTP requests, protocol details) are hidden unless LOG_LEVEL=DEBUG.
+QUIET_LIBRARIES = ("httpx", "httpx2", "openai", "mcp", "fastmcp")  # openai 3.x uses httpx2
 DEFAULT_NOTES_DB = "data/notes.sqlite3"
 DEFAULT_SCOPE_FILE = str(Path(__file__).parent / "data" / "scope.txt")
 DEFAULT_PREFERENCES_FILE = str(Path(__file__).parent / "data" / "preferenze.json")
 DEFAULT_AGENT_HOST = "127.0.0.1"  # not reachable from other computers
 DEFAULT_AGENT_PORT = 8000
+DEFAULT_AGENT_URL = f"http://{DEFAULT_AGENT_HOST}:{DEFAULT_AGENT_PORT}"  # used by the CLI
 
 
 @dataclass(frozen=True)
@@ -102,12 +108,7 @@ def load_config(env: Mapping[str, str]) -> Config:
             f"ricevuti '{summary_keep_messages}' e '{summary_max_messages}'."
         )
 
-    log_level = read("LOG_LEVEL").upper() or "INFO"
-    if log_level not in LOG_LEVELS:
-        problems.append(
-            f"LOG_LEVEL deve essere uno tra {', '.join(LOG_LEVELS)}, "
-            f"ricevuto '{read('LOG_LEVEL')}'."
-        )
+    log_level = _log_level(env, problems)
 
     notes_db = read("NOTES_DB") or DEFAULT_NOTES_DB
 
@@ -143,3 +144,46 @@ def load_config(env: Mapping[str, str]) -> Config:
         read("AGENT_HOST") or DEFAULT_AGENT_HOST,
         agent_port,
     )
+
+
+def _log_level(env: Mapping[str, str], problems: list[str]) -> str:
+    """LOG_LEVEL in upper case (default INFO); an invalid value is added to `problems`."""
+    text = env.get("LOG_LEVEL", "").strip()
+    log_level = text.upper() or "INFO"
+    if log_level not in LOG_LEVELS:
+        problems.append(
+            f"LOG_LEVEL deve essere uno tra {', '.join(LOG_LEVELS)}, ricevuto '{text}'."
+        )
+    return log_level
+
+
+@dataclass(frozen=True)
+class ClientConfig:
+    """Configuration of the CLI, a client of the HTTP service: it needs no LM Studio variables."""
+
+    agent_url: str = DEFAULT_AGENT_URL  # AGENT_URL (address of the agent service)
+    log_level: str = "INFO"  # LOG_LEVEL
+
+
+def load_client_config(env: Mapping[str, str]) -> ClientConfig:
+    """Reads and validates the configuration of the CLI; the URL loses its final "/"."""
+    problems = []
+    agent_url = env.get("AGENT_URL", "").strip() or DEFAULT_AGENT_URL
+    if not agent_url.startswith(("http://", "https://")):
+        problems.append(f"AGENT_URL deve iniziare con http:// o https://, ricevuto '{agent_url}'.")
+    log_level = _log_level(env, problems)
+    if problems:
+        raise ConfigError(" ".join(problems))
+    return ClientConfig(agent_url.rstrip("/"), log_level)
+
+
+def configure_logging(log_level: str) -> None:
+    """Logs on stderr (the conversation of the CLI is on stdout); libraries quiet unless DEBUG."""
+    logging.basicConfig(
+        stream=sys.stderr,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        level=log_level,
+    )
+    if log_level != "DEBUG":
+        for library in QUIET_LIBRARIES:
+            logging.getLogger(library).setLevel(logging.WARNING)

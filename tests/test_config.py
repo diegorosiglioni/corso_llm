@@ -1,13 +1,19 @@
+import logging
 from pathlib import Path
 
 import pytest
 
 import assistant.config
 from assistant.config import (
+    DEFAULT_AGENT_URL,
     DEFAULT_PREFERENCES_FILE,
     DEFAULT_SCOPE_FILE,
+    QUIET_LIBRARIES,
+    ClientConfig,
     Config,
     ConfigError,
+    configure_logging,
+    load_client_config,
     load_config,
 )
 
@@ -254,3 +260,49 @@ def test_agent_port_problem_listed_with_the_others():
         "Manca LMSTUDIO_BASE_URL. Manca LMSTUDIO_MODEL. "
         "AGENT_PORT deve essere un intero tra 1 e 65535, ricevuto '0'."
     )
+
+
+# --- configuration of the CLI, a client of the service (step 6, point 5) ---
+
+def client_error(env) -> str:
+    with pytest.raises(ConfigError) as e:
+        load_client_config(env)
+    return str(e.value)
+
+
+def test_client_defaults_need_no_lm_studio_variables():
+    assert load_client_config({}) == ClientConfig("http://127.0.0.1:8000", "INFO")
+    assert DEFAULT_AGENT_URL == "http://127.0.0.1:8000"
+
+
+@pytest.mark.parametrize(("value", "expected"), [
+    ("http://agent:8000", "http://agent:8000"),
+    (" https://agente.example/ ", "https://agente.example"),
+    ("http://127.0.0.1:9000//", "http://127.0.0.1:9000"),
+    ("", "http://127.0.0.1:8000"),
+    ("   ", "http://127.0.0.1:8000"),
+])
+def test_agent_url(value, expected):
+    assert load_client_config({"AGENT_URL": value}).agent_url == expected
+
+
+def test_client_log_level():
+    assert load_client_config({"LOG_LEVEL": " debug "}).log_level == "DEBUG"
+
+
+def test_invalid_client_values_listed_together():
+    assert client_error({"AGENT_URL": "agent:8000", "LOG_LEVEL": "tanto"}) == (
+        "AGENT_URL deve iniziare con http:// o https://, ricevuto 'agent:8000'. "
+        "LOG_LEVEL deve essere uno tra DEBUG, INFO, WARNING, ERROR, ricevuto 'tanto'."
+    )
+
+
+def test_client_ignores_the_service_variables():
+    env = {"LMSTUDIO_BASE_URL": "x", "AGENT_PORT": "0", "SCOPE_FILE": "manca.txt"}
+    assert load_client_config(env) == ClientConfig()
+
+
+def test_configure_logging_quiets_the_libraries():
+    configure_logging("INFO")
+    for library in QUIET_LIBRARIES:
+        assert logging.getLogger(library).level == logging.WARNING, library

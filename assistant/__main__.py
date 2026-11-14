@@ -1,116 +1,47 @@
-"""Startup: configuration → logging → MCP client → models (agent, router, reviewer, summary) →
-graph → session → terminal with the prompt commands."""
+"""The CLI, a client of the agent service: configuration → logging → GET /status → terminal with
+the prompt commands. History and summary of the conversation live in the CLI (RemoteSession);
+graph, MCP server and models live in the service (`python -m assistant.service`)."""
 
-import logging
 import os
 import sys
-from collections import Counter
 from collections.abc import Mapping
-from pathlib import Path
 
+from assistant.api_client import AgentClient, AgentError, RemoteSession
 from assistant.commands import PromptCommands
-from assistant.config import ConfigError, load_config
-from assistant.graph import build_graph
-from assistant.mcp_client import (
-    ALLOWED_MCP_TOOLS,
-    McpClient,
-    McpStartupError,
-    create_mcp_tools,
-    server_command,
-)
-from assistant.model import (
-    create_model,
-    create_reviewer_model,
-    create_router_model,
-    create_summary_model,
-)
-from assistant.preferences import load_preferences, preferences_prompt
-from assistant.session import Session
+from assistant.config import ConfigError, configure_logging, load_client_config
 from assistant.terminal import run
-from assistant.tools import ToolUnavailableError, create_current_time_tool
 
-log = logging.getLogger(__name__)
-
-# Libraries whose INFO logs (HTTP requests, protocol details) are hidden unless LOG_LEVEL=DEBUG.
-QUIET_LIBRARIES = ("httpx", "httpx2", "openai", "mcp", "fastmcp")  # openai 3.x uses httpx2
+SERVICE_HINT = "Avvia il servizio con: python -m assistant.service"
+COMPONENTS = (("mcp", "server MCP"), ("model", "modello"))
 
 
 def main(env: Mapping[str, str] = os.environ) -> int:
     try:
-        config = load_config(env)
+        config = load_client_config(env)
     except ConfigError as error:
         print(f"Configurazione non valida: {error}", file=sys.stderr)
         return 1
+    configure_logging(config.log_level)
 
-    logging.basicConfig(
-        stream=sys.stderr,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        level=config.log_level,
-    )
-    if config.log_level != "DEBUG":
-        for library in QUIET_LIBRARIES:
-            logging.getLogger(library).setLevel(logging.WARNING)
-
-    notes_db = Path(config.notes_db).resolve()
-    notes_db.parent.mkdir(parents=True, exist_ok=True)
-    command, args, cwd = server_command(
-        notes_db, config.log_level, Path(config.preferences_file).resolve()
-    )
-    try:
-        with McpClient(command, args, cwd=cwd) as client:
-            return _converse(config, client)
-    except McpStartupError as error:
-        print(f"Server MCP non avviato: {error}", file=sys.stderr)
-        return 1
-
-
-def _converse(config, client) -> int:
-    """Collects local and MCP tools, then runs the conversation while the session is open."""
-    try:
-        mcp_tools = create_mcp_tools(client, ALLOWED_MCP_TOOLS)
-    except ToolUnavailableError as error:  # discovery failed after the handshake
-        print(f"Server MCP non avviato: {error}", file=sys.stderr)
-        return 1
-    tools = [create_current_time_tool(), *mcp_tools]
-    duplicates = [name for name, n in Counter(t.name for t in tools).items() if n > 1]
-    if duplicates:
-        names = ", ".join(f"'{name}'" for name in duplicates)
-        print(f"Strumenti con lo stesso nome: {names}.", file=sys.stderr)
-        return 1
-    log.info(
-        "tools=[%s]",
-        ", ".join(f"{t.name} ({(t.metadata or {}).get('variant', 'local')})" for t in tools),
-    )
-
-    log.info(
-        "scope_file=%s max_reviews=%d summary_max_messages=%d summary_keep_messages=%d "
-        "preferences_file=%s",
-        config.scope_file, config.max_reviews,
-        config.summary_max_messages, config.summary_keep_messages,
-        Path(config.preferences_file).resolve(),
-    )
-    preferences = load_preferences(client)  # once per session, before the first question
-
-    model = create_model(config, tools)
-    graph = build_graph(
-        model,
-        tools,
-        config.max_steps,
-        router_model=create_router_model(config),
-        scope=config.scope,
-        reviewer_model=create_reviewer_model(config),
-        max_reviews=config.max_reviews,
-        summary_model=create_summary_model(config),
-        summary_max_messages=config.summary_max_messages,
-        summary_keep_messages=config.summary_keep_messages,
-        preferences=preferences_prompt(preferences),
-    )
-    session = Session(graph)
-    print(
-        f"Assistente del laboratorio — modello {config.model} su {config.base_url}. "
-        "Scrivi /prompts per i prompt disponibili, 'esci' per uscire."
-    )
-    run(session, commands=PromptCommands(client))
+    with AgentClient(config.agent_url) as agent:
+        try:
+            status = agent.status()
+        except AgentError as error:
+            message = f"Agente non disponibile: {error.phrase}."
+            if error.code == "agent_unreachable":
+                message += f" {SERVICE_HINT}"
+            print(message, file=sys.stderr)
+            return 1
+        for key, name in COMPONENTS:  # the conversation opens anyway: they may come back
+            component = status[key]
+            if component["status"] != "ok":
+                print(f"Attenzione: {name} non disponibile ({component['detail']}).")
+        print(
+            f"Assistente del laboratorio — agente su {config.agent_url}, "
+            f"modello {status['model']['id']}. "
+            "Scrivi /prompts per i prompt disponibili, 'esci' per uscire."
+        )
+        run(RemoteSession(agent), commands=PromptCommands(agent))
     return 0
 
 

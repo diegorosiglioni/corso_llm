@@ -248,6 +248,28 @@ all'avvio non impedisce l'avvio (lo segnala `/status`).
   `condition: service_healthy`, `stdin_open` e `tty`). Si arriva qui con il punto della CLI client,
   perché è lì che il comando Docker attuale smetterebbe di funzionare.
 
+Aggiunte del punto 5 (modalità autonoma):
+- Errori del client oltre a quelli del servizio: `agent_unreachable` («agente non raggiungibile su
+  <url>», anche per connessione chiusa o tempo scaduto in connessione), `agent_timeout` («l'agente
+  non ha risposto entro N s»), `bad_response` («risposta inattesa dell'agente (HTTP N)», anche per un
+  corpo di forma sbagliata). `GET /status` con `503` e corpo di stato non è un errore per il client.
+- Nel terminale ogni `AgentError` tranne `prompt_rejected` dà «Errore: <detail>. Riprova.» (anche gli
+  errori del prompt, che si possono riprovare); il punto finale del `detail` non si raddoppia. Un
+  errore di `/prompts` dà «Errore: <detail>.».
+- All'avvio ogni `AgentError` su `/status` (anche `500`) → «Agente non disponibile: <detail>.» su
+  stderr ed exit 1; per l'agente non raggiungibile si aggiunge «Avvia il servizio con: python -m
+  assistant.service». Gli avvisi sono «Attenzione: server MCP non disponibile (…).» e «Attenzione:
+  modello non disponibile (…).», su stdout prima del benvenuto.
+- `CommandResult` ha `prompt=(name, arguments)` al posto di `messages`; la CLI controlla solo la
+  sintassi, il controllo rispetto a `prompts/list` lo fa il servizio (righe di log nel servizio).
+- `configure_logging` e `QUIET_LIBRARIES` stanno in `config.py` (li usano servizio e CLI, che così non
+  importa FastAPI e il grafo); `load_client_config` legge solo `AGENT_URL` (senza `/` finale) e
+  `LOG_LEVEL`.
+- `healthcheck` con `start_period: 60s`, `start_interval: 2s` e `interval: 30s`: rapido all'avvio,
+  poi rado, perché ogni controllo scrive una riga `api response=status` e chiama `GET /models`.
+- Nei test il `TestClient` dell'app sostituisce la rete del client; l'avviso di Starlette sul
+  parametro `timeout` è filtrato in `pytest.ini`.
+
 ## 11. Dipendenze
 
 `fastapi==0.162.7` (nuova, con l'indiretta `annotated-doc==0.0.6`), `uvicorn==0.54.0` e
