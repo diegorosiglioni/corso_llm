@@ -64,19 +64,19 @@ sottoprocesso stdio, con l'archivio delle note in una cartella temporanea (circa
 Il servizio HTTP si prova con l'app vera su un grafo finto, senza rete (`TestClient`), e la CLI
 parla con quella stessa app. Il back-end si prova su SQLite in memoria, con lo stesso schema, senza
 PostgreSQL. Il JavaScript della pagina del front-end si prova con Node.js (`node --test`, lanciato
-da `pytest`; senza Node il test si salta col motivo). Esito al 2026-11-14: `888 passed, 74
-deselected` (le 74 deselezionate sono le 62 prove reali, 24 con LM Studio e 38 test dell'archivio
-ripetuti su PostgreSQL, e i 12 test nel browser).
+da `pytest`; senza Node il test si salta col motivo). Esito al 2026-11-14: `888 passed, 83
+deselected` (le 83 deselezionate sono le 62 prove reali, 24 con LM Studio e 38 test dell'archivio
+ripetuti su PostgreSQL, e i 21 test nel browser).
 
 La pagina vera nel browser installato (Edge; Chrome con `$env:BROWSER_CHANNEL = "chrome"`), pilotato
-da Playwright senza finestra, con il back-end vero su SQLite in memoria e nessun browser da
-scaricare:
+da Playwright senza finestra, con il back-end vero su SQLite in memoria, un agente finto (risposta con
+uno strumento, risposta lenta, agente spento o in errore) e nessun browser da scaricare:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -m browser
 ```
 
-Esito al 2026-11-14: `12 passed` in circa 5 s.
+Esito al 2026-11-14: `21 passed` in circa 9 s.
 
 ## Configurazione
 
@@ -267,10 +267,21 @@ messaggio. Dettagli nella [specifica](docs/superpowers/specs/2026-11-14-backend-
 
 Il front-end (`python -m frontend`) serve una pagina in HTML, CSS e JavaScript, senza framework,
 che parla solo con il back-end: il browser lo chiama direttamente all'indirizzo `BACKEND_URL`,
-ammesso dal back-end con `CORS_ORIGINS`. Per ora la pagina elenca le chat (dalla più recente, con
-la data dell'ultimo messaggio), ne crea una nuova e la apre, ne elimina una dopo la conferma; la
-chat aperta resta nell'indirizzo (`#/chats/3`) e si ritrova ricaricando la pagina. Vista dei
-messaggi e invio arrivano con il prossimo incremento dello Step 8.
+ammesso dal back-end con `CORS_ORIGINS`. La pagina elenca le chat (dalla più recente, con la data
+dell'ultimo messaggio), ne crea una nuova e la apre, ne elimina una dopo la conferma; la chat aperta
+resta nell'indirizzo (`#/chats/3`) e si ritrova ricaricando la pagina.
+
+Nella chat aperta i messaggi compaiono in ordine con l'ora (domande a destra, risposte a sinistra),
+come testo semplice: il Markdown del modello non è interpretato. Sotto una risposta, «Strumenti
+usati: calculate» (con «(errore)» accanto a uno strumento fallito) si apre con un clic e mostra
+argomenti e risultato di ogni strumento. La domanda si scrive nel campo in fondo: Invio o «Invia»
+la manda, Maiusc+Invio va a capo. Mentre l'assistente risponde la domanda è già visibile, sotto
+compare «L'assistente sta rispondendo… (12 s)» e solo l'invio in quella chat è bloccato: si possono
+leggere, creare o aprire altre chat (il testo scritto e non inviato resta nella sua chat). La pagina
+aspetta la risposta fino a 660 s (il back-end aspetta l'agente fino a 600 s). Gli errori compaiono
+in un riquadro rosso in cima alla vista, chiudibile, senza bloccare la pagina; dopo un errore
+dell'agente la chat mostra la domanda salvata, negli altri casi il testo torna nel campo per
+riprovare.
 
 | Variabile | Default | Significato |
 |-----------|---------|-------------|
@@ -781,6 +792,12 @@ all'indirizzo di `BACKEND_URL` (quello che vede il browser). Se il back-end risp
 `http://127.0.0.1:8080`): il browser blocca la risposta e la pagina non può distinguere i due casi.
 Nella console del browser (F12) compare l'errore CORS; aggiungere l'origine a `CORS_ORIGINS` e
 riavviare il back-end.
+
+**La pagina dice «L'assistente non è raggiungibile in questo momento…» o «L'assistente ha risposto
+con un errore: …».** Il back-end funziona ma l'agente è spento (`503`) o ha risposto con un errore,
+per esempio LM Studio spento (`502`, il motivo è nel messaggio). La domanda è salvata e compare nella
+chat senza risposta: avviare l'agente (o LM Studio) e scrivere di nuovo la domanda. «L'assistente
+non ha risposto in tempo» è il `504` del back-end dopo 600 s.
 
 **LM Studio non raggiungibile.** All'avvio la CLI mostra «Attenzione: modello non disponibile (LM
 Studio non raggiungibile su …)»; ogni domanda risponde `Errore: LM Studio non raggiungibile:

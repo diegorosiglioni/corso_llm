@@ -1,4 +1,5 @@
-// Texts of the page, error messages and date format: pure functions, tested with Node.
+// Texts of the page, error messages, date format and the other pure functions of the page,
+// tested with Node.
 
 import { BackendError } from "./api.js";
 
@@ -11,6 +12,7 @@ export const TEXTS = {
   deleteLabel: (title) => `Elimina la chat ${title}`,
   confirmDelete: (title) =>
     `Eliminare la chat "${title}"? Anche i suoi messaggi saranno cancellati.`,
+  waiting: (seconds) => `L'assistente sta rispondendo… (${seconds} s)`,
 };
 
 // The detail of the back-end without a final period: the messages add their own.
@@ -66,4 +68,43 @@ export function formatDate(value, { now = new Date(), timeZone = undefined } = {
 // The line under the title of a chat in the list.
 export function chatSubtitle(chat, options = {}) {
   return chat.last_message_at ? formatDate(chat.last_message_at, options) : TEXTS.noMessageYet;
+}
+
+// Errors after which the question is saved in the chat: the back-end reached the agent.
+const AGENT_ERRORS = new Set(["503 agent_unavailable", "504 agent_timeout", "502 agent_error"]);
+
+// True when the back-end saved the question before failing (the reloaded chat shows it).
+export function questionSaved(error) {
+  return error instanceof BackendError && AGENT_ERRORS.has(`${error.status} ${error.code}`);
+}
+
+// The name of a tool, marked when it failed.
+const toolName = (tool) => `${tool.name}${tool.ok === false ? " (errore)" : ""}`;
+
+// The line under an answer: "Strumenti usati: calculate, convert_units (errore)"; "" without tools.
+export function toolsSummary(tools) {
+  if (!tools || tools.length === 0) {
+    return "";
+  }
+  return `Strumenti usati: ${tools.map(toolName).join(", ")}`;
+}
+
+// Arguments and result of one tool, in JSON, for the details under an answer.
+export function toolDetail(tool) {
+  const lines = [
+    toolName(tool),
+    `argomenti: ${JSON.stringify(tool.args ?? {})}`,
+    `risultato: ${JSON.stringify(tool.result ?? null)}`,
+  ];
+  return lines.join("\n");
+}
+
+// The messages to show while `pendingText` waits for its answer: the back-end saves the question
+// before calling the agent, so a chat read meanwhile already ends with it and it would be twice.
+export function visibleMessages(messages, pendingText = null) {
+  const last = messages[messages.length - 1];
+  if (pendingText !== null && last && last.role === "user" && last.content === pendingText) {
+    return messages.slice(0, -1);
+  }
+  return messages;
 }

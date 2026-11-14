@@ -149,3 +149,57 @@ test("the default fetch is the global one, not called on the client", async (t) 
   assert.equal(calls[0].url, "http://b/chats");
   assert.equal(calls[0].self instanceof BackendClient, false); // browsers reject that "this"
 });
+
+test("sendMessage: POST /chats/{id}/messages with the content", async () => {
+  const answer = { question: { id: 1 }, answer: { id: 2 } };
+  const { fetch, calls } = fakeFetch(201, json(answer));
+  const client = new BackendClient("http://backend:8001", { fetch });
+  assert.deepEqual(await client.sendMessage(3, "Quanto fa 17 * 23?"), answer);
+  assert.equal(calls[0].url, "http://backend:8001/chats/3/messages");
+  assert.equal(calls[0].method, "POST");
+  assert.equal(calls[0].body, json({ content: "Quanto fa 17 * 23?" }));
+  assert.deepEqual(calls[0].headers, { "Content-Type": "application/json" });
+});
+
+test("sendMessage: error of the agent with the body of the back-end", async () => {
+  const body = json({ error: "agent_unavailable", detail: "agente non raggiungibile" });
+  const { fetch } = fakeFetch(503, body);
+  await assert.rejects(
+    new BackendClient("http://b", { fetch }).sendMessage(3, "ciao"),
+    expectError(503, "agent_unavailable", "agente non raggiungibile"),
+  );
+});
+
+// A fetch that answers 200 "{}" after `delayMs`, or rejects when the request is aborted.
+function slowFetch(delayMs) {
+  return (url, init) => new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => resolve({ ok: true, status: 200, text: async () => "{}" }), delayMs,
+    );
+    init.signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(new DOMException("aborted", "AbortError"));
+    });
+  });
+}
+
+test("sendMessage waits sendTimeoutMs, the other requests timeoutMs", async () => {
+  const client = new BackendClient("http://b", {
+    fetch: slowFetch(80), timeoutMs: 20, sendTimeoutMs: 2_000,
+  });
+  assert.deepEqual(await client.sendMessage(3, "ciao"), {});
+  await assert.rejects(client.listChats(), expectError(0, "timeout", null));
+});
+
+test("sendMessage: no answer within sendTimeoutMs is a timeout", async () => {
+  const client = new BackendClient("http://b", {
+    fetch: slowFetch(2_000), timeoutMs: 2_000, sendTimeoutMs: 20,
+  });
+  await assert.rejects(client.sendMessage(3, "ciao"), expectError(0, "timeout", null));
+});
+
+test("default times: 10 s, and 660 s for sending (the back-end waits the agent 600 s)", () => {
+  const client = new BackendClient("http://b");
+  assert.equal(client.timeoutMs, 10_000);
+  assert.equal(client.sendTimeoutMs, 660_000);
+});

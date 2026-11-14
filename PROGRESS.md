@@ -1357,6 +1357,70 @@ Decisioni:
   con CORS non è stato avviato su PostgreSQL in questo punto (coperto da `TestClient` e dai test nel
   browser su SQLite), la prova reale è il punto 4.
 
+### Punto 3 · Vista dei messaggi, invio, attesa ed errori — piano
+
+1. `api.js`: `sendMessage(id, text)` → `POST /chats/{id}/messages` `{"content"}` con
+   `sendTimeoutMs` (predefinito 660 s, specifica §1 e §7).
+2. `texts.js`: testi del campo, del pulsante e dell'attesa (`waiting(secondi)`), `toolsSummary`
+   («Strumenti usati: calculate, convert_units (errore)»), `toolDetail` (argomenti e risultato in
+   JSON), `questionSaved(error)` (errori dell'agente: la domanda è nel back-end),
+   `visibleMessages(messages, pendingText)` (toglie la domanda già salvata che è anche in attesa).
+3. `index.html`, `style.css`: elenco dei messaggi `#messages` (domande a destra, risposte a sinistra,
+   ora, strumenti in `<details>`), riga d'attesa, modulo `#composer` (`textarea` e «Invia»).
+4. `app.js`: vista dei messaggi; invio con Invio o pulsante (Maiusc+Invio va a capo, testo vuoto
+   ignorato); invii in attesa per chat (`Map`), contatore dei secondi, campo e pulsante disattivati
+   solo per quella chat; bozze per chat; `201` → messaggi aggiunti ed elenco riletto; errore →
+   messaggio, chat riletta, testo rimesso nel campo se la domanda non è salvata.
+5. Test: Node (`api.test.mjs`: `sendMessage`, tempo massimo dell'invio separato; `texts.test.mjs`:
+   nuove funzioni; `contract.test.mjs`: invio, `ChatMessageInfo`, `SendMessageResponse`, errori
+   dell'invio); browser (`test_frontend_browser.py`, agente finto controllabile al posto di
+   `NoAgent`: messaggi salvati con ora e strumenti, invio con attesa e strumenti, Maiusc+Invio e
+   testo vuoto, altra chat durante l'attesa, agente spento `503`, errore `502`, back-end spento
+   durante l'invio, HTML nei messaggi come testo). Poi `pytest` e `pytest -m browser`.
+
+Decisioni:
+- Il testo torna nel campo per ogni errore che non sia dell'agente (`503 agent_unavailable`,
+  `504`, `502`): in quei casi la domanda è salvata e la chat riletta la mostra; negli altri
+  (rete, `400`, `422`, `404`, database, `500`, tempo scaduto) restituire il testo non fa danni e
+  la chat riletta dice se era stato salvato. Il testo non sovrascrive una bozza nel frattempo scritta.
+- Un errore dell'invio si mostra solo se quella chat è ancora aperta (come la risposta, specifica
+  §5); altrimenti si aggiorna solo l'elenco e la chat, riaperta, mostra la domanda senza risposta.
+- Il titolo della chat aperta si aggiorna dall'elenco riletto (la prima domanda dà il titolo; la
+  risposta di `POST …/messages` non contiene `ChatInfo`).
+
+### Punto 3 · Vista dei messaggi, invio, attesa ed errori — fatto
+
+- `api.js`: `sendMessage(id, text)` con `sendTimeoutMs` (660 s). `texts.js`: `TEXTS.waiting`,
+  `questionSaved`, `toolsSummary`, `toolDetail`, `visibleMessages`. `index.html`: `#messages` e
+  modulo `#composer` (`textarea` «Scrivi una domanda…», «Invia»); `style.css` per messaggi,
+  strumenti, attesa e campo.
+- `app.js`: messaggi con ora (`<time>`), strumenti in `<details>`, tutto con `textContent`; invio
+  con Invio o «Invia» (Maiusc+Invio a capo, testo vuoto ignorato, testo inviato senza spazi ai
+  lati); invii in attesa per chat con contatore dei secondi; campo e pulsante disattivati solo nella
+  chat che aspetta; bozze per chat; `201` → domanda e risposta al posto di quella in attesa, elenco
+  riletto e titolo della chat aperta preso dall'elenco; errore → riquadro (solo se la chat è ancora
+  aperta), chat riletta, testo rimesso nel campo se la domanda non è salvata. `openFromAddress`
+  divisa in `openFromAddress` e `readOpenChat` (rilettura senza svuotare la vista).
+- Decisioni prese durante l'esecuzione:
+  - Rileggere l'elenco non ridisegna i messaggi (aggiorna solo il titolo): altrimenti si
+    chiuderebbero i `<details>` degli strumenti aperti dall'utente.
+  - Etichette fisse del campo e del pulsante scritte in `index.html` (non in `TEXTS`): non cambiano.
+  - Il campo riceve il fuoco quando una chat si apre e dopo una risposta (specifica §5: «campo di
+    testo pronto»).
+- Test: Node 47 (client 21: +5 su `sendMessage` e i due tempi massimi; testi 19: +5; contratto 7:
+  invio, `ChatMessageInfo`, `SendMessageRequest`/`SendMessageResponse`, errori `400/404/502/503/504`
+  dell'invio); browser 21 (+9: messaggi con ora e strumenti, invio con attesa e strumenti, testo
+  vuoto e Maiusc+Invio, altre chat durante l'attesa con bozza e risposta arrivata altrove, agente
+  spento `503`, errore `502` con il motivo, chat eliminata prima dell'invio, back-end spento durante
+  l'invio con il testo restituito, HTML in domanda, risposta e strumenti come testo). `NoAgent`
+  sostituito da `FakeAgent` controllabile (risposta, strumenti, errore, attesa).
+- Verifiche: `pytest` → 888 passed, 83 deselected (62 reali, 21 browser); `pytest -m browser` →
+  21 passed in circa 9 s con Edge (tre esecuzioni di seguito) e 21 passed con
+  `BROWSER_CHANNEL=chrome`.
+- Problemi aperti: prova reale dal browser con LM Studio, PostgreSQL e agente veri al punto 4;
+  una lettura della chat partita prima che arrivi la risposta e conclusa dopo potrebbe mostrare la
+  domanda senza risposta fino alla prossima apertura (finestra stretta, non osservata nei test).
+
 ### Decisioni (scelte del progettista, dettagli nella specifica §1)
 
 - HTML, CSS e JavaScript standard (moduli ES) senza framework né build: cinque operazioni e una vista

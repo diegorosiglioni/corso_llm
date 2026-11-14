@@ -53,7 +53,7 @@ streaming facoltativo). Si fa solo ciò che chiede la traccia (decisione dell'ut
 
 - [x] Specifica dello Step 8 e requisiti §16 (tecnologia del front-end, contratto = OpenAPI del back-end, indirizzo del back-end da configurazione)
 - [x] Front-end: elenco, creazione ed eliminazione delle chat, collegato solo al back-end
-- [ ] Front-end: vista dei messaggi e invio, stato di attesa ed errori comprensibili (agente spento → errore mostrato senza bloccare l'interfaccia); test automatici dove possibili
+- [x] Front-end: vista dei messaggi e invio, stato di attesa ed errori comprensibili (agente spento → errore mostrato senza bloccare l'interfaccia); test automatici dove possibili
 - [ ] Prova reale Step 8 dal browser: conversazione completa con uno strumento, chat presente dopo il riavvio, agente spento gestito; README aggiornato
 
 ## Step 9 · Docker Compose: un container per componente

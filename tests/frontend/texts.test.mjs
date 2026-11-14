@@ -1,9 +1,13 @@
-// Messages of the page (specification of step 8, §5) and date format (CA-83).
+// Messages of the page (specification of step 8, §5), date format and the other pure functions
+// of the page (CA-83).
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { BackendError } from "../../frontend/static/api.js";
-import { TEXTS, chatSubtitle, errorMessage, formatDate } from "../../frontend/static/texts.js";
+import {
+  TEXTS, chatSubtitle, errorMessage, formatDate, questionSaved, toolDetail, toolsSummary,
+  visibleMessages,
+} from "../../frontend/static/texts.js";
 
 const URL = "http://127.0.0.1:8001";
 const message = (status, code, detail = null) =>
@@ -107,4 +111,62 @@ test("fixed texts of the specification", () => {
   assert.equal(TEXTS.noMessages, "Nessun messaggio: scrivi la prima domanda.");
   assert.equal(TEXTS.loading, "Caricamento…");
   assert.equal(TEXTS.deleteLabel("Conversioni"), "Elimina la chat Conversioni");
+});
+
+test("waiting line with the seconds", () => {
+  assert.equal(TEXTS.waiting(0), "L'assistente sta rispondendo… (0 s)");
+  assert.equal(TEXTS.waiting(42), "L'assistente sta rispondendo… (42 s)");
+});
+
+test("questionSaved: only after an error of the agent", () => {
+  const saved = (status, code) => questionSaved(new BackendError(status, code, null));
+  assert.equal(saved(503, "agent_unavailable"), true);
+  assert.equal(saved(504, "agent_timeout"), true);
+  assert.equal(saved(502, "agent_error"), true);
+  assert.equal(saved(0, "network"), false);
+  assert.equal(saved(0, "timeout"), false);
+  assert.equal(saved(400, "invalid_request"), false);
+  assert.equal(saved(404, "chat_not_found"), false);
+  assert.equal(saved(422, null), false);
+  assert.equal(saved(503, "database_unavailable"), false);
+  assert.equal(saved(500, "internal_error"), false);
+  assert.equal(questionSaved(new TypeError("x")), false);
+});
+
+const CALCULATE = { name: "calculate", args: { expression: "17 * 23" }, result: 391, ok: true };
+const FAILED = {
+  name: "convert_units", args: { value: 1, from: "m", to: "kg" },
+  result: { error: "unità incompatibili" }, ok: false,
+};
+
+test("toolsSummary: names in order, failed ones marked, empty without tools", () => {
+  assert.equal(toolsSummary([CALCULATE]), "Strumenti usati: calculate");
+  assert.equal(
+    toolsSummary([CALCULATE, FAILED]), "Strumenti usati: calculate, convert_units (errore)",
+  );
+  assert.equal(toolsSummary([]), "");
+  assert.equal(toolsSummary(undefined), "");
+});
+
+test("toolDetail: name, arguments and result in JSON", () => {
+  assert.equal(
+    toolDetail(CALCULATE),
+    'calculate\nargomenti: {"expression":"17 * 23"}\nrisultato: 391',
+  );
+  assert.equal(
+    toolDetail(FAILED),
+    'convert_units (errore)\nargomenti: {"value":1,"from":"m","to":"kg"}\n' +
+      'risultato: {"error":"unità incompatibili"}',
+  );
+  assert.equal(toolDetail({ name: "x" }), "x\nargomenti: {}\nrisultato: null");
+});
+
+test("visibleMessages: the saved question waiting for its answer is not shown twice", () => {
+  const old = { id: 1, role: "assistant", content: "Ciao" };
+  const question = { id: 2, role: "user", content: "Quanto fa 17 * 23?" };
+  assert.deepEqual(visibleMessages([old, question], "Quanto fa 17 * 23?"), [old]);
+  assert.deepEqual(visibleMessages([old, question], null), [old, question]);
+  assert.deepEqual(visibleMessages([old, question], "altra domanda"), [old, question]);
+  assert.deepEqual(visibleMessages([old], "Ciao"), [old]); // an answer is never removed
+  assert.deepEqual(visibleMessages([], "Ciao"), []);
 });

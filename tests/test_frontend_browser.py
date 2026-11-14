@@ -1,8 +1,9 @@
 """The real page in the browser installed on the computer (Edge, or Chrome with
 BROWSER_CHANNEL=chrome), driven by Playwright without a window.
 
-The back-end is the real app on SQLite in memory, with CORS for the front-end; both services run
-with uvicorn on free ports in threads of this process. Marker `browser`: pytest -m browser.
+The back-end is the real app on SQLite in memory, with CORS for the front-end, and a fake agent
+the tests control; both services run with uvicorn on free ports in threads of this process.
+Marker `browser`: pytest -m browser.
 """
 
 import os
@@ -16,6 +17,7 @@ import pytest
 import uvicorn
 from playwright.sync_api import Browser, Page, expect, sync_playwright
 
+from assistant.api_client import AgentError
 from backend.api import create_app as create_backend_app
 from backend.db import Base, create_db_engine, init_db
 from backend.store import AgentState, ChatStore
@@ -27,6 +29,13 @@ pytestmark = pytest.mark.browser
 NO_CHATS = 'Nessuna chat. Premi "Nuova chat" per iniziare.'
 NO_SELECTION = "Seleziona una chat o creane una nuova."
 NO_MESSAGES = "Nessun messaggio: scrivi la prima domanda."
+TIME = re.compile(r"^\d{2}:\d{2}$")
+WAITING = re.compile(r"^L'assistente sta rispondendo… \(\d+ s\)$")
+CALCULATE = {"name": "calculate", "args": {"expression": "17 * 23"}, "result": 391, "ok": True}
+FAILED = {
+    "name": "convert_units", "args": {"value": 1, "from_unit": "m", "to_unit": "kg"},
+    "result": {"error": "unità incompatibili"}, "ok": False,
+}
 
 
 def free_port() -> int:
@@ -60,11 +69,34 @@ class ServerThread:
         self._thread.join(10)
 
 
-class NoAgent:
-    """The chat operations of this step never call the agent."""
+class FakeAgent:
+    """The agent behind the back-end, with the `chat` method of AgentClient.
 
-    def chat(self, *args, **kwargs):
-        raise AssertionError("l'agente non deve essere chiamato")
+    Answers `reply` with `tools`; raises `error` when set; when `gate` is an Event, waits for it
+    before answering (a slow agent). `calls` records the messages received.
+    """
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self) -> None:
+        self.reply = "17 * 23 fa 391."
+        self.tools: list[dict] = [CALCULATE]
+        self.error: Exception | None = None
+        self.gate: threading.Event | None = None
+        self.calls: list[str] = []
+
+    def chat(self, history, summary, *, message=None, prompt=None):
+        self.calls.append(message)
+        if self.gate is not None:
+            self.gate.wait(30)
+        if self.error is not None:
+            raise self.error
+        turn = [{"role": "user", "content": message}, {"role": "assistant", "content": self.reply}]
+        return {
+            "reply": self.reply, "tools_used": self.tools,
+            "history": [*history, *turn], "summary": summary,
+        }
 
 
 @pytest.fixture(scope="module")
@@ -76,17 +108,47 @@ def engine():
 
 
 @pytest.fixture(scope="module")
-def services(engine) -> Iterator[tuple[str, str]]:
+def module_agent() -> FakeAgent:
+    return FakeAgent()
+
+
+@pytest.fixture(autouse=True)
+def agent(module_agent) -> Iterator[FakeAgent]:
+    """The fake agent, reset for every test; a waiting answer is let go at the end."""
+    module_agent.reset()
+    yield module_agent
+    if module_agent.gate is not None:
+        module_agent.gate.set()
+
+
+class Services:
+    """Back-end on the chat archive and front-end of its page, served on free ports."""
+
+    def __init__(self, engine, agent: FakeAgent):
+        frontend_port = free_port()
+        backend_app = create_backend_app(
+            store=ChatStore(engine), agent=agent,
+            cors_origins=(f"http://127.0.0.1:{frontend_port}",),
+        )
+        self.backend = ServerThread(backend_app, free_port())
+        frontend_app = create_frontend_app(FrontendConfig(backend_url=self.backend.url))
+        self.frontend = ServerThread(frontend_app, frontend_port)
+
+    def __enter__(self) -> "Services":
+        self.backend.__enter__()
+        self.frontend.__enter__()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.frontend.__exit__(*exc)
+        self.backend.__exit__(*exc)
+
+
+@pytest.fixture(scope="module")
+def services(engine, module_agent) -> Iterator[tuple[str, str]]:
     """(front-end URL, back-end URL), the back-end accepting the page of the front-end."""
-    backend_port, frontend_port = free_port(), free_port()
-    frontend_origin = f"http://127.0.0.1:{frontend_port}"
-    backend_app = create_backend_app(
-        store=ChatStore(engine), agent=NoAgent(), cors_origins=(frontend_origin,)
-    )
-    with ServerThread(backend_app, backend_port) as backend:
-        frontend_app = create_frontend_app(FrontendConfig(backend_url=backend.url))
-        with ServerThread(frontend_app, frontend_port) as frontend:
-            yield frontend.url, backend.url
+    with Services(engine, module_agent) as running:
+        yield running.frontend.url, running.backend.url
 
 
 @pytest.fixture(scope="module")
@@ -135,6 +197,24 @@ def chat_button(page: Page, title: str):
 
 def delete_button(page: Page, title: str):
     return page.get_by_role("button", name=f"Elimina la chat {title}", exact=True)
+
+
+def messages(page: Page):
+    """The messages shown in the open chat, the question waiting for its answer included."""
+    return page.locator("#messages .message")
+
+
+def field(page: Page):
+    return page.locator("#message-input")
+
+
+def send_button(page: Page):
+    return page.get_by_role("button", name="Invia", exact=True)
+
+
+def send(page: Page, text: str) -> None:
+    field(page).fill(text)
+    field(page).press("Enter")
 
 
 # --- list ---
@@ -305,4 +385,213 @@ def test_html_in_a_title_is_shown_as_text(page, services, store):  # CA-85
     expect(page.locator("#chat-title")).to_have_text(title)
     expect(chat_buttons(page).locator(".chat-name")).to_have_text(title)
     assert page.locator("#chat-list b, #chat-list img, #chat-title b, #chat-title img").count() == 0
+    assert page.evaluate("window.injected") is None
+
+
+# --- messages and sending (CA-85) ---
+
+def test_messages_in_order_with_time_and_tools(page, services, store):  # CA-85
+    chat = store.create_chat("Calcoli")
+    store.add_question(chat.id, "Quanto fa 17 * 23?")
+    store.add_answer(chat.id, "Fa 391.", [CALCULATE, FAILED], AgentState([], ""))
+    frontend_url, _ = services
+    open_page(page, f"{frontend_url}/#/chats/{chat.id}")
+    expect(messages(page).locator(".message-text")).to_have_text(["Quanto fa 17 * 23?", "Fa 391."])
+    expect(messages(page).nth(0)).to_have_class("message user")
+    expect(messages(page).nth(1)).to_have_class("message assistant")
+    expect(messages(page).locator(".message-time")).to_have_text([TIME, TIME])
+    expect(messages(page).nth(0).locator("details")).to_have_count(0)
+    expect(page.locator("#chat-status")).to_have_text("")
+    expect(field(page)).to_be_focused()  # the field is ready for the next question
+    tools = messages(page).nth(1).locator("details.tools")
+    expect(tools.locator("summary")).to_have_text(
+        "Strumenti usati: calculate, convert_units (errore)"
+    )
+    expect(tools.locator("pre").first).to_be_hidden()
+    tools.locator("summary").click()
+    assert tools.locator("pre").all_inner_texts() == [
+        'calculate\nargomenti: {"expression":"17 * 23"}\nrisultato: 391',
+        'convert_units (errore)\nargomenti: {"value":1,"from_unit":"m","to_unit":"kg"}\n'
+        'risultato: {"error":"unità incompatibili"}',
+    ]
+
+
+def test_send_with_waiting_state_and_tools(page, services, store, agent):  # CA-85
+    chat = store.create_chat()
+    agent.gate = threading.Event()
+    frontend_url, _ = services
+    open_page(page, f"{frontend_url}/#/chats/{chat.id}")
+    expect(page.locator("#chat-status")).to_have_text(NO_MESSAGES)
+    expect(field(page)).to_have_attribute("placeholder", "Scrivi una domanda…")
+    send(page, "  Quanto fa 17 * 23?  ")
+    pending = page.locator("#messages .message.pending")
+    expect(pending).to_have_text("Quanto fa 17 * 23?")
+    expect(pending).to_have_class("message user pending")
+    waiting = page.locator("#waiting")
+    expect(waiting).to_have_text(WAITING)
+    expect(waiting).to_have_text(re.compile(r"\((?:[1-9]\d*) s\)$"))  # the seconds go on
+    expect(field(page)).to_be_disabled()
+    expect(send_button(page)).to_be_disabled()
+    expect(page.locator("#chat-status")).to_have_text("")
+    agent.gate.set()
+    expect(pending).to_have_count(0)
+    expect(waiting).to_have_count(0)
+    expect(messages(page).locator(".message-text")).to_have_text(
+        ["Quanto fa 17 * 23?", "17 * 23 fa 391."]
+    )
+    expect(messages(page).nth(1).locator("summary")).to_have_text("Strumenti usati: calculate")
+    expect(field(page)).to_be_enabled()
+    expect(field(page)).to_have_value("")
+    expect(field(page)).to_be_focused()
+    # the first question gives the title, the list shows it with the date of the answer
+    expect(page.locator("#chat-title")).to_have_text("Quanto fa 17 * 23?")
+    expect(chat_buttons(page).first.locator(".chat-name")).to_have_text("Quanto fa 17 * 23?")
+    expect(chat_buttons(page).first.locator(".chat-date")).to_have_text(TIME)
+    assert agent.calls == ["Quanto fa 17 * 23?"]
+    _, saved = store.get_chat(chat.id)
+    assert [(message.role, message.content) for message in saved] == [
+        ("user", "Quanto fa 17 * 23?"), ("assistant", "17 * 23 fa 391."),
+    ]
+
+
+def test_empty_text_not_sent_and_shift_enter_new_line(page, services, store, agent):  # CA-85
+    chat = store.create_chat("Righe")
+    frontend_url, _ = services
+    open_page(page, f"{frontend_url}/#/chats/{chat.id}")
+    send(page, "   ")
+    send_button(page).click()
+    expect(messages(page)).to_have_count(0)
+    field(page).fill("")
+    field(page).press_sequentially("prima riga")
+    field(page).press("Shift+Enter")
+    field(page).press_sequentially("seconda riga")
+    expect(field(page)).to_have_value("prima riga\nseconda riga")
+    send_button(page).click()
+    expect(messages(page).locator(".message-text")).to_have_count(2)
+    assert messages(page).locator(".message-text").first.inner_text() == "prima riga\nseconda riga"
+    assert agent.calls == ["prima riga\nseconda riga"]  # the empty texts sent nothing
+
+
+def test_other_chats_usable_while_waiting(page, services, store, agent):  # CA-85, RF-73
+    first = store.create_chat("Prima")
+    agent.gate = threading.Event()
+    frontend_url, _ = services
+    open_page(page, f"{frontend_url}/#/chats/{first.id}")
+    send(page, "Domanda lenta")
+    expect(page.locator("#waiting")).to_be_visible()
+    page.get_by_role("button", name="Nuova chat").click()
+    expect(page.locator("#chat-title")).to_have_text("Nuova chat")
+    expect(page.locator("#waiting")).to_have_count(0)
+    expect(field(page)).to_be_enabled()  # only the chat that waits cannot send
+    field(page).fill("bozza della nuova chat")
+    chat_button(page, "Prima").click()
+    expect(page.locator("#waiting")).to_be_visible()
+    expect(messages(page)).to_have_count(1)  # the question already saved is not shown twice
+    expect(field(page)).to_be_disabled()
+    chat_button(page, "Nuova chat").click()
+    expect(field(page)).to_have_value("bozza della nuova chat")
+    # the answer arrives while another chat is open: only the list changes
+    agent.gate.set()
+    expect(chat_button(page, "Prima").locator(".chat-date")).to_have_text(TIME)
+    expect(page.locator("#chat-title")).to_have_text("Nuova chat")
+    expect(messages(page)).to_have_count(0)
+    expect(page.locator("#chat-status")).to_have_text(NO_MESSAGES)
+    chat_button(page, "Prima").click()
+    expect(messages(page).locator(".message-text")).to_have_text(
+        ["Domanda lenta", "17 * 23 fa 391."]
+    )
+    expect(field(page)).to_be_enabled()
+
+
+def test_agent_switched_off(page, services, store, agent):  # CA-85, RF-74
+    chat = store.create_chat("Spento")
+    agent.error = AgentError("agent_unreachable", "agente non raggiungibile")
+    frontend_url, _ = services
+    open_page(page, f"{frontend_url}/#/chats/{chat.id}")
+    send(page, "Ci sei?")
+    expect(page.locator("#error-text")).to_have_text(
+        "L'assistente non è raggiungibile in questo momento. La domanda è salvata nella chat: "
+        "riprova più tardi."
+    )
+    expect(messages(page).locator(".message-text")).to_have_text(["Ci sei?"])  # saved question
+    expect(messages(page)).to_have_class(["message user"])
+    expect(page.locator("#waiting")).to_have_count(0)
+    expect(field(page)).to_be_enabled()
+    expect(field(page)).to_have_value("")  # saved: the text does not come back
+    expect(chat_button(page, "Spento").locator(".chat-date")).to_have_text(TIME)
+    page.get_by_role("button", name="Nuova chat").click()  # the page is still usable
+    expect(chat_buttons(page)).to_have_count(2)
+    expect(page.locator("#chat-title")).to_have_text("Nuova chat")
+    expect(page.locator("#error")).to_be_hidden()
+
+
+def test_agent_error_with_the_detail(page, services, store, agent):  # CA-85, RF-74
+    chat = store.create_chat("Errore")
+    agent.error = AgentError("model_unavailable", "LM Studio non risponde")
+    frontend_url, _ = services
+    open_page(page, f"{frontend_url}/#/chats/{chat.id}")
+    send(page, "Che ore sono?")
+    expect(page.locator("#error-text")).to_have_text(
+        "L'assistente ha risposto con un errore: l'agente ha risposto con un errore "
+        "(model_unavailable): LM Studio non risponde. La domanda è salvata nella chat: riprova."
+    )
+    expect(messages(page).locator(".message-text")).to_have_text(["Che ore sono?"])
+    expect(field(page)).to_be_enabled()
+
+
+def test_chat_deleted_before_sending(page, services, store, agent):  # CA-85, RF-74
+    chat = store.create_chat("Sparita")
+    frontend_url, _ = services
+    open_page(page, f"{frontend_url}/#/chats/{chat.id}")
+    expect(page.locator("#chat-title")).to_have_text("Sparita")
+    store.delete_chat(chat.id)  # deleted from another page meanwhile
+    send(page, "Ci sei?")
+    expect(page.locator("#error-text")).to_have_text("Questa chat non esiste più.")
+    expect(page.locator("#chat-status")).to_have_text(NO_SELECTION)
+    expect(page.locator("#composer")).to_be_hidden()
+    expect(chat_buttons(page)).to_have_count(0)
+    assert agent.calls == []
+
+
+def test_backend_switched_off_while_sending(page, engine, store, agent):  # CA-85, RF-74
+    chat = store.create_chat("Senza back-end")
+    running = Services(engine, agent).__enter__()
+    try:
+        open_page(page, f"{running.frontend.url}/#/chats/{chat.id}")
+        expect(page.locator("#chat-title")).to_have_text("Senza back-end")
+    finally:
+        running.backend.__exit__(None, None, None)
+    try:
+        send(page, "Mi senti?")
+        backend_url = running.backend.url
+        expect(page.locator("#error-text")).to_have_text(
+            f"Il back-end non risponde ({backend_url}). Controlla che sia avviato e riprova."
+        )
+        expect(page.locator("#waiting")).to_have_count(0)
+        expect(field(page)).to_be_enabled()
+        expect(field(page)).to_have_value("Mi senti?")  # not saved: the text comes back
+        page.get_by_role("button", name="Chiudi").click()
+        expect(page.locator("#error")).to_be_hidden()
+    finally:
+        running.frontend.__exit__(None, None, None)
+    assert agent.calls == []
+
+
+def test_html_in_messages_is_shown_as_text(page, services, store, agent):  # CA-85
+    question = '<script>window.injected=1</script><b>domanda</b>'
+    agent.reply = '<img src=x onerror="window.injected=2"><b>risposta</b>'
+    agent.tools = [{
+        "name": "<b>strumento</b>", "args": {"x": "<i>a</i>"},
+        "result": '<img src=x onerror="window.injected=3">', "ok": True,
+    }]
+    chat = store.create_chat("HTML")
+    frontend_url, _ = services
+    open_page(page, f"{frontend_url}/#/chats/{chat.id}")
+    send(page, question)
+    expect(messages(page).locator(".message-text")).to_have_text([question, agent.reply])
+    summary = messages(page).nth(1).locator("summary")
+    expect(summary).to_have_text("Strumenti usati: <b>strumento</b>")
+    summary.click()
+    expect(messages(page).nth(1).locator("pre")).to_contain_text("<i>a</i>")
+    assert page.locator("#messages b, #messages i, #messages img, #messages script").count() == 0
     assert page.evaluate("window.injected") is None

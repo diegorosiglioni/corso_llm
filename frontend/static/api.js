@@ -34,11 +34,13 @@ function errorFrom(status, text) {
 const globalFetch = (...args) => globalThis.fetch(...args);
 
 export class BackendClient {
-  // `fetch` is a parameter so that the tests can pass a fake one.
-  constructor(baseUrl, { fetch = globalFetch, timeoutMs = 10_000 } = {}) {
+  // `fetch` is a parameter so that the tests can pass a fake one. `sendTimeoutMs` is longer than
+  // the 600 s the back-end waits for the agent, so that its 504 answer can arrive.
+  constructor(baseUrl, { fetch = globalFetch, timeoutMs = 10_000, sendTimeoutMs = 660_000 } = {}) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.fetch = fetch;
     this.timeoutMs = timeoutMs;
+    this.sendTimeoutMs = sendTimeoutMs;
   }
 
   listChats() {
@@ -55,6 +57,12 @@ export class BackendClient {
 
   deleteChat(id) {
     return this.request("DELETE", `/chats/${encodeURIComponent(id)}`);
+  }
+
+  // The question saved and the answer of the agent: {question, answer}.
+  sendMessage(id, text) {
+    const path = `/chats/${encodeURIComponent(id)}/messages`;
+    return this.request("POST", path, { content: text }, this.sendTimeoutMs);
   }
 
   // JSON body of a 2xx answer (null for 204), otherwise a BackendError.

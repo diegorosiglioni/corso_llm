@@ -15,6 +15,9 @@ const contract = JSON.parse(
 const FIELDS_READ = {
   ChatInfo: ["id", "title", "last_message_at"],
   ChatDetail: ["id", "title", "messages"],
+  ChatMessageInfo: ["id", "role", "content", "tools_used", "created_at"],
+  SendMessageRequest: ["content"],
+  SendMessageResponse: ["question", "answer"],
   ErrorBody: ["error", "detail"],
 };
 
@@ -23,6 +26,7 @@ const ANSWERS = [
   ["get", "/chats", "200", "ChatInfo", true],
   ["post", "/chats", "201", "ChatInfo", false],
   ["get", "/chats/{chat_id}", "200", "ChatDetail", false],
+  ["post", "/chats/{chat_id}/messages", "201", "SendMessageResponse", false],
 ];
 
 // The requests the client makes, recorded with a fake fetch.
@@ -37,6 +41,7 @@ async function clientRequests() {
   await client.createChat();
   await client.getChat(7);
   await client.deleteChat(7);
+  await client.sendMessage(7, "ciao");
   return calls;
 }
 
@@ -44,7 +49,7 @@ const template = (path) => path.replace(/\/\d+(?=\/|$)/g, "/{chat_id}");
 
 test("every request of the client is an operation of the contract", async () => {
   const calls = await clientRequests();
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
   for (const { method, path } of calls) {
     const operations = contract.paths[template(path)];
     assert.ok(operations, `percorso ${path} assente dal contratto`);
@@ -80,10 +85,30 @@ test("the error answers of the chat operations use ErrorBody", () => {
     ["delete", "/chats/{chat_id}", "404"],
     ["get", "/chats", "503"],
     ["post", "/chats", "503"],
+    ["post", "/chats/{chat_id}/messages", "400"],
+    ["post", "/chats/{chat_id}/messages", "404"],
+    ["post", "/chats/{chat_id}/messages", "502"],
+    ["post", "/chats/{chat_id}/messages", "503"],
+    ["post", "/chats/{chat_id}/messages", "504"],
   ];
   for (const [method, path, status] of errors) {
     const content = contract.paths[path][method].responses[status].content["application/json"];
     const where = `${method} ${path} ${status}`;
     assert.equal(content.schema.$ref, "#/components/schemas/ErrorBody", where);
   }
+});
+
+test("the question is sent as the body SendMessageRequest", () => {
+  const body = contract.paths["/chats/{chat_id}/messages"].post.requestBody;
+  assert.equal(
+    body.content["application/json"].schema.$ref, "#/components/schemas/SendMessageRequest",
+  );
+});
+
+test("the messages of a chat and of the answer to a question are ChatMessageInfo", () => {
+  const { schemas } = contract.components;
+  const message = "#/components/schemas/ChatMessageInfo";
+  assert.equal(schemas.ChatDetail.properties.messages.items.$ref, message);
+  assert.equal(schemas.SendMessageResponse.properties.question.$ref, message);
+  assert.equal(schemas.SendMessageResponse.properties.answer.$ref, message);
 });
