@@ -1,11 +1,11 @@
 # Requisiti — Assistente del laboratorio
 
-Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5) e integrati per la lezione 6 (§9–§15)
+Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5) e integrati per la lezione 6 (§9–§16)
 Stato: §1–§7 approvati il 2026-10-26; revisioni del 2026-11-09 e §8 approvate il 2026-11-09
 (insieme alla specifica `specs/2026-11-09-strumenti-mcp-design.md`); §9 (lezione 6, Step 1)
 e §10 (lezione 6, Step 2) approvate il 2026-11-11; §11 (lezione 6, Step 3) approvata il 2026-11-13;
-§12 (lezione 6, Step 4), §13 (lezione 6, Step 5), §14 (lezione 6, Step 6) e §15 (lezione 6,
-Step 7) scritte il 2026-11-14 in modalità autonoma (piano in `PROGRESS.md`)
+§12 (lezione 6, Step 4), §13 (lezione 6, Step 5), §14 (lezione 6, Step 6), §15 (lezione 6,
+Step 7) e §16 (lezione 6, Step 8) scritte il 2026-11-14 in modalità autonoma (piano in `PROGRESS.md`)
 
 Questo documento fissa **che cosa** deve fare l'applicazione. Il **come** (architettura,
 moduli, dettagli del grafo) sarà descritto nella specifica, che rimanda a questi requisiti.
@@ -556,3 +556,51 @@ PostgreSQL, agente e LM Studio (`google/gemma-4-e2b`) dalla prova `test_backend_
 | CA-76 | Righe di log esatte per le cinque operazioni e per gli errori, ai livelli della specifica §7. | automatica |
 | CA-77 | Con PostgreSQL: i test dell'archivio passano anche sul database vero. | reale |
 | CA-78 | Con PostgreSQL, agente e LM Studio: messaggio con uno strumento salvato; dopo il riavvio del back-end chat e messaggi presenti e il turno successivo usa la cronologia salvata; agente fermato → `503 agent_unavailable` con la domanda salvata. | reale |
+
+## 16. Lezione 6, Step 8 — front-end: interfaccia di chat (2026-11-14)
+
+Riferimento: `LLM_Lez_6.pdf`, Blocco C e Step 8 (riassunto in `lezione6.md`). Stato: scritti il
+2026-11-14 in modalità autonoma insieme alla specifica `specs/2026-11-14-frontend-chat-design.md`; le
+scelte del progettista sono nella sua §1. Esiti delle verifiche in `PROGRESS.md`.
+
+- **RF-68** *Front-end* — Un'interfaccia di chat nel browser, in italiano, usabile da chi non conosce
+  il progetto, scritta in HTML, CSS e JavaScript senza framework né passo di build, servita da un
+  servizio distinto (pacchetto `frontend`, avvio con `python -m frontend`, indirizzo da
+  `FRONTEND_HOST` e `FRONTEND_PORT`, predefiniti `127.0.0.1` e `8080`).
+- **RF-69** *Solo il back-end* — La pagina comunica solo con il back-end dello Step 7, all'indirizzo
+  di `BACKEND_URL` (predefinito `http://127.0.0.1:8001`) consegnato al browser da `/config.js`; non
+  conosce agente né database. Il back-end ammette le chiamate del browser dalle origini di
+  `CORS_ORIGINS` (predefinite `http://127.0.0.1:8080` e `http://localhost:8080`).
+- **RF-70** *Contratto* — Il documento OpenAPI del back-end è salvato nella repository come contratto
+  del front-end; i test controllano che coincida con quello generato dal back-end e che ogni richiesta
+  e ogni campo usati dalla pagina vi compaiano.
+- **RF-71** *Chat* — La pagina elenca le chat (titolo e data dell'ultimo messaggio, dalla più
+  recente), ne crea una nuova e la apre, ne elimina una dopo una conferma; la chat aperta resta
+  nell'indirizzo della pagina e si ritrova ricaricandola.
+- **RF-72** *Messaggi e invio* — La pagina mostra i messaggi della chat in ordine, ciascuno con l'ora,
+  e sotto ogni risposta gli strumenti usati (nome, argomenti e risultato, errore segnalato); invia una
+  domanda con Invio o con il pulsante e mostra la risposta salvata. I testi sono mostrati come testo,
+  mai interpretati come HTML.
+- **RF-73** *Attesa* — Durante un invio la domanda compare subito con l'indicazione che l'assistente
+  sta rispondendo e i secondi trascorsi; solo l'invio in quella chat è bloccato, il resto della pagina
+  resta usabile.
+- **RF-74** *Errori* — Back-end non raggiungibile, tempo scaduto, agente non raggiungibile, senza
+  risposta o in errore, archivio non disponibile, chat inesistente e altri errori producono il
+  messaggio in italiano della specifica §5, senza bloccare la pagina; dopo un errore dell'agente la
+  chat mostra la domanda salvata.
+- **RF-75** *Test* — Configurazione, servizio, contratto e CORS si provano con `pytest`; client HTTP
+  e messaggi del JavaScript con `node --test` (lanciato da `pytest`); la pagina nel browser con
+  Playwright e il browser installato (marcatore `browser`); la prova con agente, LM Studio e PostgreSQL
+  veri è separata (marcatore `real`).
+
+| ID | Verifica | Come |
+|----|----------|------|
+| CA-79 | Configurazione: predefiniti, `BACKEND_URL` non http, porta non valida, `CORS_ORIGINS` (predefinito, elenco, voce non valida, vuoto), problemi in un solo messaggio. | automatica |
+| CA-80 | Servizio del front-end: pagina, `/config.js` con l'indirizzo configurato e `no-store`, file statici, `404`; avvio con uvicorn sostituito e configurazione non valida → exit 1. | automatica |
+| CA-81 | CORS del back-end: richiesta preliminare e risposte (anche d'errore) con `Access-Control-Allow-Origin` per un'origine ammessa, nessuna per le altre. | automatica |
+| CA-82 | Contratto: `frontend/backend-openapi.json` uguale all'OpenAPI del back-end; richieste e campi del client presenti nel documento. | automatica |
+| CA-83 | JavaScript con Node: client HTTP (percorsi, corpi, `204`, errori con e senza corpo, rete, tempo scaduto) e ogni messaggio d'errore della specifica §5. | automatica |
+| CA-84 | Nel browser con back-end e agente finti: elenco vuoto, creazione, selezione, eliminazione con conferma, ricarica con la chat aperta. | browser |
+| CA-85 | Nel browser con back-end e agente finti: invio con stato d'attesa e strumenti mostrati, pagina usabile durante l'attesa, agente spento e back-end spento con il messaggio giusto, testo HTML mostrato come testo. | browser |
+| CA-86 | Con LM Studio, PostgreSQL, agente e back-end veri, dal browser: «Quanto fa 17 * 23?» → «391» con `calculate` mostrato e nel log dell'agente; dopo il riavvio del back-end e la ricarica la chat c'è ancora. | reale |
+| CA-87 | Con l'agente fermato, dal browser: messaggio d'errore mostrato, domanda salvata visibile, pagina ancora usabile (creazione di una chat). | reale |

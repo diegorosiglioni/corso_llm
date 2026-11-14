@@ -1257,6 +1257,61 @@ Decisioni:
   chat non bloccati (specifica §13). Nei log rediretti su file le lettere accentate della risposta
   possono uscire in cp1252 (già noto).
 
+## Step 8 · Front-end: interfaccia di chat (2026-11-14)
+
+Specifica: [`docs/superpowers/specs/2026-11-14-frontend-chat-design.md`](docs/superpowers/specs/2026-11-14-frontend-chat-design.md);
+requisiti §16 (RF-68…RF-75, CA-79…CA-87). Questo piano sostituisce l'approvazione (modalità
+autonoma); i punti successivi dello step seguono la specifica.
+
+### Piano dello step (un punto di `TODO.md` per riga)
+
+1. Specifica, requisiti §16, dipendenza di test `playwright==1.65.2` (`requirements-dev.txt`;
+   `playwright` e `greenlet` in `constraints.txt`). Verifica: `pip check`, `pip freeze` confrontato
+   con `constraints.txt`, prova usa e getta fuori dal progetto (Edge/Chrome con Playwright,
+   `node --test`), `pytest` invariato.
+2. Pacchetto `frontend/` (`config.py`, `app.py` con `/config.js` e file statici, `__main__.py`),
+   contratto `frontend/backend-openapi.json`, `CORS_ORIGINS` e `CORSMiddleware` nel back-end; pagina
+   con elenco, creazione ed eliminazione (`index.html`, `style.css`, `api.js`, `texts.js`, `app.js`);
+   marcatore `browser` in `pytest.ini`. Test: `test_frontend_config.py`, `test_frontend_app.py`,
+   `test_frontend_service.py`, `test_frontend_contract.py`, CORS in `test_backend_api.py` e
+   `test_backend_config.py`, `test_frontend_js.py` (`node --test`), `test_frontend_browser.py`
+   (Edge senza finestra, back-end vero su SQLite e agente finto).
+3. Vista dei messaggi, invio, stato di attesa, strumenti usati ed errori della specifica §5; test
+   con Node (`errorMessage`, `toolsSummary`, `formatDate`, client) e nel browser (attesa, pagina
+   usabile, agente e back-end spenti, HTML mostrato come testo).
+4. Prova reale dal browser (CA-86, CA-87: PostgreSQL nel container sulla 5433, LM Studio, agente,
+   back-end e front-end come sottoprocessi, Edge con Playwright); README e `CLAUDE.md`; esiti in
+   requisiti §16 e qui. Servizio non raggiungibile → `[!]`.
+
+### Decisioni (scelte del progettista, dettagli nella specifica §1)
+
+- HTML, CSS e JavaScript standard (moduli ES) senza framework né build: cinque operazioni e una vista
+  di messaggi non giustificano React/Vue né `npm`; `CLAUDE.md` vieta framework non concordati.
+- Pacchetto `frontend/` con un piccolo servizio FastAPI + uvicorn (già fissati): componente a sé per
+  lo Step 9, nessuna dipendenza nuova in esercizio.
+- `BACKEND_URL` consegnato al browser da `GET /config.js`: modo standard di configurare una pagina
+  statica senza ricostruirla.
+- Il browser chiama direttamente il back-end con CORS (`CORS_ORIGINS`, elenco esplicito, niente `*`):
+  niente proxy da scrivere; la traccia ammette entrambe le strade.
+- Contratto: OpenAPI del back-end salvato in `frontend/backend-openapi.json`, controllato dai test.
+- Testi come testo (`textContent`), niente Markdown: nessuna libreria e nessuna iniezione di HTML.
+- Test del JavaScript con `node --test` lanciato da `pytest` (Node 24.15.0, nessun pacchetto npm);
+  pagina nel browser con Playwright e Edge già installato, marcatore `browser` a parte.
+
+### Punto 1 · Specifica e requisiti — fatto
+
+- Scritti la specifica e i requisiti §16 (intestazione di `requisiti.md` aggiornata).
+- Dipendenza: `playwright==1.65.2` in `requirements-dev.txt` (solo test, non nell'immagine); in
+  `constraints.txt` le righe nuove `greenlet==3.5.6` e `playwright==1.65.2` (confronto tra
+  `pip freeze` e `constraints.txt`: sono le sole differenze). `pip check` senza problemi;
+  `pip install --dry-run -r requirements-dev.txt` risolve.
+- Prova usa e getta in `%TEMP%\step8probe` (fuori dal progetto): `node --test` importa un modulo ES
+  `.js` senza `package.json` (Node 24.15.0); Playwright pilota Edge 157.0.4341.46 e Chrome
+  157.0.8103.78 senza finestra (`channel`), senza scaricare browser; porta 8080 libera.
+- Test: `pytest` → 825 passed, 62 deselected (nessun codice cambiato).
+- Problemi aperti: README e `CLAUDE.md` cambiano dal punto 2, quando c'è codice da descrivere;
+  immagine del front-end e porta pubblicata del back-end restano allo Step 9 (specifica §11).
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

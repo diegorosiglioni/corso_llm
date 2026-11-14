@@ -3,3 +3,5 @@
 pytest==9.1.1
 # Richiesta finta per costruire openai.APIConnectionError nei test (openai 3.x usa httpx2)
 httpx2==2.16.0
+# Pagina del front-end nel browser installato (Edge o Chrome) nei test con marcatore browser (Step 8)
+playwright==1.65.2
