@@ -558,6 +558,20 @@ parziale imposta dalla prova e approva la riscrittura dell'agente reale, e la st
 parti interamente reale («391» e l'ora di Tokyo nella risposta); con soglie 4 e 2, il nome
 detto nel primo turno ritrovato dopo la compressione solo attraverso il riassunto.
 
+Le prove dei prompt MCP (`/prompt spiega` e `/prompt riassumi_conversazione`) e quelle del servizio
+HTTP si aggiungono alle precedenti (23 prove in tutto). Le quattro del servizio avviano
+`python -m assistant.service` come processo separato su una porta libera e sono passate il
+2026-11-14 (circa 4 minuti e mezzo): `POST /chat` «Quanto fa 17 * 23?» → `200` con `calculate` in
+`tools_used`, «391» e le righe `api response=chat status=200 tools=calculate` e `tool=calculate` nel
+log del servizio; la stessa domanda dalla CLI e dall'API con lo stesso strumento e la stessa
+risposta («17 * 23 fa 391.» in entrambe, alla lettera); `/openapi.json`, `/docs` e `/status` `200`;
+con `LMSTUDIO_BASE_URL` irraggiungibile `/status` `503` (modello `unavailable`) e `/chat` `503
+model_unavailable`. Per eseguire solo queste:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -m real -v -k "http_chat or same_answer or openapi_and_status or without_lm_studio"
+```
+
 ## Docker
 
 LM Studio resta sull'host; Compose avvia due servizi dalla stessa immagine:

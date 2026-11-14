@@ -457,7 +457,10 @@ CA-60 CA-43 è fallita una volta su tre esecuzioni (rifiuto del router, vedi `PR
 
 Riferimento: `LLM_Lez_6.pdf`, Blocco C e Step 6 (riassunto in `lezione6.md`). Stato: scritti il
 2026-11-14 in modalità autonoma insieme alla specifica `specs/2026-11-14-servizio-http-design.md`; le
-scelte del progettista sono nella sua §1. Esiti delle verifiche in `PROGRESS.md`.
+scelte del progettista sono nella sua §1. Esiti delle verifiche in `PROGRESS.md`. CA-61…CA-66
+verificati con `pytest`; CA-67…CA-69 verificati il 2026-11-14 con LM Studio (`google/gemma-4-e2b`)
+dalle quattro prove reali del servizio in `test_real.py` (stessa risposta da CLI e API, alla
+lettera).
 
 - **RF-52** *Agente senza stato* — Il turno dell'agente è una funzione separata dall'interfaccia: riceve
   i messaggi che aprono il turno, la cronologia e il riassunto e restituisce la risposta, gli

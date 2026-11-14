@@ -8,9 +8,15 @@ import json
 import logging
 import os
 import re
+import socket
+import subprocess
+import sys
+import time
 from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
 
+import httpx
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
@@ -32,6 +38,8 @@ from assistant.summary import is_user_question
 from assistant.tools import create_current_time_tool
 
 pytestmark = pytest.mark.real
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture
@@ -413,3 +421,141 @@ def test_summary_prompt(real, caplog):  # CA-59
                for line in prompt_get_lines(caplog, "riassumi_conversazione")), caplog.text
     assert any("category=conversation" in line for line in router_lines(caplog)[n:]), caplog.text
     assert "Paolo" in reply and "391" in reply, (reply, session.messages)
+
+
+# --- lesson 6, step 6: the agent as an HTTP service (CA-67…CA-69) ---
+
+QUESTION = "Quanto fa 17 * 23?"
+SERVICE_START_TIMEOUT = 60.0  # seconds: MCP server, discovery and preferences before uvicorn
+
+
+def free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+@contextmanager
+def start_service(tmp_path, **overrides):
+    """`python -m assistant.service` as a subprocess on a free port, notes in tmp_path and log in
+    a file; yields (base_url, read_log). The process is stopped on exit."""
+    port = free_port()
+    env = {
+        **os.environ,
+        "AGENT_HOST": "127.0.0.1",
+        "AGENT_PORT": str(port),
+        "NOTES_DB": str(tmp_path / "notes.sqlite3"),
+        "LOG_LEVEL": "INFO",
+        "PYTHONIOENCODING": "utf-8",
+        **overrides,
+    }
+    log_path = tmp_path / f"service-{port}.log"
+    base_url = f"http://127.0.0.1:{port}"
+    with open(log_path, "wb") as log_file:
+        process = subprocess.Popen(
+            [sys.executable, "-m", "assistant.service"],
+            cwd=REPO_ROOT, env=env, stdout=log_file, stderr=subprocess.STDOUT,
+        )
+        try:
+            wait_for_service(base_url, process, log_path)
+            yield base_url, lambda: log_path.read_text(encoding="utf-8", errors="replace")
+        finally:
+            process.terminate()
+            process.wait(timeout=30)
+
+
+def wait_for_service(base_url, process, log_path) -> None:
+    deadline = time.monotonic() + SERVICE_START_TIMEOUT
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            pytest.fail(f"Servizio terminato: {log_path.read_text(encoding='utf-8')}")
+        try:
+            httpx.get(f"{base_url}/openapi.json", timeout=2.0)
+            return
+        except httpx.TransportError:
+            time.sleep(0.5)
+    pytest.fail(f"Servizio non pronto: {log_path.read_text(encoding='utf-8')}")
+
+
+def post_chat(base_url, message: str, history=(), summary: str = "") -> httpx.Response:
+    return httpx.post(
+        f"{base_url}/chat",
+        json={"message": message, "history": list(history), "summary": summary},
+        timeout=600.0,
+    )
+
+
+def cli_replies(stdout: str) -> list[str]:
+    """Replies printed by the CLI: text after 'Assistente> ' up to the next prompt."""
+    return [part.split("Tu> ")[0].replace("Arrivederci!", "").strip()
+            for part in stdout.split("Assistente> ")[1:]]
+
+
+def chat_response_lines(log: str) -> list[str]:
+    return [line for line in log.splitlines() if "api response=chat" in line]
+
+
+def test_http_chat_with_a_tool(tmp_path):  # CA-67
+    with start_service(tmp_path) as (base_url, read_log):
+        response = post_chat(base_url, QUESTION)
+        log = read_log()
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [t["name"] for t in body["tools_used"]] == ["calculate"], body
+    assert body["tools_used"][0]["ok"] is True, body
+    assert "391" in body["reply"], body
+    assert body["history"][0]["role"] == "user", body
+    assert body["history"][0]["content"] == QUESTION, body
+    assert "api request=chat kind=message history=0" in log, log
+    assert any("status=200 tools=calculate " in line
+               for line in chat_response_lines(log)), log
+    assert re.search(r"variant=\S+ tool=calculate call_id=", log), log
+
+
+def test_same_answer_from_cli_and_api(tmp_path):  # CA-68
+    with start_service(tmp_path) as (base_url, read_log):
+        api = post_chat(base_url, QUESTION)
+        cli = subprocess.run(
+            [sys.executable, "-m", "assistant"],
+            cwd=REPO_ROOT, input=f"{QUESTION}\nesci\n", capture_output=True,
+            encoding="utf-8", errors="replace", timeout=900,
+            env={**os.environ, "AGENT_URL": base_url, "LOG_LEVEL": "INFO",
+                 "PYTHONIOENCODING": "utf-8"},
+        )
+        log = read_log()
+    assert api.status_code == 200, api.text
+    assert cli.returncode == 0, (cli.stdout, cli.stderr)
+    api_reply = api.json()["reply"]
+    (cli_reply,) = cli_replies(cli.stdout)
+    lines = chat_response_lines(log)
+    assert len(lines) == 2, log
+    assert all("status=200 tools=calculate " in line for line in lines), lines
+    assert "391" in api_reply and "391" in cli_reply, (api_reply, cli_reply)
+    print(f"API: {api_reply!r}\nCLI: {cli_reply!r}\nuguali: {api_reply == cli_reply}")
+
+
+def test_openapi_and_status(tmp_path):  # CA-69
+    with start_service(tmp_path) as (base_url, _):
+        openapi = httpx.get(f"{base_url}/openapi.json", timeout=10.0)
+        docs = httpx.get(f"{base_url}/docs", timeout=10.0)
+        status = httpx.get(f"{base_url}/status", timeout=30.0)
+    assert openapi.status_code == 200, openapi.text
+    assert {"/chat", "/prompts", "/status"} <= set(openapi.json()["paths"]), openapi.json()
+    assert docs.status_code == 200, docs.text
+    assert status.status_code == 200, status.text
+    body = status.json()
+    assert body["status"] == "ok", body
+    assert body["mcp"]["status"] == "ok" and body["model"]["status"] == "ok", body
+
+
+def test_service_without_lm_studio(tmp_path):  # CA-69
+    with start_service(tmp_path, LMSTUDIO_BASE_URL="http://127.0.0.1:1/v1") as (base_url, read_log):
+        status = httpx.get(f"{base_url}/status", timeout=30.0)
+        chat = post_chat(base_url, QUESTION)
+        log = read_log()
+    assert status.status_code == 503, status.text
+    assert status.json()["mcp"]["status"] == "ok", status.json()
+    assert status.json()["model"]["status"] == "unavailable", status.json()
+    assert chat.status_code == 503, chat.text
+    assert chat.json()["error"] == "model_unavailable", chat.json()
+    assert "api response=chat status=503 error=model_unavailable" in log, log

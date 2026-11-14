@@ -902,6 +902,46 @@ Decisioni:
   anche con LM Studio attivo (`localhost` su Windows prova prima `::1`; in Docker 10–40 ms); le
   prove del README precedenti allo Step 6 mostrano ancora `__main__` nei log (annotato nel testo).
 
+### Punto 6 · Prova reale Step 6 — piano
+
+LM Studio raggiungibile (`GET /v1/models` → `google/gemma-4-e2b`).
+1. `tests/test_real.py`: aiuto `start_service(config, tmp_path, **env)` (context manager) che avvia
+   `python -m assistant.service` come sottoprocesso su una porta libera, note in `tmp_path`, log
+   (stderr) in un file, attende `GET /status` e alla fine termina il processo.
+2. Prove nuove (specifica §12): CA-67 (`POST /chat` «Quanto fa 17 * 23?» → `200`, `calculate` in
+   `tools_used`, «391», righe `api response=chat status=200 tools=calculate` e `tool=calculate` nel
+   log), CA-68 (stessa domanda dalla CLI `python -m assistant` con `AGENT_URL` del servizio e
+   dall'API: `calculate` e «391» in entrambe; testi confrontati e annotati), CA-69 (`/openapi.json`
+   con i tre percorsi, `/status` `200`; servizio con `LMSTUDIO_BASE_URL=http://127.0.0.1:1/v1` →
+   `/status` `503` `model.status=unavailable`, `/chat` `503 model_unavailable`).
+3. Esecuzione: le tre prove nuove, poi `pytest`; esiti in requisiti §14, qui e nel README se cambia.
+
+Decisioni:
+- Servizio come sottoprocesso vero (non `TestClient` in processo): la prova riguarda l'avvio reale
+  con `python -m assistant.service`, la porta e il log del processo, come chiede la specifica §12.
+- Porta libera scelta dal sistema (`socket.bind(("127.0.0.1", 0))`): le prove non urtano un servizio
+  già attivo su 8000.
+
+### Punto 6 · Prova reale Step 6 — fatto
+
+Prove reali con LM Studio, `google/gemma-4-e2b`, `MAX_STEPS=5`, altre variabili non impostate (da
+Git Bash, `LMSTUDIO_BASE_URL=http://localhost:1234/v1`). Aiuti nuovi in `tests/test_real.py`:
+`start_service` (servizio come sottoprocesso, log in un file di `tmp_path`), `post_chat`,
+`cli_replies`.
+
+| CA | Prova | Esito |
+|----|-------|-------|
+| CA-69 | `test_openapi_and_status`, `test_service_without_lm_studio` | ✅ 2 passed in 23 s: `/openapi.json` con `/chat`, `/prompts`, `/status`, `/docs` `200`, `/status` `200` `ok`; con `LMSTUDIO_BASE_URL=http://127.0.0.1:1/v1` `/status` `503` (MCP `ok`, modello `unavailable`), `/chat` `503 model_unavailable` con la riga `api response=chat status=503 error=model_unavailable` |
+| CA-67, CA-68 | `test_http_chat_with_a_tool`, `test_same_answer_from_cli_and_api` | ✅ 2 passed in 238 s: `200`, `tools_used` = `calculate` con `ok: true`, «391», righe `api request=chat kind=message history=0`, `api response=chat status=200 tools=calculate …` e `tool=calculate call_id=…`; CLI (`python -m assistant`, `AGENT_URL` del servizio, domanda ed `esci` in ingresso) e API: due righe `status=200 tools=calculate` e risposta «17 * 23 fa 391.» uguale alla lettera |
+| — | `pytest` | ✅ 689 passed, 23 deselected; `pytest -m real --collect-only` raccoglie 23 prove |
+
+- Documenti: README («Prove reali con LM Studio»: le prove del servizio, esiti e comando per eseguire
+  solo quelle, verificato con `--collect-only`), requisiti §14 con gli esiti di CA-61…CA-69.
+- Problemi aperti: la suite reale completa (23 prove, circa 40 minuti) non è stata rieseguita in
+  questo punto: nessun codice dell'applicazione è cambiato dal punto 5, e le prove di prompt erano
+  passate al punto 5. Una sola esecuzione per prova: dimostra il comportamento con quella domanda,
+  non che il modello risponda sempre uguale da CLI e API.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13
