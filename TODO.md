@@ -35,7 +35,7 @@ streaming facoltativo). Si fa solo ciò che chiede la traccia (decisione dell'ut
 ## Step 6 · L'agente come servizio HTTP
 
 - [x] Specifica dello Step 6 e requisiti §14 (framework HTTP con OpenAPI, formato JSON di messaggi, cronologia e riassunto, codici d'errore, porta), con dipendenze motivate e versioni fissate in `requirements.txt` e `constraints.txt`
-- [ ] Modulo dell'agente separato dall'interfaccia: funzione senza stato che riceve messaggio, cronologia e riassunto e restituisce risposta, strumenti usati, cronologia e riassunto aggiornati; serializzazione JSON dei messaggi; test con il grafo simulato
+- [x] Modulo dell'agente separato dall'interfaccia: funzione senza stato che riceve messaggio, cronologia e riassunto e restituisce risposta, strumenti usati, cronologia e riassunto aggiornati; serializzazione JSON dei messaggi; test con il grafo simulato
 - [ ] Endpoint HTTP di conversazione (messaggio e cronologia in ingresso, risposta e strumenti usati in uscita) con OpenAPI consultabile; test dell'API con il grafo simulato
 - [ ] Endpoint di stato (agente, server MCP e modello raggiungibili) ed errori comprensibili con codice HTTP quando modello o strumenti non sono disponibili; test con modello e client MCP finti
 - [ ] CLI come client dell'API HTTP (stesso comportamento del terminale attuale, comandi `/prompts` e `/prompt` compresi); test con l'API simulata; README e CLAUDE.md aggiornati con i nuovi comandi di avvio

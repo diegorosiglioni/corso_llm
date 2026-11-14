@@ -641,6 +641,54 @@ autonoma); i punti successivi dello step seguono la specifica.
 - Problemi aperti: rischi nella specifica §14 (due processi in locale, cronologia dal chiamante,
   turni lunghi); il README cambierà al punto 5, quando cambiano i comandi d'avvio.
 
+### Punto 2 · Modulo dell'agente — piano
+
+1. `assistant/agent.py` (specifica §3–§4): `EMPTY_REPLY` (spostato da `session.py`), `TurnResult`,
+   `run_turn(graph, history, summary, messages)` (copie dei messaggi, `id` nuovi a quelli
+   d'apertura, messaggi del turno dopo l'ultimo d'apertura, `tools_used`), `messages_to_json`,
+   `messages_from_json` (campi, ruoli, niente `system`, ordine chiamate/risposte; `ValueError`
+   «messaggio N: …»).
+2. `assistant/session.py`: `Session.send_messages` delega a `run_turn`.
+3. Test: `tests/test_agent.py` con `fake_graph` (senza stato e argomenti invariati, risposta e
+   `EMPTY_REPLY`, `tools_used` con strumento riuscito, errore, chiamata non interpretabile e limite,
+   compressione, rifiuto del router, eccezioni al chiamante; andata e ritorno JSON per ogni ruolo e
+   campo; ogni errore di `messages_from_json`; cronologia di un turno vero → JSON → di nuovo al
+   grafo); `test_session.py` invariato deve restare verde. Poi `pytest` completo.
+
+Decisioni:
+- `run_turn` lavora su copie (`model_copy`) di cronologia e messaggi d'apertura: `add_messages`
+  assegna gli `id` mancanti modificando gli oggetti ricevuti, e la specifica vuole gli argomenti
+  invariati.
+- `messages_from_json` rifiuta i campi sconosciuti e richiede `id` e `name` anche nelle chiamate non
+  interpretabili: il nodo degli strumenti risponde con `tool_call_id=id`, quindi senza `id` la
+  cronologia non sarebbe utilizzabile.
+- `ok` di `tools_used` è `false` solo se il risultato è un oggetto con `error` (un testo non JSON
+  non viene esaminato per sottostringhe).
+- `messages_to_json` rifiuta con `ValueError` i messaggi di tipo non previsto (per esempio
+  `SystemMessage`): il grafo non ne mette nella cronologia.
+
+### Punto 2 · Modulo dell'agente — fatto
+
+- Implementati `assistant/agent.py` (`EMPTY_REPLY`, `TurnResult`, `run_turn`, `messages_to_json`,
+  `messages_from_json`) e `Session.send_messages` che delega a `run_turn` (`EMPTY_REPLY` non è più
+  in `session.py`); `CLAUDE.md`, struttura, con `agent.py`.
+- Decisioni prese durante l'esecuzione: `tool_calls`/`invalid_tool_calls` `null` equivalgono ad
+  assenti come gli elenchi vuoti; gli `id` di chiamata possono ripetersi tra messaggi diversi
+  (succede col modello finto e il controllo dell'ordine resta corretto) ma non nello stesso
+  messaggio; `name` vuoto in ingresso = assente.
+- Test nuovi: `tests/test_agent.py` (52: turno con strumento, cronologia e riassunto in ingresso,
+  senza stato con argomenti invariati e senza `id` aggiunti, `id` nuovi ai messaggi d'apertura,
+  turno aperto da più messaggi, nessun messaggio → `ValueError`, `EMPTY_REPLY`, errore dello
+  strumento, chiamata non interpretabile con il testo ricevuto, chiamata non eseguita per il
+  limite, strumenti dei turni precedenti esclusi, rifiuto del router, compressione (anche con gli
+  strumenti del turno), eccezioni al chiamante, indicazione del revisore; andata e ritorno JSON con
+  ogni ruolo e campo, contenuto a blocchi, `SystemMessage` rifiutato, cronologia di un turno vero →
+  JSON → di nuovo al grafo; 26 cronologie non valide col loro messaggio). `test_session.py`
+  invariato e verde.
+- `pytest` → 542 passed, 19 deselected.
+- Problemi aperti: nessuno nuovo. Il modulo non è ancora esposto via HTTP (punto 3); README
+  invariato (comportamento della CLI uguale), si aggiorna al punto 5.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

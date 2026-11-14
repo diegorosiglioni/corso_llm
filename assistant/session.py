@@ -2,7 +2,7 @@
 
 from langchain_core.messages import AnyMessage, BaseMessage, HumanMessage
 
-EMPTY_REPLY = "(Il modello non ha fornito una risposta.)"
+from assistant.agent import run_turn
 
 
 class Session:
@@ -26,12 +26,7 @@ class Session:
     def send_messages(self, messages: list[BaseMessage]) -> str:
         """Runs one turn opened by `messages` (for example those of an MCP prompt), all added to
         the history; history and summary change only if the turn succeeds."""
-        result = self._graph.invoke({
-            "messages": self._messages + list(messages),
-            "summary": self._summary,
-            "steps": 0,
-            "reviews": 0,
-        })
-        self._messages = result["messages"]
-        self._summary = result["summary"]
-        return self._messages[-1].text.strip() or EMPTY_REPLY
+        result = run_turn(self._graph, self._messages, self._summary, messages)
+        self._messages = result.history
+        self._summary = result.summary
+        return result.reply
