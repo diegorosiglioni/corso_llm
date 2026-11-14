@@ -1,9 +1,9 @@
 # Requisiti — Assistente del laboratorio
 
-Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5)
+Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5) e integrati per la lezione 6 (§9–§11)
 Stato: §1–§7 approvati il 2026-10-26; revisioni del 2026-11-09 e §8 approvate il 2026-11-09
 (insieme alla specifica `specs/2026-11-09-strumenti-mcp-design.md`); §9 (lezione 6, Step 1)
-e §10 (lezione 6, Step 2) approvate il 2026-11-11
+e §10 (lezione 6, Step 2) approvate il 2026-11-11; §11 (lezione 6, Step 3) approvata il 2026-11-13
 
 Questo documento fissa **che cosa** deve fare l'applicazione. Il **come** (architettura,
 moduli, dettagli del grafo) sarà descritto nella specifica, che rimanda a questi requisiti.

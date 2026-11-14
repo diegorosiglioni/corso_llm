@@ -11,8 +11,9 @@ di un turno.
 `router.py` e `reviewer.py`); `config.py` legge le due soglie; `model.py` crea il modello del
 riassunto (testo libero, senza strumenti); `graph.py` aggiunge il campo `summary`, il nodo
 `summary` e l'arco `START → summary → router`, e l'agente legge il riassunto in fondo al prompt di
-sistema; `Session` conserva il riassunto tra i turni; `__main__.py` collega. Router, revisore,
-terminale, strumenti, MCP, `scope.txt` e `compose.yaml` non cambiano.
+sistema; `Session` conserva il riassunto tra i turni; `__main__.py` collega. Terminale, strumenti,
+MCP, `scope.txt` e `compose.yaml` non cambiano. Router e revisore, previsti invariati, ricevono
+anche loro il riassunto dopo la prova reale (specifica §16).
 
 **Tech Stack:** Python 3.13, LangGraph 1.2.17, langchain-core 1.7.0, langchain-openai 1.7.2,
 pytest. Nessuna dipendenza nuova.
