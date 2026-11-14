@@ -101,6 +101,49 @@ autonoma); i punti successivi dello step seguono la specifica.
 - Problemi aperti: rischi nella specifica §9 (fuso predefinito ignorato dal modello, revisore con
   risposte non in italiano), da verificare nella prova reale del punto 5.
 
+### Punto 2 · Server MCP: resource `utente://preferenze` — piano
+
+1. `assistant/preferences.py`: `PREFERENCES_URI`, `read_preferences_file(path)` (specifica §4).
+2. `assistant/data/preferenze.json` con i tre predefiniti.
+3. `config.py`: `DEFAULT_PREFERENCES_FILE`, `Config.preferences_file` da `PREFERENCES_FILE`, non
+   letto né validato; `.env.example` con le righe di commento.
+4. `mcp_server.py`: `build_server(notes, catalog, preferences_file)`, resource con `ResourceError`
+   a livello INFO e log `event=resource_read`; argomento obbligatorio `--preferences-file`.
+5. `mcp_client.server_command(notes_db, log_level, preferences_file=DEFAULT_PREFERENCES_FILE)`;
+   `__main__.py` passa `Path(config.preferences_file).resolve()`.
+6. Test: `test_preferences.py` (file di esempio, BOM, mancante, JSON non valido, lista);
+   `test_mcp_server.py` in memoria (`resources/list` con nome e `mimeType`, assente da
+   `tools/list`, lettura, file mancante → errore con il messaggio italiano, log) e via stdio con
+   `server_command` (argomento `--preferences-file` passato davvero); `test_config.py`;
+   `test_main.py` (il server riceve il percorso assoluto). Poi `pytest` completo.
+
+Decisioni:
+- `server_command` ha `preferences_file` con default `DEFAULT_PREFERENCES_FILE`: i chiamanti
+  esistenti (test del client, `test_real.py`) restano validi e il server riceve sempre l'argomento
+  obbligatorio; `__main__.py` lo passa esplicito.
+- `test_mcp_server.py` usa il client in memoria come gli altri test del file, più una prova via
+  stdio per l'argomento della riga di comando (la specifica chiedeva stdio; così si coprono
+  entrambi i percorsi).
+- La riga di avvio `preferences_file=…` arriva al punto 4 con la lettura della resource (specifica §5).
+- File non UTF-8 → «non leggibile» (non «non valido»): stessa scelta di `SCOPE_FILE` in `config.py`.
+- Nei test si legge `mime_type`: `mimeType` in fastmcp 4.1.6 dà `FastMCPDeprecationWarning`.
+
+### Punto 2 · Server MCP — fatto
+
+- Implementati `assistant/preferences.py`, `assistant/data/preferenze.json`, la resource in
+  `mcp_server.py` (`--preferences-file` obbligatorio), `server_command` con il file delle
+  preferenze, `PREFERENCES_FILE` in `config.py` e `.env.example`, percorso assoluto da
+  `__main__.py`.
+- Test nuovi: `test_preferences.py` (12), `test_mcp_server.py` (+7: `resources/list` con nome,
+  descrizione e `mime_type`, assente da `tools/list` che resta a 7, lettura e log
+  `event=resource_read`, rilettura a ogni richiesta, file mancante → `MCPError` con il messaggio
+  italiano, via stdio con `server_command`, nessuna riga «Error reading resource» a INFO),
+  `test_config.py` (+2), `test_main.py` (+2, percorso predefinito e relativo reso assoluto).
+- Verifica: a DEBUG il server scrive «Error reading resource» con traceback; a INFO no (il test
+  sulle righe di log quindi distingue).
+- `pytest` → 320 passed, 15 deselected.
+- Problemi aperti: nessuno nuovo. README e `CLAUDE.md` si aggiornano al punto 5, come da piano.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

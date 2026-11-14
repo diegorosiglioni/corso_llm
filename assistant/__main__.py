@@ -51,7 +51,9 @@ def main(env: Mapping[str, str] = os.environ) -> int:
 
     notes_db = Path(config.notes_db).resolve()
     notes_db.parent.mkdir(parents=True, exist_ok=True)
-    command, args, cwd = server_command(notes_db, config.log_level)
+    command, args, cwd = server_command(
+        notes_db, config.log_level, Path(config.preferences_file).resolve()
+    )
     try:
         with McpClient(command, args, cwd=cwd) as client:
             return _converse(config, client)

@@ -15,6 +15,7 @@ from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 from langchain_core.tools import BaseTool, StructuredTool
 
+from assistant.config import DEFAULT_PREFERENCES_FILE
 from assistant.tools import ToolUnavailableError
 
 log = logging.getLogger(__name__)
@@ -35,10 +36,18 @@ class McpStartupError(Exception):
     """The MCP server could not be started or did not complete the handshake."""
 
 
-def server_command(notes_db: Path, log_level: str) -> tuple[str, list[str], str]:
-    """Command, arguments and working directory that start the local MCP server."""
+def server_command(
+    notes_db: Path, log_level: str, preferences_file: str | Path = DEFAULT_PREFERENCES_FILE
+) -> tuple[str, list[str], str]:
+    """Command, arguments and working directory that start the local MCP server.
+
+    The server runs in another working directory: relative paths must be resolved first.
+    """
     package_parent = Path(__file__).resolve().parent.parent
-    args = ["-m", "assistant.mcp_server", "--notes-db", str(notes_db), "--log-level", log_level]
+    args = [
+        "-m", "assistant.mcp_server", "--notes-db", str(notes_db),
+        "--preferences-file", str(preferences_file), "--log-level", log_level,
+    ]
     return sys.executable, args, str(package_parent)
 
 

@@ -3,7 +3,13 @@ from pathlib import Path
 import pytest
 
 import assistant.config
-from assistant.config import DEFAULT_SCOPE_FILE, Config, ConfigError, load_config
+from assistant.config import (
+    DEFAULT_PREFERENCES_FILE,
+    DEFAULT_SCOPE_FILE,
+    Config,
+    ConfigError,
+    load_config,
+)
 
 VALID = {"LMSTUDIO_BASE_URL": "http://localhost:1234/v1", "LMSTUDIO_MODEL": "google/gemma-4-e2b"}
 
@@ -188,3 +194,21 @@ def test_summary_problems_listed_with_the_others():
         "SUMMARY_MAX_MESSAGES deve essere un intero ≥ 1, ricevuto '0'. "
         "SUMMARY_KEEP_MESSAGES deve essere un intero ≥ 1, ricevuto 'x'."
     )
+
+
+# --- preferences (lesson 6, step 4) ---
+
+def test_preferences_file_default_and_override():
+    assert load_config(VALID).preferences_file == DEFAULT_PREFERENCES_FILE
+    assert Path(DEFAULT_PREFERENCES_FILE) == (
+        Path(assistant.config.__file__).parent / "data" / "preferenze.json"
+    )
+    assert load_config({**VALID, "PREFERENCES_FILE": " p.json "}).preferences_file == "p.json"
+    assert load_config({**VALID, "PREFERENCES_FILE": "  "}).preferences_file == (
+        DEFAULT_PREFERENCES_FILE
+    )
+
+
+def test_missing_preferences_file_is_not_a_config_error(tmp_path):
+    missing = str(tmp_path / "manca.json")
+    assert load_config({**VALID, "PREFERENCES_FILE": missing}).preferences_file == missing

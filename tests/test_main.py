@@ -1,10 +1,11 @@
 import logging
+from pathlib import Path
 
 import pytest
 
 import assistant.__main__ as entry
 from assistant.__main__ import main
-from assistant.config import DEFAULT_SCOPE_FILE, load_config
+from assistant.config import DEFAULT_PREFERENCES_FILE, DEFAULT_SCOPE_FILE, load_config
 from assistant.mcp_client import ALLOWED_MCP_TOOLS, ToolSpec
 from assistant.session import Session
 from assistant.tools import ToolUnavailableError
@@ -210,3 +211,29 @@ def test_summary_thresholds_are_logged(monkeypatch, caplog):
         f"scope_file={DEFAULT_SCOPE_FILE} max_reviews=2 "
         "summary_max_messages=20 summary_keep_messages=6"
     ) in caplog.text
+
+
+# --- preferences (lesson 6, step 4) ---
+
+def _server_args(monkeypatch, env) -> list[str]:
+    """Arguments given to McpClient by main()."""
+    received = []
+
+    def fake_client(command, args, **kwargs):
+        received.append(args)
+        return FakeMcpClient(MCP_SPECS)
+
+    monkeypatch.setattr(entry, "McpClient", fake_client)
+    monkeypatch.setattr(entry, "run", lambda session: None)
+    assert main(env) == 0
+    return received[0]
+
+
+def test_server_gets_the_default_preferences_file(monkeypatch):
+    args = _server_args(monkeypatch, VALID)
+    assert args[args.index("--preferences-file") + 1] == str(Path(DEFAULT_PREFERENCES_FILE))
+
+
+def test_server_gets_an_absolute_preferences_file(monkeypatch, tmp_path):
+    args = _server_args(monkeypatch, {**VALID, "PREFERENCES_FILE": "p.json"})  # cwd is tmp_path
+    assert args[args.index("--preferences-file") + 1] == str((tmp_path / "p.json").resolve())

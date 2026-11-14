@@ -1,6 +1,8 @@
-"""Local MCP server (FastMCP, stdio) exposing unit converter, calculator, catalog and notes.
+"""Local MCP server (FastMCP, stdio) exposing unit converter, calculator, catalog and notes as
+tools, and the user preferences as the resource utente://preferenze.
 
-Run as a subprocess by the client: python -m assistant.mcp_server --notes-db PATH [--log-level L]
+Run as a subprocess by the client:
+python -m assistant.mcp_server --notes-db PATH --preferences-file PATH [--log-level L]
 stdout is reserved for the protocol: logs go to stderr.
 """
 
@@ -8,9 +10,10 @@ import argparse
 import logging
 import sys
 from collections.abc import Callable
+from pathlib import Path
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
+from fastmcp.exceptions import ResourceError, ToolError
 
 from assistant.calculator import CALCULATOR_DESCRIPTION, calculate
 from assistant.catalog import GET_ITEM_DESCRIPTION, SEARCH_DESCRIPTION, Catalog
@@ -21,6 +24,7 @@ from assistant.notes import (
     LIST_NOTES_DESCRIPTION,
     NotesStore,
 )
+from assistant.preferences import PREFERENCES_URI, read_preferences_file
 from assistant.units import UNITS_DESCRIPTION, convert_units
 
 # Explicit name: run with "python -m", __name__ would be "__main__".
@@ -32,6 +36,9 @@ log = logging.getLogger("assistant.mcp_server")
 LIBRARY_LEVELS = {"mcp": logging.WARNING, "fastmcp": logging.ERROR}
 
 SERVER_NAME = "Strumenti del laboratorio"
+PREFERENCES_DESCRIPTION = (
+    "Preferenze dell'utente: lingua delle risposte, fuso orario predefinito e stile."
+)
 
 
 def _run(function: Callable[..., dict], *args) -> dict:
@@ -54,9 +61,25 @@ def _configure_library_logging(level: str) -> None:
             logging.getLogger(name).setLevel(max(minimum, logging.getLevelName(level)))
 
 
-def build_server(notes: NotesStore, catalog: Catalog) -> FastMCP:
-    """Returns a FastMCP server with the seven tools bound to `notes` and `catalog`."""
+def build_server(notes: NotesStore, catalog: Catalog, preferences_file: str | Path) -> FastMCP:
+    """Returns a FastMCP server with the seven tools bound to `notes` and `catalog` and the
+    preferences resource read from `preferences_file`."""
     server = FastMCP(SERVER_NAME)
+
+    @server.resource(
+        PREFERENCES_URI,
+        name="preferenze",
+        mime_type="application/json",
+        description=PREFERENCES_DESCRIPTION,
+    )
+    def preferences() -> str:
+        try:
+            text = read_preferences_file(preferences_file)  # at every read: no cache
+        except ValueError as error:
+            # Expected (missing or wrong file): the host logs the WARNING and uses the defaults.
+            raise ResourceError(str(error), log_level=logging.INFO) from None
+        log.info("event=resource_read uri=%s", PREFERENCES_URI)
+        return text
 
     @server.tool(name="convert_units", description=UNITS_DESCRIPTION)
     def convert_units_tool(value: float, from_unit: str, to_unit: str) -> dict:
@@ -96,6 +119,9 @@ def build_server(notes: NotesStore, catalog: Catalog) -> FastMCP:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Server MCP degli strumenti del laboratorio")
     parser.add_argument("--notes-db", required=True, help="percorso del file SQLite delle note")
+    parser.add_argument(
+        "--preferences-file", required=True, help="percorso del file JSON delle preferenze"
+    )
     parser.add_argument("--log-level", default="INFO", choices=LOG_LEVELS)
     args = parser.parse_args(argv)
 
@@ -105,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     _configure_library_logging(args.log_level)
-    build_server(NotesStore(args.notes_db), Catalog.load()).run(
+    build_server(NotesStore(args.notes_db), Catalog.load(), args.preferences_file).run(
         transport="stdio", show_banner=False
     )
     return 0

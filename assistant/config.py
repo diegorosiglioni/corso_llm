@@ -1,4 +1,6 @@
-"""Configuration read from environment variables and from the scope file they point to."""
+"""Configuration read from environment variables and from the scope file they point to.
+
+The preferences file is only located here: the MCP server reads it."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -7,6 +9,7 @@ from pathlib import Path
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 DEFAULT_NOTES_DB = "data/notes.sqlite3"
 DEFAULT_SCOPE_FILE = str(Path(__file__).parent / "data" / "scope.txt")
+DEFAULT_PREFERENCES_FILE = str(Path(__file__).parent / "data" / "preferenze.json")
 
 
 @dataclass(frozen=True)
@@ -21,6 +24,9 @@ class Config:
     max_reviews: int = 2  # MAX_REVIEWS (integer >= 1): reviewer calls per turn
     summary_max_messages: int = 20  # SUMMARY_MAX_MESSAGES (integer >= 1)
     summary_keep_messages: int = 6  # SUMMARY_KEEP_MESSAGES (integer >= 1, < max)
+    # PREFERENCES_FILE: not read here, a missing file must not stop the startup (the MCP
+    # server reads it, the host falls back to the defaults).
+    preferences_file: str = DEFAULT_PREFERENCES_FILE
 
 
 class ConfigError(Exception):
@@ -117,4 +123,5 @@ def load_config(env: Mapping[str, str]) -> Config:
     return Config(
         base_url, model, max_steps, log_level, notes_db, scope_file, scope, max_reviews,
         summary_max_messages, summary_keep_messages,
+        read("PREFERENCES_FILE") or DEFAULT_PREFERENCES_FILE,
     )
