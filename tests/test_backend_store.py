@@ -14,6 +14,7 @@ from backend.store import (
     InvalidInputError,
     title_from_question,
 )
+from conftest import Clock
 
 START = datetime(2026, 11, 14, 10, 0, 0, tzinfo=UTC)
 TOOL = {"name": "calculate", "args": {"expression": "17 * 23"}, "result": {"result": 391}, "ok": True}
@@ -21,19 +22,6 @@ HISTORY = [
     {"type": "human", "content": "Quanto fa 17 * 23?"},
     {"type": "ai", "content": "17 * 23 fa 391."},
 ]
-
-
-class Clock:
-    """Fixed clock that moves only when the test says so."""
-
-    def __init__(self, start: datetime = START):
-        self.current = start
-
-    def __call__(self) -> datetime:
-        return self.current
-
-    def advance(self, seconds: int) -> None:
-        self.current += timedelta(seconds=seconds)
 
 
 @pytest.fixture
@@ -46,7 +34,7 @@ def engine():
 
 @pytest.fixture
 def clock():
-    return Clock()
+    return Clock(START)
 
 
 @pytest.fixture

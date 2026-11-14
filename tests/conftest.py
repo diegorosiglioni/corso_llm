@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx2
 import openai
@@ -190,3 +190,16 @@ def fake_service(model=None, client=None, model_status=model_ok, **graph_options
         graph=graph, client=client or FakeMcpClient(MCP_SPECS), model_id=MODEL_ID,
         model_status=model_status,
     ))
+
+
+class Clock:
+    """Fixed clock that moves only when the test says so (archive of the back-end)."""
+
+    def __init__(self, start: datetime):
+        self.current = start
+
+    def __call__(self) -> datetime:
+        return self.current
+
+    def advance(self, seconds: int) -> None:
+        self.current += timedelta(seconds=seconds)

@@ -195,6 +195,9 @@ accesso di uvicorn disattivati, come nell'agente. Riga d'avvio (logger `backend.
 - Avvio: configurazione (errore → stderr, exit 1), logging, `create_db_engine`, `init_db` (database
   non raggiungibile → «Database non raggiungibile: …» su stderr, exit 1), `AgentClient(AGENT_URL)`,
   `uvicorn.run(create_app(...), host=…, port=…, access_log=False, log_config=None)`.
+- Connessione a PostgreSQL con `connect_timeout=10` s (aggiunto al punto 3): senza, psycopg aspetta
+  130 s un host che non risponde (osservato su Windows con una porta chiusa), sia all'avvio sia
+  prima di un `503 database_unavailable`.
 - `.env.example`: righe di commento per `DATABASE_URL`, `BACKEND_HOST`, `BACKEND_PORT`, senza
   credenziali vere.
 

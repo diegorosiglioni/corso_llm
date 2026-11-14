@@ -57,10 +57,14 @@ def _enable_sqlite_foreign_keys(connection, _record) -> None:
     connection.execute("PRAGMA foreign_keys=ON")
 
 
-def create_db_engine(url: str) -> Engine:
+CONNECT_TIMEOUT = 10  # seconds; psycopg would wait 130 s for a host that does not answer
+
+
+def create_db_engine(url: str, connect_timeout: int = CONNECT_TIMEOUT) -> Engine:
     """Engine for `url`. SQLite (tests only) gets foreign keys on and, in memory, one shared
     connection; PostgreSQL checks pooled connections before use, so a database restart is
-    not seen as an error by the first request after it."""
+    not seen as an error by the first request after it, and gives up connecting after
+    `connect_timeout` seconds (psycopg turns values below 2 into 2)."""
     if url.startswith("sqlite"):
         options = {}
         if url in ("sqlite://", "sqlite:///:memory:"):
@@ -68,7 +72,9 @@ def create_db_engine(url: str) -> Engine:
         engine = create_engine(url, **options)
         event.listen(engine, "connect", _enable_sqlite_foreign_keys)
         return engine
-    return create_engine(url, pool_pre_ping=True)
+    return create_engine(
+        url, pool_pre_ping=True, connect_args={"connect_timeout": connect_timeout}
+    )
 
 
 def init_db(engine: Engine) -> None:

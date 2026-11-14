@@ -1064,6 +1064,82 @@ Decisioni:
 - Problemi aperti: l'archivio su PostgreSQL vero (CA-77) resta da provare al punto 5; API, avvio e
   README arrivano ai punti 3–5. README non cambiato: nessun comportamento visibile all'utente.
 
+### Punto 3 · Endpoint delle chat, configurazione e avvio — piano
+
+1. `backend/config.py` (specifica §8): `BackendConfig(database_url, agent_url, host, port,
+   log_level)`, `load_backend_config(env)` con `ConfigError` di `assistant.config`; `AGENT_URL` e
+   `LOG_LEVEL` letti da `load_client_config` (stesse regole della CLI, messaggio aggiunto agli altri
+   problemi); `postgresql://` → `postgresql+psycopg://`; `display_url(url)` con la password nascosta.
+2. `backend/api.py` (specifica §5–§7): `create_app(*, store, agent)` con `POST /chats` (corpo
+   facoltativo), `GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}`; modelli pydantic con
+   descrizioni italiane; errori `400 invalid_request`, `404 chat_not_found`, `503
+   database_unavailable`, `500 internal_error` mappati in un solo punto; righe di log `backend
+   response=…`. L'invio (`POST /chats/{id}/messages`) arriva al punto 4.
+3. `backend/__main__.py`: `main(env)` → configurazione (errore → stderr, exit 1), logging,
+   `create_db_engine`, `init_db` (`OperationalError` → «Database non raggiungibile: …», exit 1),
+   `AgentClient(AGENT_URL)`, riga d'avvio senza password, `uvicorn.run(...)`.
+4. `.env.example` (righe di commento `DATABASE_URL`, `BACKEND_HOST`, `BACKEND_PORT`), `CLAUDE.md`
+   (struttura del pacchetto `backend/`).
+5. Test: `test_backend_config.py` (CA-70), `test_backend_api.py` (CA-72, righe CRUD di CA-74 e
+   CA-76: le quattro operazioni con `TestClient` su SQLite in memoria e orologio fisso, OpenAPI,
+   404/400/422/503/500, righe di log e livelli), `test_backend_service.py` (CA-75: `uvicorn.run`
+   sostituito, indirizzo, configurazione non valida, database su porta chiusa → exit 1, password
+   assente). Poi `pytest` completo.
+
+Decisioni:
+- `create_app(*, store, agent)` ha già la firma della specifica: `agent` resta inutilizzato fino al
+  punto 4, così avvio e test non cambiano firma al punto successivo.
+- `ApiError` e la mappatura degli errori scritte di nuovo in `backend/api.py` invece di importarle da
+  `assistant/api.py`: la specifica §2 limita gli import da `assistant` a client dell'agente e
+  configurazione, e `assistant.api` porta con sé grafo, LangChain e openai.
+- Errore su `DATABASE_URL` che riporta solo lo schema ricevuto, mai l'indirizzo: potrebbe contenere
+  la password.
+- Il messaggio del driver di un `OperationalError` va nel log come `cause="…"` sulla riga della
+  risposta `503`, non nel corpo (specifica §6).
+- Nessuna riga di log del back-end per il `422` di FastAPI (validazione prima dell'endpoint), come
+  nell'agente dello Step 6.
+- README rimandato al punto 5 come da piano dello step: i comandi d'avvio si documentano dopo averli
+  provati con PostgreSQL vero.
+
+### Punto 3 · Endpoint delle chat, configurazione e avvio — fatto
+
+- Implementati `backend/config.py` (`BackendConfig`, `load_backend_config`, `display_url`),
+  `backend/api.py` (`create_app(*, store, agent)` con `POST /chats`, `GET /chats`,
+  `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}`, modelli `CreateChatRequest`, `ChatInfo`,
+  `ChatDetail`, `ChatMessageInfo`, `ErrorBody`, errori e righe di log), `backend/__main__.py`
+  (`python -m backend`); `.env.example` e `CLAUDE.md` (struttura) aggiornati; `Clock` spostato da
+  `test_backend_store.py` a `conftest.py` per usarlo anche nei test dell'API.
+- Decisioni prese durante l'esecuzione:
+  - **`connect_timeout=10` s nel motore PostgreSQL** (`create_db_engine(url, connect_timeout=…)`):
+    su questo computer una porta chiusa non viene rifiutata e psycopg aspettava 130 s («connection
+    timeout expired»), sia all'avvio sia prima di un `503`. Annotato nella specifica §8.
+  - Le righe di log di lettura ed eliminazione mettono `chat=` prima di `status=` (come l'invio
+    nella specifica §7); la creazione dopo, perché l'id nasce con la risposta. Lettura con
+    `messages=<n>`.
+  - Corpo di `POST /chats` facoltativo (anche assente): un front-end può creare una chat senza titolo
+    con una richiesta vuota.
+  - `history` e `summary` dell'agente non compaiono nelle risposte (specifica §1, stato interno).
+- Test nuovi: `test_backend_config.py` (16: predefiniti, valori dall'ambiente, `postgresql://` →
+  `postgresql+psycopg://`, `DATABASE_URL` mancante, altri schemi e testo senza schema rifiutati senza
+  mostrare la password, URL non interpretabile, porta non valida, problemi in un solo messaggio,
+  password nascosta), `test_backend_api.py` (34: creazione con e senza corpo e titolo, titolo di 200 e
+  201 caratteri, `422` per corpo fuori schema; elenco vuoto e con titolo, ultimo messaggio e ordine;
+  lettura con messaggi e strumenti in ordine, chat vuota, stato dell'agente non esposto; `404` e `422`
+  su lettura ed eliminazione; eliminazione con i messaggi contati; OpenAPI con percorsi, schemi e
+  codici d'errore, `/docs`; `503 database_unavailable` con `cause=` nel log e `500 internal_error` con
+  traceback per ognuna delle quattro operazioni; righe di log esatte e livelli; titoli e messaggi
+  assenti dal log), `test_backend_service.py` (12: indirizzo predefinito e dall'ambiente, riga d'avvio
+  con la password nascosta, password mai nel log anche a DEBUG, tabelle create prima di servire,
+  configurazione non valida → exit 1, psycopg vero su porta chiusa → exit 1 senza password, timeout
+  del motore, agente spento che non blocca l'avvio, app servita che usa il database).
+- `pytest` → 795 passed, 23 deselected; i tre file nuovi anche con `-W error::DeprecationWarning`.
+- Prova d'avvio da Git Bash: senza `DATABASE_URL` → «Configurazione non valida: Manca
+  DATABASE_URL.», exit 1; `DATABASE_URL=postgresql://lab:segreta@127.0.0.1:1/assistente` →
+  «Database non raggiungibile: connection timeout expired» in 12 s, exit 1, password assente.
+- Problemi aperti: avvio con PostgreSQL vero e README al punto 5; invio dei messaggi al punto 4
+  (`agent` di `create_app` ancora inutilizzato). Il `422` di FastAPI non scrive una riga di log del
+  back-end (come nell'agente).
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13
