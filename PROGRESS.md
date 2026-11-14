@@ -942,6 +942,68 @@ Git Bash, `LMSTUDIO_BASE_URL=http://localhost:1234/v1`). Aiuti nuovi in `tests/t
   passate al punto 5. Una sola esecuzione per prova: dimostra il comportamento con quella domanda,
   non che il modello risponda sempre uguale da CLI e API.
 
+## Step 7 · Back-end: API e salvataggio delle chat (2026-11-14)
+
+Specifica: [`docs/superpowers/specs/2026-11-14-backend-chat-design.md`](docs/superpowers/specs/2026-11-14-backend-chat-design.md);
+requisiti §15 (RF-60…RF-67, CA-70…CA-78). Questo piano sostituisce l'approvazione (modalità
+autonoma); i punti successivi dello step seguono la specifica.
+
+### Piano dello step (un punto di `TODO.md` per riga)
+
+1. Specifica, requisiti §15, dipendenze (`SQLAlchemy`, `psycopg[binary]` in `requirements.txt`,
+   righe nuove in `constraints.txt`). Verifica: `pip check`, prova usa e getta fuori dal progetto,
+   `pytest` invariato.
+2. `backend/__init__.py`, `backend/db.py` (schema `chats`/`chat_messages`, `create_db_engine`,
+   `init_db`), `backend/store.py` (`ChatStore`, `ChatRecord`, `MessageRecord`, `AgentState`,
+   `ChatNotFoundError`). Test: `test_backend_store.py` su SQLite in memoria con orologio fisso;
+   `CLAUDE.md` (struttura).
+3. `backend/api.py` (`create_app(*, store, agent)`: `POST/GET /chats`, `GET/DELETE /chats/{id}`,
+   errori `400`/`404`/`422`/`503 database_unavailable`/`500`, OpenAPI), `backend/config.py`,
+   `backend/__main__.py`, `.env.example`. Test: `test_backend_api.py`, `test_backend_config.py`,
+   `test_backend_service.py`.
+4. `POST /chats/{id}/messages` con `AgentClient.chat`, errori `503 agent_unavailable`,
+   `504 agent_timeout`, `502 agent_error`, righe di log dell'invio. Test con l'agente dello Step 6 su
+   grafo finto (`fake_service`) e con agenti finti.
+5. Prove reali CA-77 (archivio su PostgreSQL con `TEST_DATABASE_URL`) e CA-78 (back-end, agente,
+   PostgreSQL in Docker, LM Studio; riavvio del back-end; agente fermato); README e `CLAUDE.md`;
+   esiti in requisiti §15 e qui. PostgreSQL o LM Studio non raggiungibili → `[!]`.
+
+### Decisioni (scelte del progettista, dettagli nella specifica §1)
+
+- Pacchetto `backend/` separato da `assistant/`: è un altro servizio (un container allo Step 9).
+- SQLAlchemy 2.1.8 + psycopg 3.3.9 (binario): standard Python; lo stesso codice gira su PostgreSQL e
+  su SQLite in memoria, così i test non richiedono PostgreSQL.
+- `create_all` all'avvio, niente Alembic: schema nuovo, nessuna migrazione da gestire.
+- Il back-end riusa `AgentClient` di `assistant/api_client.py`: un solo client dell'agente con gli
+  stessi errori; l'immagine del back-end (Step 9) conterrà quindi il pacchetto `assistant`.
+- Messaggi visibili (tabella `chat_messages`) separati dallo stato dell'agente (cronologia JSON e
+  riassunto nella riga della chat): la cronologia dell'agente ha bozze e chiamate e perde i turni
+  riassunti, l'utente deve rileggere tutto.
+- Identificativi interi: leggibili, e senza autenticazione un UUID non proteggerebbe nulla.
+- Titolo facoltativo, altrimenti dalla prima domanda (60 caratteri): l'elenco ha un titolo utile.
+- Domanda salvata prima di chiamare l'agente, come dice la traccia: con l'agente spento resta nella
+  chat senza risposta e lo stato dell'agente non cambia.
+- Errori `{"error", "detail"}`: `404 chat_not_found`, `400 invalid_request`, `503 agent_unavailable`,
+  `504 agent_timeout`, `502 agent_error`, `503 database_unavailable`, `500 internal_error`.
+- `DATABASE_URL` obbligatoria e solo PostgreSQL; porta predefinita `8001` (l'agente usa `8000`).
+- PostgreSQL per le prove di questo step in un container avviato a mano (`postgres:18`); Compose a
+  quattro servizi resta allo Step 9.
+
+### Punto 1 · Specifica e requisiti — fatto
+
+- Scritti la specifica e i requisiti §15 (intestazione di `requisiti.md` aggiornata).
+- Dipendenze: `SQLAlchemy==2.1.8` e `psycopg[binary]==3.3.9` in `requirements.txt`; in
+  `constraints.txt` le righe nuove `psycopg==3.3.9`, `psycopg-binary==3.3.9`, `SQLAlchemy==2.1.8`
+  (confrontato con `pip freeze` dopo l'installazione: nessun'altra differenza). `pip check` senza
+  problemi; `pip install --dry-run -r requirements-dev.txt` risolve.
+- Prova usa e getta in `%TEMP%\step7probe` (fuori dal progetto): tabelle su SQLite in memoria con
+  `StaticPool`, colonna JSON, `ON DELETE CASCADE` con `PRAGMA foreign_keys=ON`, `max(created_at)` con
+  `outer join` (su SQLite l'orario torna senza fuso: l'archivio lo considererà UTC), DDL PostgreSQL
+  generato, porta chiusa → `OperationalError`. Docker disponibile (server 29.9.1) per le prove reali.
+- Test: `pytest` → 689 passed, 23 deselected (nessun codice cambiato).
+- Problemi aperti: rischi nella specifica §13 (invii contemporanei, SQLite nei test, domande senza
+  risposta); README e `CLAUDE.md` cambiano dal punto 2 in poi, quando c'è codice da descrivere.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

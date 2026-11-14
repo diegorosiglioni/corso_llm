@@ -1,11 +1,11 @@
 # Requisiti — Assistente del laboratorio
 
-Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5) e integrati per la lezione 6 (§9–§14)
+Data: 2026-10-26, rivisti il 2026-11-09 (lezione 5) e integrati per la lezione 6 (§9–§15)
 Stato: §1–§7 approvati il 2026-10-26; revisioni del 2026-11-09 e §8 approvate il 2026-11-09
 (insieme alla specifica `specs/2026-11-09-strumenti-mcp-design.md`); §9 (lezione 6, Step 1)
 e §10 (lezione 6, Step 2) approvate il 2026-11-11; §11 (lezione 6, Step 3) approvata il 2026-11-13;
-§12 (lezione 6, Step 4), §13 (lezione 6, Step 5) e §14 (lezione 6, Step 6) scritte il 2026-11-14
-in modalità autonoma (piano in `PROGRESS.md`)
+§12 (lezione 6, Step 4), §13 (lezione 6, Step 5), §14 (lezione 6, Step 6) e §15 (lezione 6,
+Step 7) scritte il 2026-11-14 in modalità autonoma (piano in `PROGRESS.md`)
 
 Questo documento fissa **che cosa** deve fare l'applicazione. Il **come** (architettura,
 moduli, dettagli del grafo) sarà descritto nella specifica, che rimanda a questi requisiti.
@@ -504,3 +504,52 @@ lettera).
 | CA-67 | Con LM Studio: `POST /chat` «Quanto fa 17 * 23?» → `200`, `calculate` negli strumenti usati, «391», righe dell'API e dello strumento nel log del servizio. | reale |
 | CA-68 | Con LM Studio: la stessa domanda dalla CLI e dall'API dà gli stessi strumenti e lo stesso risultato. | reale |
 | CA-69 | Con LM Studio: `/openapi.json` consultabile, `/status` `200`; con LM Studio irraggiungibile `/status` `503` e `/chat` `503 model_unavailable`. | reale |
+
+## 15. Lezione 6, Step 7 — back-end: API e salvataggio delle chat (2026-11-14)
+
+Riferimento: `LLM_Lez_6.pdf`, Blocco C e Step 7 (riassunto in `lezione6.md`). Stato: scritti il
+2026-11-14 in modalità autonoma insieme alla specifica `specs/2026-11-14-backend-chat-design.md`; le
+scelte del progettista sono nella sua §1. Esiti delle verifiche in `PROGRESS.md`.
+
+- **RF-60** *Servizio back-end* — Un servizio HTTP distinto dall'agente (pacchetto `backend`, avvio con
+  `python -m backend`, indirizzo da `BACKEND_HOST` e `BACKEND_PORT`, predefiniti `127.0.0.1` e
+  `8001`) è l'unico punto di contatto del front-end; raggiunge l'agente solo via HTTP all'indirizzo
+  di `AGENT_URL`.
+- **RF-61** *Archivio PostgreSQL* — Chat e messaggi sono salvati in PostgreSQL (indirizzo e
+  credenziali solo in `DATABASE_URL`, mai nei log); le tabelle si creano all'avvio se mancano. Per
+  ogni chat si conservano titolo, data di creazione, i messaggi visibili (domande e risposte con gli
+  strumenti usati, con la loro data) e lo stato dell'agente (cronologia e riassunto dello Step 6).
+  Le chat restano dopo il riavvio del back-end.
+- **RF-62** *Operazioni sulle chat* — Creare una chat restituisce il suo identificativo; l'elenco
+  riporta per ogni chat titolo e data dell'ultimo messaggio, dalla più recente; la lettura
+  restituisce i messaggi in ordine cronologico; l'eliminazione rimuove la chat e i suoi messaggi.
+  Senza un titolo dato alla creazione, la prima domanda dà il titolo alla chat.
+- **RF-63** *Invio di un messaggio* — Il back-end salva la domanda, chiama l'agente (`POST /chat`)
+  con la domanda, la cronologia e il riassunto salvati per la chat, poi salva la risposta con gli
+  strumenti usati, sostituisce cronologia e riassunto con quelli restituiti e restituisce domanda e
+  risposta salvate.
+- **RF-64** *Errori* — Chat inesistente, richiesta non valida, agente non raggiungibile, agente senza
+  risposta, agente che risponde con un errore, database non disponibile ed errori imprevisti
+  producono il codice HTTP della specifica §6 e un corpo `{"error", "detail"}` con un messaggio in
+  italiano. Con un errore dell'agente la domanda resta salvata e lo stato dell'agente della chat non
+  cambia.
+- **RF-65** *OpenAPI* — Il back-end pubblica `/openapi.json` e `/docs` con gli schemi di richieste,
+  risposte ed errori: è il contratto del front-end (Step 8).
+- **RF-66** *Log* — Una riga per ogni risposta (operazione, chat, codice, durata), più la richiesta e
+  la chiamata all'agente per l'invio (strumenti usati, dimensione di cronologia e riassunto), senza il
+  testo dei messaggi né le credenziali.
+- **RF-67** *Test senza PostgreSQL* — Archivio e API si provano senza PostgreSQL né modello, con lo
+  stesso schema su SQLite in memoria e l'agente simulato; le prove con PostgreSQL vero sono separate
+  e attivate esplicitamente.
+
+| ID | Verifica | Come |
+|----|----------|------|
+| CA-70 | Configurazione: predefiniti, `DATABASE_URL` mancante o non PostgreSQL rifiutata, `postgresql://` accettato, porta non valida, problemi in un solo messaggio. | automatica |
+| CA-71 | Archivio su SQLite: creazione con e senza titolo, elenco con titolo, data dell'ultimo messaggio e ordine, lettura in ordine cronologico, eliminazione con i messaggi, titolo dalla prima domanda, stato dell'agente salvato con la risposta, chat inesistente. | automatica |
+| CA-72 | API con archivio su SQLite: creazione, elenco, lettura ed eliminazione con i codici della specifica; OpenAPI con i percorsi e gli schemi. | automatica |
+| CA-73 | Invio con l'agente simulato: domanda e risposta salvate e restituite, strumenti usati salvati, al secondo invio l'agente riceve cronologia e riassunto aggiornati dal primo. | automatica |
+| CA-74 | Errori: ogni riga della tabella della specifica §6 col suo codice, `error` e `detail`; dopo un errore dell'agente la domanda resta e lo stato dell'agente non cambia. | automatica |
+| CA-75 | Avvio con uvicorn sostituito: indirizzo e porta, configurazione non valida e database non raggiungibile → exit 1, password assente dalla riga d'avvio. | automatica |
+| CA-76 | Righe di log esatte per le cinque operazioni e per gli errori, ai livelli della specifica §7. | automatica |
+| CA-77 | Con PostgreSQL: i test dell'archivio passano anche sul database vero. | reale |
+| CA-78 | Con PostgreSQL, agente e LM Studio: messaggio con uno strumento salvato; dopo il riavvio del back-end chat e messaggi presenti e il turno successivo usa la cronologia salvata; agente fermato → `503 agent_unavailable` con la domanda salvata. | reale |

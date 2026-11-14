@@ -20,3 +20,7 @@ fastapi==0.162.7
 uvicorn==0.54.0
 # Client HTTP della CLI e controllo di /v1/models; usato anche da TestClient (già indiretta)
 httpx==0.28.1
+# Archivio delle chat del back-end: PostgreSQL in esercizio, SQLite nei test (lezione 6, Step 7)
+SQLAlchemy==2.1.8
+# Driver PostgreSQL di SQLAlchemy, con la libreria client precompilata (lezione 6, Step 7)
+psycopg[binary]==3.3.9
