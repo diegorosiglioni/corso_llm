@@ -6,9 +6,11 @@ from langchain_openai.chat_models.base import OpenAIRefusalError
 from openai.types.chat import ChatCompletion
 from pydantic import ValidationError
 
+from assistant import model as model_module
 from assistant.config import load_config
 from assistant.model import (
     check_model,
+    create_model,
     create_reviewer_model,
     create_router_model,
     create_summary_model,
@@ -72,6 +74,25 @@ def test_create_reviewer_model_needs_no_server():
 def test_create_summary_model_needs_no_server():
     model = create_summary_model(load_config(VALID))
     assert isinstance(model, ChatOpenAI) and model.model_name == "google/gemma-4-e2b"
+
+
+@pytest.mark.parametrize(("create", "disabled"), [
+    (lambda config: create_model(config, []), False),
+    (create_router_model, True),
+    (create_reviewer_model, True),
+    (create_summary_model, True),
+], ids=["agent", "router", "reviewer", "summary"])
+def test_only_the_agent_streams(monkeypatch, create, disabled):  # CA-96
+    built = []
+
+    class Recording(ChatOpenAI):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            built.append(self)
+
+    monkeypatch.setattr(model_module, "ChatOpenAI", Recording)
+    create(load_config(VALID))
+    assert [model.disable_streaming for model in built] == [disabled]
 
 
 # --- check_model: GET <base_url>/models ---

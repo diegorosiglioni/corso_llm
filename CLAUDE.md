@@ -9,9 +9,11 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
 ## Struttura e comandi
 - Codice in `assistant/`: `config.py`, `model.py`, `tools.py`, `router.py`, `reviewer.py`,
   `summary.py`, `preferences.py`, `graph.py`, `agent.py` (turno senza stato e messaggi in JSON),
-  `api.py` (app FastAPI del servizio HTTP dell'agente: `/chat`, `/prompts`, `/status`),
+  `api.py` (app FastAPI del servizio HTTP dell'agente: `/chat`, `/chat/stream` in Server-Sent
+  Events da `stream_turn` di `agent.py`, `/prompts`, `/status`),
   `service.py` (avvio del servizio con `python -m assistant.service`, `AGENT_HOST`/`AGENT_PORT`),
-  `api_client.py` (client HTTP della CLI: `AgentClient`, `AgentError`, `RemoteSession`),
+  `api_client.py` (client HTTP della CLI e del back-end: `AgentClient` con `chat_stream`,
+  `iter_sse`, `AgentError`, `RemoteSession`),
   `session.py` (sessione in processo che usa `agent.py`, per prove reali e test), `terminal.py`,
   `commands.py` (comandi della CLI che cominciano con `/`, controllo dell'host dei prompt usato dal
   servizio); `__main__.py` è la CLI, client del servizio (`AGENT_URL`); ambito del router in
@@ -25,7 +27,8 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
 - Back-end (Step 7) nel pacchetto `backend/`, servizio distinto dall'agente: `db.py`
   (schema SQLAlchemy `chats`/`chat_messages`, `create_db_engine`, `init_db`), `store.py`
   (`ChatStore`: chat, messaggi visibili e stato dell'agente), `api.py` (app FastAPI: `/chats`,
-  `/chats/{chat_id}`, `/chats/{chat_id}/messages` che inoltra la domanda all'agente), `config.py` (`DATABASE_URL`, `AGENT_URL`, `BACKEND_HOST`/`BACKEND_PORT`),
+  `/chats/{chat_id}`, `/chats/{chat_id}/messages` che inoltra la domanda all'agente e
+  `/chats/{chat_id}/messages/stream` che ne inoltra il flusso SSE), `config.py` (`DATABASE_URL`, `AGENT_URL`, `BACKEND_HOST`/`BACKEND_PORT`),
   `__main__.py` (avvio con `python -m backend`). Da `assistant` importa solo il client dell'agente
   e la configurazione (logging, `AGENT_URL`, `LOG_LEVEL`); `assistant` non importa nulla da
   `backend`. Il back-end ammette il browser dalle origini di `CORS_ORIGINS`.
@@ -36,7 +39,7 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
   `frontend/backend-openapi.json` (OpenAPI del back-end, rigenerato con `UPDATE_CONTRACT=1` su
   `tests/test_frontend_contract.py`). Da `assistant` importa solo la configurazione; nulla da
   `backend`.
-- Test in `tests/`; il modello finto (`FakeModel`), il router finto (`ConversationRouter`), il
+- Test in `tests/`; il modello finto (`FakeModel`; `StreamingFakeModel` per lo streaming), il router finto (`ConversationRouter`), il
   revisore finto (`ApprovingReviewer`), il client MCP finto (`FakeMcpClient`), il servizio finto
   (`fake_service`: l'app vera su un grafo finto, con `TestClient`) e gli aiuti comuni sono in
   `conftest.py`. I test MCP avviano il server

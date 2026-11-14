@@ -1,14 +1,19 @@
 import json
 import logging
 import re
+import threading
+import time
 
+import anyio
 import httpx2
 import openai
 import pytest
 from fastapi.testclient import TestClient
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
+from assistant.api import StreamTurn, _in_thread, _stream_events
 from assistant.mcp_client import PromptArgument, PromptMessage, PromptSpec
+from assistant.reviewer import ReviewDecision
 from assistant.tools import ToolUnavailableError
 from conftest import (
     MCP_SPECS,
@@ -16,9 +21,12 @@ from conftest import (
     FakeMcpClient,
     FakeModel,
     PromptListFails,
+    StreamingFakeModel,
+    fake_graph,
     fake_service,
     lm_studio_error,
     model_ok,
+    sse,
     tool_call,
 )
 
@@ -584,3 +592,211 @@ def test_openapi_documents_prompts_and_status():
     schemas = document["components"]["schemas"]
     for name in ("PromptInfo", "PromptArgumentInfo", "StatusBody", "McpStatus", "ModelStatus"):
         assert name in schemas
+
+
+# --- POST /chat/stream (specification of the streaming, §4; CA-95) ---
+
+def stream(service: TestClient, body: dict) -> list[tuple[str, object]]:
+    with service.stream("POST", "/chat/stream", json=body) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        assert response.headers["cache-control"] == "no-cache"
+        return sse(response.read().decode())
+
+
+def time_call_with_text() -> AIMessage:
+    return AIMessage("Controllo.", tool_calls=[
+        {"name": "get_current_time", "args": {"timezone": "Asia/Tokyo"}, "id": "c1"}
+    ])
+
+
+def test_stream_of_a_turn_with_a_tool():
+    replies = [time_call_with_text(), AIMessage("A Tokyo sono le 00:47.")]
+    history = [{"role": "user", "content": "d1"}, {"role": "assistant", "content": "r1"}]
+    body = {"message": "Che ore sono a Tokyo?", "history": history, "summary": "S0"}
+    events = stream(api(StreamingFakeModel(replies=list(replies))), body)
+    assert [name for name, _ in events] == [
+        "text", "reset", "tool_start", "tool_end", "text", "text", "text", "text", "text", "done",
+    ]
+    assert events[1][1] == {"reason": "tools", "detail": ""}
+    assert events[2][1] == {
+        "id": "c1", "name": "get_current_time", "args": {"timezone": "Asia/Tokyo"}
+    }
+    assert events[3][1] == {
+        "id": "c1", "name": "get_current_time", "args": {"timezone": "Asia/Tokyo"},
+        "result": TOKYO, "ok": True,
+    }
+    assert "".join(data["delta"] for name, data in events[4:-1]) == "A Tokyo sono le 00:47."
+    # done is the answer of POST /chat to the same request
+    expected = api(StreamingFakeModel(replies=list(replies))).post("/chat", json=body).json()
+    assert events[-1][1] == expected
+
+
+def test_stream_with_a_prompt():
+    client = mcp_client()
+    events = stream(api(FakeModel([AIMessage("MCP è un protocollo.")]), client), {
+        "prompt": {"name": "spiega", "arguments": {"argomento": "MCP"}}
+    })
+    assert [name for name, _ in events] == ["done"]  # a model that does not stream: no text
+    assert events[0][1]["reply"] == "MCP è un protocollo."
+    assert client.prompt_gets == [("spiega", {"argomento": "MCP"})]
+
+
+def test_stream_when_the_reviewer_rejects():
+    reviewer = FakeModel([
+        ReviewDecision(reason="manca il fuso", coherent=False),
+        ReviewDecision(reason="ok", coherent=True),
+    ])
+    model = StreamingFakeModel(replies=[AIMessage("Bozza"), AIMessage("Finale")])
+    events = stream(api(model, reviewer=reviewer), {"message": "ore?"})
+    assert events[:3] == [
+        ("text", {"delta": "Bozza"}),
+        ("reset", {"reason": "review", "detail": "manca il fuso"}),
+        ("text", {"delta": "Finale"}),
+    ]
+    assert events[-1][0] == "done" and events[-1][1]["reply"] == "Finale"
+
+
+def unusable_prompt(arguments):
+    return [PromptMessage("assistant", "risposta")]
+
+
+@pytest.mark.parametrize(("body", "client"), [
+    pytest.param({}, None, id="none"),
+    pytest.param({"message": " "}, None, id="empty"),
+    pytest.param({"message": "ciao", "history": [
+        {"role": "tool", "content": "{}", "tool_call_id": "c1"}
+    ]}, None, id="history"),
+    pytest.param({"prompt": {"name": "traduci"}}, None, id="prompt-rejected"),
+    pytest.param({"prompt": {"name": "spiega"}}, PromptListFails(MCP_SPECS), id="mcp"),
+    pytest.param(
+        {"prompt": {"name": "spiega", "arguments": {"argomento": "MCP"}}},
+        mcp_client(unusable_prompt), id="prompt-unusable",
+    ),
+])
+def test_errors_before_the_stream_are_the_json_answers_of_chat(body, client, caplog):
+    caplog.set_level(logging.INFO)
+    service = api(client=client)  # the model fails if it is ever called
+    expected = service.post("/chat", json=body)
+    chat_lines = api_lines(caplog)
+    caplog.clear()
+    response = service.post("/chat/stream", json=body)
+    assert response.status_code == expected.status_code and response.status_code >= 400
+    assert response.headers["content-type"] == "application/json"
+    assert response.json() == expected.json()
+    assert [without_duration(line) for line in api_lines(caplog)[1:]] == [
+        without_duration(line).replace("=chat ", "=chat_stream ") for line in chat_lines[1:]
+    ]
+    assert api_lines(caplog)[0] == chat_lines[0].replace("=chat ", "=chat_stream ")
+
+
+def test_body_not_matching_the_schema_is_422_before_the_stream(caplog):
+    caplog.set_level(logging.INFO)
+    response = api().post("/chat/stream", json={"message": "ciao", "session": "s1"})
+    assert response.status_code == 422
+    assert api_lines(caplog) == []
+
+
+@pytest.mark.parametrize(("error", "code", "detail"), [
+    (lm_studio_error(), "model_unavailable", "LM Studio non raggiungibile: Connection error."),
+    (lm_studio_timeout(), "model_unavailable", "LM Studio non raggiungibile: Request timed out."),
+    (lm_studio_status_error(), "model_error",
+     "LM Studio non ha risposto correttamente: Model unloaded"),
+    (lm_studio_generic_error(), "model_error",
+     "LM Studio non ha risposto correttamente: risposta inattesa"),
+], ids=["connection", "timeout", "status", "generic"])
+def test_lm_studio_errors_during_the_stream(error, code, detail, caplog):
+    caplog.set_level(logging.INFO)
+    model = StreamingFakeModel(replies=[time_call_with_text(), error])
+    events = stream(api(model), {"message": "ore a Tokyo?"})
+    assert [name for name, _ in events] == ["text", "reset", "tool_start", "tool_end", "error"]
+    assert events[-1][1] == {"error": code, "detail": detail}
+    record = [r for r in caplog.records if r.name == "assistant.api"][-1]
+    assert record.levelno == logging.WARNING
+    assert without_duration(record.getMessage()) == (
+        f"api response=chat_stream status=200 outcome=error error={code} "
+        f"detail={json.dumps(detail, ensure_ascii=False)} text_events=1 resets=1"
+    )
+
+
+def test_unexpected_error_during_the_stream(caplog):
+    caplog.set_level(logging.INFO)
+    model = StreamingFakeModel(replies=[RuntimeError("segreto interno")])
+    events = stream(api(model), {"message": "ciao"})
+    assert events == [("error", {
+        "error": "internal_error", "detail": "errore interno dell'agente; dettagli nel log"
+    })]
+    record = [r for r in caplog.records if r.name == "assistant.api"][-1]
+    assert record.levelno == logging.ERROR
+    assert record.exc_info and isinstance(record.exc_info[1], RuntimeError)
+    assert "segreto" not in record.getMessage()
+
+
+def test_log_lines_of_a_stream(caplog):
+    caplog.set_level(logging.INFO)
+    model = StreamingFakeModel(replies=[time_call_with_text(), AIMessage("Sono le 00:47.")])
+    history = [{"role": "user", "content": "d1"}, {"role": "assistant", "content": "r1"}]
+    stream(api(model), {"message": "Che ore sono?", "history": history, "summary": "S0"})
+    lines = api_lines(caplog)
+    assert lines[0] == "api request=chat_stream kind=message history=2 summary_chars=2"
+    assert without_duration(lines[1]) == (
+        "api response=chat_stream status=200 outcome=done tools=get_current_time "
+        "reply_chars=14 history=6 text_events=4 resets=1"
+    )
+    assert len(lines) == 2
+    texts = " ".join(lines)
+    assert "Che ore sono" not in texts and "d1" not in texts and "Sono le" not in texts
+
+
+def test_a_stream_closed_by_the_client_is_logged(caplog):
+    caplog.set_level(logging.INFO)
+    graph = fake_graph(StreamingFakeModel(replies=[AIMessage("Una risposta lunga")]))
+    turn = StreamTurn([], "", [HumanMessage("ciao")], time.monotonic())
+    events = _stream_events(graph, turn)
+    assert next(events).event == "text"
+    events.close()
+    assert without_duration(api_lines(caplog)[-1]) == (
+        "api response=chat_stream status=200 outcome=client_gone text_events=1 resets=0"
+    )
+
+
+def test_events_are_read_and_closed_in_a_worker_thread():
+    threads = []
+    closed = []
+
+    def numbers():
+        try:
+            for n in range(5):
+                threads.append(threading.get_ident())
+                yield n
+        finally:
+            closed.append(threading.get_ident())
+
+    async def first_two():
+        received = []
+        iterator = _in_thread(numbers())
+        async for n in iterator:
+            received.append(n)
+            if len(received) == 2:
+                break
+        await iterator.aclose()
+        return received
+
+    assert anyio.run(first_two) == [0, 1]
+    assert threading.get_ident() not in threads + closed
+    assert len(closed) == 1
+
+
+def test_openapi_documents_the_stream_endpoint():
+    document = api().get("/openapi.json").json()
+    operation = document["paths"]["/chat/stream"]["post"]
+    assert operation["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ChatRequest"
+    }
+    assert set(operation["responses"]) == {"200", "400", "422", "500", "502", "503"}
+    assert set(operation["responses"]["200"]["content"]) == {"text/event-stream"}
+    for code in ("400", "500", "502", "503"):
+        schema = operation["responses"][code]["content"]["application/json"]["schema"]
+        assert schema == {"$ref": "#/components/schemas/ErrorBody"}
+    for event in ("text", "reset", "tool_start", "tool_end", "done", "error"):
+        assert f"`{event}`" in operation["description"]

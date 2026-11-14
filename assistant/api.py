@@ -9,17 +9,25 @@ the 422 of FastAPI for a body that does not match the schema.
 import json
 import logging
 import time
-from collections.abc import Callable
-from dataclasses import asdict
+from collections.abc import AsyncIterator, Callable, Iterator
+from dataclasses import asdict, dataclass
 from typing import Annotated, Any, Literal
 
+import anyio
 import openai
-from fastapi import FastAPI, Response
+from fastapi import Depends, FastAPI, Response
 from fastapi.responses import JSONResponse
+from fastapi.sse import EventSourceResponse, ServerSentEvent
 from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel, ConfigDict, Field
 
-from assistant.agent import messages_from_json, messages_to_json, run_turn
+from assistant.agent import (
+    TurnResult,
+    messages_from_json,
+    messages_to_json,
+    run_turn,
+    stream_turn,
+)
 from assistant.commands import (
     PromptGetError,
     PromptListError,
@@ -177,6 +185,16 @@ CHAT_ERRORS = {
     )},
 }
 
+# The same error answers, in JSON: with "model" FastAPI would give them the media type of the
+# route (text/event-stream). ErrorBody is in the components through /chat.
+STREAM_ERRORS = {
+    status: {
+        "description": response["description"],
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorBody"}}},
+    }
+    for status, response in CHAT_ERRORS.items()
+}
+
 PROMPTS_ERRORS = {
     500: INTERNAL_ERROR,
     503: {"model": ErrorBody, "description": "Elenco dei prompt non disponibile (mcp_unavailable)."},
@@ -188,6 +206,22 @@ STATUS_RESPONSES = {
 }
 
 INTERNAL_DETAIL = "errore interno dell'agente; dettagli nel log"
+
+STREAM_DESCRIPTION = """\
+Lo stesso turno di POST /chat, con lo stesso corpo, restituito come Server-Sent Events mentre il \
+grafo lavora. Ogni evento ha un nome e un oggetto JSON:
+- `text` {delta}: un pezzo del testo dell'agente (solo l'agente: riassunto, router e revisore no);
+- `reset` {reason, detail}: il testo mandato dall'ultimo reset non sarà la risposta; reason \
+`tools` se l'agente chiama strumenti, `review` se il revisore la respinge (detail = motivo);
+- `tool_start` {id, name, args}: l'agente chiede uno strumento;
+- `tool_end` {id, name, args, result, ok}: lo strumento ha risposto;
+- `done`: il corpo della risposta di POST /chat (reply, tools_used, history, summary); ultimo;
+- `error` {error, detail}: il turno si è fermato (model_unavailable, model_error, \
+internal_error); ultimo.
+
+La risposta vera è sempre quella di `done`. Commenti `: ping` ogni 15 s senza eventi. Gli errori \
+scoperti prima del flusso (richiesta, cronologia, prompt) sono risposte JSON come quelle di \
+POST /chat."""
 
 
 class ApiError(Exception):
@@ -238,27 +272,116 @@ def _opening(client, request: ChatRequest) -> list[BaseMessage]:
         raise ApiError(502, "prompt_unavailable", str(error)) from None
 
 
-def _chat(graph, client, request: ChatRequest) -> dict:
+def _prepare(client, request: ChatRequest) -> tuple[list[BaseMessage], list[BaseMessage]]:
+    """History and opening messages of the turn, after the checks of the request."""
     if (request.message is None) == (request.prompt is None):
         raise ApiError(400, "invalid_request", "indicare esattamente uno tra 'message' e 'prompt'")
     if request.message is not None and not request.message.strip():
         raise ApiError(400, "invalid_request", "il campo 'message' è vuoto")
     history = _history(request)  # before the prompt: a bad history calls nothing
-    opening = _opening(client, request)
-    try:
-        result = run_turn(graph, history, request.summary, opening)
-    except openai.APIConnectionError as error:  # APITimeoutError included
-        raise ApiError(503, "model_unavailable", f"LM Studio non raggiungibile: {error}") from None
-    except openai.APIError as error:
-        raise ApiError(
-            502, "model_error", f"LM Studio non ha risposto correttamente: {error}"
-        ) from None
+    return history, _opening(client, request)
+
+
+def _model_error(error: Exception) -> ApiError | None:
+    """The answer for an error of LM Studio; None for any other exception."""
+    if isinstance(error, openai.APIConnectionError):  # APITimeoutError included
+        return ApiError(503, "model_unavailable", f"LM Studio non raggiungibile: {error}")
+    if isinstance(error, openai.APIError):
+        return ApiError(502, "model_error", f"LM Studio non ha risposto correttamente: {error}")
+    return None
+
+
+def _chat_body(result: TurnResult) -> dict:
     return {
         "reply": result.reply,
         "tools_used": result.tools_used,
         "history": messages_to_json(result.history),
         "summary": result.summary,
     }
+
+
+def _chat(graph, client, request: ChatRequest) -> dict:
+    history, opening = _prepare(client, request)
+    try:
+        result = run_turn(graph, history, request.summary, opening)
+    except openai.APIError as error:
+        raise _model_error(error) from None
+    return _chat_body(result)
+
+
+# --- Streaming (specification of the streaming, §4) ---
+
+@dataclass(frozen=True)
+class StreamTurn:
+    """A turn checked before the stream starts."""
+
+    history: list[BaseMessage]
+    summary: str
+    opening: list[BaseMessage]
+    started: float  # time.monotonic() of the request
+
+
+def _stream_events(graph, turn: StreamTurn) -> Iterator[ServerSentEvent]:
+    """The events of the turn, then done or error; logs the outcome, client_gone if the
+    generator is closed before the end."""
+    counts = {"text": 0, "reset": 0}
+    finished = False
+
+    def totals() -> str:
+        return (
+            f"text_events={counts['text']} resets={counts['reset']} "
+            f"duration_ms={_elapsed_ms(turn.started)}"
+        )
+
+    events = stream_turn(graph, turn.history, turn.summary, turn.opening)
+    try:
+        for name, data in events:
+            if name == "done":
+                body = _chat_body(data)
+                log.info(
+                    "api response=chat_stream status=200 outcome=done tools=%s reply_chars=%d "
+                    "history=%d %s",
+                    ",".join(str(tool["name"]) for tool in body["tools_used"]),
+                    len(body["reply"]), len(body["history"]), totals(),
+                )
+                finished = True
+                yield ServerSentEvent(event="done", data=body)
+                return
+            if name in counts:
+                counts[name] += 1
+            yield ServerSentEvent(event=name, data=data)
+    except Exception as exception:  # every error of the turn becomes an "error" event
+        error = _model_error(exception)
+        unexpected = error is None
+        if unexpected:
+            error = ApiError(500, "internal_error", INTERNAL_DETAIL)
+        log.log(
+            logging.ERROR if unexpected else logging.WARNING,
+            "api response=chat_stream status=200 outcome=error error=%s detail=%s %s",
+            error.code, _json(error.detail), totals(), exc_info=unexpected,
+        )
+        finished = True
+        yield ServerSentEvent(event="error", data={"error": error.code, "detail": error.detail})
+    finally:
+        events.close()  # also closes the graph's stream
+        if not finished:
+            log.info("api response=chat_stream status=200 outcome=client_gone %s", totals())
+
+
+async def _in_thread(events: Iterator) -> AsyncIterator:
+    """The items of the synchronous generator `events`, each read in a worker thread.
+
+    At the end, also when the client goes away, `events` is closed in a worker thread too: with
+    stream_mode="messages" LangGraph runs the nodes in other threads and closing its stream waits
+    for the running node, which must not stop the event loop of the service.
+    """
+    end = object()
+    try:
+        while (item := await anyio.to_thread.run_sync(next, events, end)) is not end:
+            yield item
+    finally:
+        with anyio.CancelScope(shield=True):
+            await anyio.to_thread.run_sync(events.close)
 
 
 def _mcp_status(client) -> dict:
@@ -321,6 +444,10 @@ def create_app(
     """
     app = FastAPI(title=TITLE, description=DESCRIPTION)
 
+    @app.exception_handler(ApiError)
+    def api_error(_request, error: ApiError) -> JSONResponse:  # errors before a stream
+        return error.response()
+
     @app.post(
         "/chat",
         response_model=ChatResponse,
@@ -350,6 +477,35 @@ def create_app(
             return body
 
         return _answer("chat", work)
+
+    def stream_turn_checked(request: ChatRequest) -> StreamTurn:
+        """The checks of /chat, before the stream: an error becomes the JSON answer of /chat."""
+        log.info(
+            "api request=chat_stream kind=%s history=%d summary_chars=%d",
+            _kind(request), len(request.history), len(request.summary),
+        )
+        started = time.monotonic()
+        try:
+            history, opening = _prepare(client, request)
+        except ApiError as error:
+            _log_error("chat_stream", error, started)
+            raise
+        except Exception:
+            error = ApiError(500, "internal_error", INTERNAL_DETAIL)
+            _log_error("chat_stream", error, started, exc_info=True)
+            raise error from None
+        return StreamTurn(history, request.summary, opening, started)
+
+    @app.post(
+        "/chat/stream",
+        response_class=EventSourceResponse,
+        responses=STREAM_ERRORS,
+        summary="Un turno di conversazione in streaming",
+        description=STREAM_DESCRIPTION,
+    )
+    async def chat_stream(turn: Annotated[StreamTurn, Depends(stream_turn_checked)]):
+        async for event in _in_thread(_stream_events(graph, turn)):
+            yield event
 
     @app.get(
         "/prompts",

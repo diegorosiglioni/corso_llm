@@ -1,14 +1,20 @@
+import json
 import os
+import re
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import httpx2
 import openai
 import pytest
 from fastapi.testclient import TestClient
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from pydantic import Field
 from sqlalchemy import Engine, event
 from sqlalchemy.exc import OperationalError
 
@@ -45,6 +51,43 @@ class FakeModel:
         if isinstance(reply, BaseException):
             raise reply
         return reply
+
+
+class StreamingFakeModel(BaseChatModel):
+    """Chat model of LangChain with scripted replies (AIMessage or exceptions to raise).
+
+    With graph.invoke it returns each reply whole; with graph.stream(stream_mode="messages") it
+    streams it: one piece per word of the text (spaces included), then one piece per call, with
+    the arguments as JSON text (the received text for the invalid calls).
+    """
+
+    replies: list[Any]
+    calls: list[list[BaseMessage]] = Field(default_factory=list)
+
+    @property
+    def _llm_type(self) -> str:
+        return "streaming-fake"
+
+    def _next(self, messages) -> AIMessage:
+        self.calls.append(list(messages))
+        reply = self.replies.pop(0)
+        if isinstance(reply, BaseException):
+            raise reply
+        return reply
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        return ChatResult(generations=[ChatGeneration(message=self._next(messages))])
+
+    def _stream(self, messages, stop=None, run_manager=None, **kwargs):
+        reply = self._next(messages)
+        for piece in re.findall(r"\s*\S+\s*", reply.content):
+            yield ChatGenerationChunk(message=AIMessageChunk(content=piece))
+        calls = [(c["id"], c["name"], json.dumps(c["args"])) for c in reply.tool_calls]
+        calls += [(c["id"], c["name"], c["args"]) for c in reply.invalid_tool_calls]
+        for index, (call_id, name, args) in enumerate(calls):
+            yield ChatGenerationChunk(message=AIMessageChunk(content="", tool_call_chunks=[
+                {"id": call_id, "name": name, "args": args, "index": index}
+            ]))
 
 
 TEST_SCOPE = "Ambito di prova: ora e calcoli."
@@ -199,6 +242,18 @@ def fake_service(model=None, client=None, model_status=model_ok, **graph_options
         graph=graph, client=client or FakeMcpClient(MCP_SPECS), model_id=MODEL_ID,
         model_status=model_status,
     ))
+
+
+def sse(text: str) -> list[tuple[str, object]]:
+    """(event, decoded data) of a text/event-stream body written by FastAPI."""
+    events = []
+    for block in text.replace("\r\n", "\n").split("\n\n"):
+        fields = dict(
+            line.split(": ", 1) for line in block.split("\n") if line and not line.startswith(":")
+        )
+        if fields:
+            events.append((fields["event"], json.loads(fields["data"])))
+    return events
 
 
 class Clock:

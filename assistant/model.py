@@ -22,7 +22,9 @@ INVALID_OUTPUT_ERRORS = (
 )
 
 
-def _chat(config: Config) -> ChatOpenAI:
+def _chat(config: Config, *, streaming: bool = False) -> ChatOpenAI:
+    """`streaming=False` keeps the requests to LM Studio without stream=true even when the graph
+    runs with stream_mode="messages" (POST /chat/stream): only the agent's text is streamed."""
     return ChatOpenAI(
         base_url=config.base_url,
         model=config.model,
@@ -30,11 +32,13 @@ def _chat(config: Config) -> ChatOpenAI:
         temperature=0,  # more repeatable answers and steadier tool calling
         timeout=120,  # the first load of a local model can be slow
         max_retries=1,  # with LM Studio off the error arrives within seconds
+        disable_streaming=not streaming,
     )
 
 
 def create_model(config: Config, tools: list[BaseTool]) -> Runnable:
-    return _chat(config).bind_tools(tools)
+    """The agent: it streams its reply when the graph is streamed, as with graph.invoke it does not."""
+    return _chat(config, streaming=True).bind_tools(tools)
 
 
 def guard_structured_output(structured: Runnable, error_type: type[Exception]) -> Runnable:

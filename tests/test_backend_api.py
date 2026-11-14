@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 from datetime import UTC, datetime
@@ -10,10 +11,18 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError
 
 from assistant.api_client import AgentClient
-from backend.api import create_app
+from backend.api import OpenStream, _forward, create_app
 from backend.db import Chat, ChatMessage, create_db_engine, init_db
 from backend.store import AgentState, ChatStore
-from conftest import Clock, FakeModel, fake_service, lm_studio_error, tool_call
+from conftest import (
+    Clock,
+    FakeModel,
+    StreamingFakeModel,
+    fake_service,
+    lm_studio_error,
+    sse,
+    tool_call,
+)
 
 START = datetime(2026, 11, 14, 10, 0, 0, tzinfo=UTC)
 TOOL = {"name": "calculate", "args": {"expression": "17 * 23"}, "result": {"result": 391}, "ok": True}
@@ -746,3 +755,331 @@ def test_no_cors_without_origins(http):  # CA-81
 
 def test_cors_does_not_change_the_openapi(store, http, cors_http):
     assert cors_http.get("/openapi.json").json() == http.get("/openapi.json").json()
+
+
+# --- POST /chats/{chat_id}/messages/stream (specification of the streaming, §6; CA-98) ---
+
+STREAM_REPLIES = [
+    AIMessage("Controllo.", tool_calls=[
+        {"name": "get_current_time", "args": {"timezone": "Asia/Tokyo"}, "id": "c1"}
+    ]),
+    AIMessage("A Tokyo sono le 00:47."),
+]
+
+
+def send_stream(http: TestClient, chat_id: int, content: str) -> list[tuple[str, object]]:
+    with http.stream(
+        "POST", f"/chats/{chat_id}/messages/stream", json={"content": content}
+    ) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        return sse(response.read().decode())
+
+
+class ScriptedStreamAgent:
+    """Answers each streamed turn with the next list of events (name, data); an exception in
+    the list is raised when it is reached, a function of nothing is called first. Records
+    (history, summary, message) and whether each stream was closed."""
+
+    def __init__(self, *turns):
+        self._turns = list(turns)
+        self.calls: list[tuple[list, str, str]] = []
+        self.closed: list[bool] = []
+
+    def chat(self, *args, **kwargs):
+        raise AssertionError("il flusso non deve usare /chat")
+
+    def chat_stream(self, history, summary, *, message):
+        self.calls.append((list(history), summary, message))
+        events = self._turns.pop(0)
+        index = len(self.closed)
+        self.closed.append(False)
+
+        def generate():
+            try:
+                for item in events:
+                    if isinstance(item, BaseException):
+                        raise item
+                    yield item() if callable(item) else item
+            finally:
+                self.closed[index] = True
+
+        return generate()
+
+
+def done(reply="Ok", history=(), summary="") -> tuple[str, dict]:
+    return "done", {"reply": reply, "tools_used": [], "history": list(history), "summary": summary}
+
+
+def test_stream_forwards_the_events_and_saves_like_send(store, engine):  # CA-98
+    http = app(store, service_agent(StreamingFakeModel(replies=list(STREAM_REPLIES))))
+    chat_id = http.post("/chats").json()["id"]
+    events = send_stream(http, chat_id, "Che ore sono a Tokyo?")
+
+    assert [name for name, _ in events] == [
+        "question", "text", "reset", "tool_start", "tool_end",
+        "text", "text", "text", "text", "text", "done",
+    ]
+    question = {
+        "id": 1, "role": "user", "content": "Che ore sono a Tokyo?", "tools_used": [],
+        "created_at": "2026-11-14T10:00:00Z",
+    }
+    assert events[0] == ("question", question)
+    assert events[1] == ("text", {"delta": "Controllo."})
+    assert events[2] == ("reset", {"reason": "tools", "detail": ""})
+    assert events[3] == ("tool_start", {
+        "id": "c1", "name": "get_current_time", "args": {"timezone": "Asia/Tokyo"},
+    })
+    assert events[4][1]["id"] == "c1" and events[4][1]["ok"] is True
+    assert "".join(data["delta"] for _, data in events[5:-1]) == "A Tokyo sono le 00:47."
+    assert events[-1][1]["question"] == question
+
+    # the same turn through POST /messages on another archive: same answer and agent state
+    other_engine = create_db_engine("sqlite://")
+    init_db(other_engine)
+    reference = app(
+        ChatStore(other_engine, now=Clock(START)),
+        service_agent(StreamingFakeModel(replies=list(STREAM_REPLIES))),
+    )
+    other_id = reference.post("/chats").json()["id"]
+    expected = reference.post(
+        f"/chats/{other_id}/messages", json={"content": "Che ore sono a Tokyo?"}
+    ).json()
+    assert events[-1][1] == expected
+    assert http.get(f"/chats/{chat_id}").json() == reference.get(f"/chats/{other_id}").json()
+    assert agent_state(engine, chat_id) == agent_state(other_engine, other_id)
+    other_engine.dispose()
+
+
+def test_stream_sends_the_saved_history_and_summary(store, engine):  # CA-98
+    agent = ScriptedStreamAgent(
+        [done("Uno", history=SAVED_HISTORY, summary="riassunto 1")],
+        [("text", {"delta": "Du"}), ("text", {"delta": "e"}), done("Due", summary="riassunto 2")],
+    )
+    http = app(store, agent)
+    chat_id = http.post("/chats").json()["id"]
+    first = send_stream(http, chat_id, "  a ")
+    assert [name for name, _ in first] == ["question", "done"]
+    assert agent_state(engine, chat_id) == (SAVED_HISTORY, "riassunto 1")
+    second = send_stream(http, chat_id, "b")
+    assert [name for name, _ in second] == ["question", "text", "text", "done"]
+    assert agent.calls == [([], "", "a"), (SAVED_HISTORY, "riassunto 1", "b")]
+    assert agent_state(engine, chat_id) == ([], "riassunto 2")
+    assert contents(store, chat_id) == [
+        ("user", "a"), ("assistant", "Uno"), ("user", "b"), ("assistant", "Due"),
+    ]
+    assert second[-1][1]["answer"]["content"] == "Due"
+    assert agent.closed == [True, True]
+
+
+@pytest.mark.parametrize("content", ["", "   "])
+def test_stream_empty_message_is_400_in_json(http, store, content):  # CA-98
+    chat_id = http.post("/chats").json()["id"]
+    response = http.post(f"/chats/{chat_id}/messages/stream", json={"content": content})
+    assert response.status_code == 400
+    assert response.headers["content-type"] == "application/json"
+    assert response.json() == {"error": "invalid_request", "detail": "il messaggio è vuoto"}
+    assert contents(store, chat_id) == []
+
+
+def test_stream_errors_of_the_request_are_json(http):  # CA-98
+    missing = http.post("/chats/42/messages/stream", json={"content": "Ciao"})
+    assert (missing.status_code, missing.json()) == (
+        404, {"error": "chat_not_found", "detail": "chat 42 inesistente"}
+    )
+    assert http.post("/chats/1/messages/stream", json={"content": 3}).status_code == 422
+    assert http.post("/chats/abc/messages/stream", json={"content": "a"}).status_code == 422
+
+
+STREAM_OPEN_FAILURES = [
+    pytest.param(
+        lambda: AgentClient("http://127.0.0.1:1"), 503, "agent_unavailable",
+        "agente non raggiungibile su http://127.0.0.1:1", id="closed-port",
+    ),
+    pytest.param(
+        lambda: mock_agent(raising(httpx.ReadTimeout("lento"))), 504, "agent_timeout",
+        "l'agente non ha risposto entro 60 s", id="timeout",
+    ),
+    pytest.param(
+        lambda: mock_agent(lambda request: httpx.Response(
+            400, json={"error": "invalid_history", "detail": "messaggio 1: ruolo sconosciuto"}
+        )), 502, "agent_error",
+        "l'agente ha risposto con un errore (invalid_history): messaggio 1: ruolo sconosciuto",
+        id="error-answer",
+    ),
+]
+
+
+@pytest.mark.parametrize(("make_agent", "status", "code", "detail"), STREAM_OPEN_FAILURES)
+def test_stream_agent_failure_before_the_stream_is_json(
+    store, engine, caplog, make_agent, status, code, detail,
+):  # CA-98
+    caplog.set_level(logging.INFO)
+    chat_id = store.create_chat().id
+    store.add_question(chat_id, "Mi chiamo Paolo")
+    store.add_answer(chat_id, "Piacere!", [], AgentState(SAVED_HISTORY, "rias"))
+
+    response = app(store, make_agent()).post(
+        f"/chats/{chat_id}/messages/stream", json={"content": "Quanto fa 2 + 2?"}
+    )
+    assert response.status_code == status
+    assert response.headers["content-type"] == "application/json"
+    assert response.json() == {"error": code, "detail": detail}
+    assert contents(store, chat_id)[-1] == ("user", "Quanto fa 2 + 2?")
+    assert agent_state(engine, chat_id) == (SAVED_HISTORY, "rias")
+    escaped = detail.replace('"', '\\"')
+    assert backend_lines(caplog)[-1] == (logging.WARNING, (
+        f'backend response=send_message_stream chat={chat_id} status={status} error={code} '
+        f'detail="{escaped}" duration_ms=N'
+    ))
+
+
+@pytest.mark.parametrize(("error", "status", "code"), [
+    (database_down(), 503, "database_unavailable"),
+    (RuntimeError("guasto"), 500, "internal_error"),
+])
+def test_stream_with_a_broken_archive_is_json(error, status, code, caplog):  # CA-98
+    caplog.set_level(logging.INFO)
+    http = TestClient(create_app(store=BrokenStore(error), agent=NoAgent()))
+    response = http.post("/chats/3/messages/stream", json={"content": "Ciao"})
+    assert response.status_code == status
+    assert response.json()["error"] == code
+    lines = backend_lines(caplog)
+    assert lines[0] == (logging.INFO, "backend request=send_message_stream chat=3 chars=4")
+    assert lines[1][1].startswith(
+        f"backend response=send_message_stream chat=3 status={status} error={code} "
+    )
+    assert len(lines) == 2
+
+
+STREAM_FAILURES = [
+    pytest.param(
+        lambda: service_agent(StreamingFakeModel(replies=[STREAM_REPLIES[0], lm_studio_error()])),
+        ["question", "text", "reset", "tool_start", "tool_end", "error"], "agent_error",
+        "l'agente ha risposto con un errore (model_unavailable): LM Studio non raggiungibile: "
+        "Connection error.", logging.WARNING, id="lm-studio-off",
+    ),
+    pytest.param(
+        lambda: mock_agent(lambda request: httpx.Response(
+            200, headers={"content-type": "text/event-stream"},
+            content=b'event: text\ndata: {"delta": "a"}\n\n',
+        )),
+        ["question", "text", "error"], "agent_error",
+        "l'agente ha risposto con un errore (bad_response): flusso dell'agente non valido: "
+        "flusso interrotto prima della fine del turno", logging.WARNING, id="cut",
+    ),
+    pytest.param(
+        lambda: ScriptedStreamAgent([("text", {"delta": "a"}), RuntimeError("guasto")]),
+        ["question", "text", "error"], "internal_error",
+        "errore interno del back-end; dettagli nel log", logging.ERROR, id="unexpected",
+    ),
+]
+
+
+@pytest.mark.parametrize(("make_agent", "names", "code", "detail", "level"), STREAM_FAILURES)
+def test_stream_error_during_the_turn_keeps_the_question_and_the_state(
+    store, engine, caplog, make_agent, names, code, detail, level,
+):  # CA-98
+    caplog.set_level(logging.INFO)
+    chat_id = store.create_chat().id
+    store.add_question(chat_id, "Mi chiamo Paolo")
+    store.add_answer(chat_id, "Piacere!", [], AgentState(SAVED_HISTORY, "rias"))
+
+    events = send_stream(app(store, make_agent()), chat_id, "Che ore sono a Tokyo?")
+    assert [name for name, _ in events] == names
+    assert events[-1] == ("error", {"error": code, "detail": detail})
+    assert contents(store, chat_id) == [
+        ("user", "Mi chiamo Paolo"), ("assistant", "Piacere!"), ("user", "Che ore sono a Tokyo?"),
+    ]
+    assert agent_state(engine, chat_id) == (SAVED_HISTORY, "rias")
+    escaped = detail.replace('"', '\\"')
+    assert backend_lines(caplog)[-1] == (level, (
+        f'backend response=send_message_stream chat={chat_id} status=200 outcome=error '
+        f'error={code} detail="{escaped}" duration_ms=N'
+    ))
+    if level == logging.ERROR:
+        assert "guasto" in caplog.text and "guasto" not in json.dumps(events)
+
+
+def test_stream_chat_deleted_during_the_turn(store):  # CA-98
+    def delete():
+        store.delete_chat(chat_id)
+        return "text", {"delta": "Ok"}
+
+    chat_id = store.create_chat().id
+    events = send_stream(app(store, ScriptedStreamAgent([delete, done()])), chat_id, "Ciao")
+    assert events[-1] == (
+        "error", {"error": "chat_not_found", "detail": f"chat {chat_id} inesistente"}
+    )
+    assert store.list_chats() == []
+
+
+def test_stream_log_lines(store, caplog):  # CA-98
+    caplog.set_level(logging.INFO)
+    http = app(store, service_agent(StreamingFakeModel(replies=list(STREAM_REPLIES))))
+    chat_id = http.post("/chats").json()["id"]
+    send_stream(http, chat_id, "Che ore sono a Tokyo?")
+    assert backend_lines(caplog)[1:] == [
+        (logging.INFO, f"backend request=send_message_stream chat={chat_id} chars=21"),
+        (logging.INFO, f"backend agent_call chat={chat_id} history=0 summary_chars=0 stream=true"),
+        (logging.INFO, (
+            f"backend response=send_message_stream chat={chat_id} status=200 outcome=done "
+            "tools=get_current_time reply_chars=22 duration_ms=N"
+        )),
+    ]
+
+
+def test_stream_messages_do_not_enter_the_log(store, caplog):
+    caplog.set_level(logging.DEBUG)
+    http = app(store, ScriptedStreamAgent([
+        ("text", {"delta": "Risposta riservata"}), done("Risposta riservata", summary="riservato"),
+    ]))
+    chat_id = http.post("/chats").json()["id"]
+    send_stream(http, chat_id, "Domanda riservata")
+    assert "riservat" not in " ".join(message for _, message in backend_lines(caplog))
+
+
+def test_client_gone_closes_the_stream_of_the_agent(store, engine, caplog):  # CA-98
+    caplog.set_level(logging.INFO)
+    chat_id = store.create_chat().id
+    question, _ = store.add_question(chat_id, "Ciao")
+    agent = ScriptedStreamAgent([("text", {"delta": "a"}), ("text", {"delta": "b"}), done()])
+    stream = OpenStream(chat_id, question, agent.chat_stream([], "", message="Ciao"), 0.0)
+
+    forwarded = _forward(store, stream)
+    assert next(forwarded).event == "question"
+    assert next(forwarded).event == "text"
+    forwarded.close()
+    assert agent.closed == [True]
+    assert contents(store, chat_id) == [("user", "Ciao")]
+    assert agent_state(engine, chat_id) == ([], "")
+    assert backend_lines(caplog)[-1] == (logging.INFO, (
+        f"backend response=send_message_stream chat={chat_id} status=200 outcome=client_gone "
+        "duration_ms=N"
+    ))
+
+
+def test_openapi_describes_the_stream(http):  # CA-98
+    document = http.get("/openapi.json").json()
+    assert set(document["paths"]["/chats/{chat_id}/messages/stream"]) == {"post"}
+    operation = document["paths"]["/chats/{chat_id}/messages/stream"]["post"]
+    assert operation["summary"] and "`question`" in operation["description"]
+    assert "text/event-stream" in operation["responses"]["200"]["content"]
+    assert operation["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/SendMessageRequest"
+    }
+    error_ref = {"$ref": "#/components/schemas/ErrorBody"}
+    assert set(operation["responses"]) == {"200", "400", "404", "422", "500", "502", "503", "504"}
+    for code in ("400", "404", "500", "502", "503", "504"):
+        assert operation["responses"][code]["content"] == {
+            "application/json": {"schema": error_ref}
+        }
+
+
+def test_preflight_of_the_stream(cors_http):  # CA-98, CA-81
+    response = cors_http.options("/chats/1/messages/stream", headers={
+        "Origin": PAGE, "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type",
+    })
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == PAGE

@@ -1,15 +1,20 @@
 import json
+from types import SimpleNamespace
 
 import httpx
 import pytest
 from langchain_core.messages import AIMessage
 
+from assistant import api_client
 from assistant.api_client import (
     CHAT_TIMEOUT,
     STATUS_TIMEOUT,
+    STREAM_CONNECT_TIMEOUT,
+    STREAM_IDLE_TIMEOUT,
     AgentClient,
     AgentError,
     RemoteSession,
+    iter_sse,
 )
 from assistant.mcp_client import PromptArgument, PromptMessage, PromptSpec
 from conftest import (
@@ -18,6 +23,7 @@ from conftest import (
     FakeMcpClient,
     FakeModel,
     PromptListFails,
+    StreamingFakeModel,
     fake_service,
     lm_studio_error,
     tool_call,
@@ -225,6 +231,180 @@ def test_chat_with_lm_studio_switched_off():
 def test_chat_unexpected_answer(response):
     error = raised(lambda: scripted(response).chat([], "", message="ciao"))
     assert error.code == "bad_response"
+
+
+# --- iter_sse and chat_stream (specification of the streaming, §5; CA-97) ---
+
+def test_iter_sse():
+    lines = [
+        ": ping", "event: text", 'data: {"delta": "a"}', "",
+        "event: done", "data: riga 1", "data:riga 2", "id: 7", "retry: 10", "",
+        "", "data: senza nome", "",
+        "event: vuoto", "",
+        "event: text\r", 'data: {"delta": "b"}\r', "\r",
+        "event: troncato", "data: {}",
+    ]
+    assert list(iter_sse(lines)) == [
+        ("text", '{"delta": "a"}'),
+        ("done", "riga 1\nriga 2"),
+        ("message", "senza nome"),
+        ("text", '{"delta": "b"}'),
+    ]
+
+
+def sse_body(*events, end: str = "") -> bytes:
+    """A text/event-stream body with the (event, data) given; data that is not text is JSON."""
+    blocks = [
+        f"event: {name}\ndata: {data if isinstance(data, str) else json.dumps(data)}\n\n"
+        for name, data in events
+    ]
+    return (": ping\n\n" + "".join(blocks) + end).encode()
+
+
+def sse_answer(*events, end: str = "") -> httpx.Response:
+    return httpx.Response(
+        200, headers={"content-type": "text/event-stream"}, content=sse_body(*events, end=end)
+    )
+
+
+def streamed_events(client: AgentClient, **opening) -> list[tuple[str, dict]]:
+    return list(client.chat_stream([], "", **(opening or {"message": "ciao"})))
+
+
+def test_chat_stream_on_the_service():
+    replies = [
+        AIMessage("Controllo.", tool_calls=[
+            {"name": "get_current_time", "args": {"timezone": "Asia/Tokyo"}, "id": "c1"}
+        ]),
+        AIMessage("Sono le 00:47."),
+    ]
+    events = streamed_events(agent(StreamingFakeModel(replies=list(replies))))
+    assert [name for name, _ in events] == [
+        "text", "reset", "tool_start", "tool_end", "text", "text", "text", "done",
+    ]
+    assert events[0] == ("text", {"delta": "Controllo."})
+    expected = agent(StreamingFakeModel(replies=list(replies))).chat([], "", message="ciao")
+    assert events[-1] == ("done", expected)
+
+
+def test_chat_stream_request_body():
+    requests = []
+    client = scripted(sse_answer(("done", chat_body())), sse_answer(("done", chat_body())),
+                      requests=requests)
+    history = [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"}]
+    list(client.chat_stream(history, "riassunto", message="ciao"))
+    list(client.chat_stream([], "", prompt=("spiega", {"argomento": "MCP"})))
+    assert [(r.method, r.url.path) for r in requests] == [("POST", "/chat/stream")] * 2
+    assert json.loads(requests[0].content) == {
+        "history": history, "summary": "riassunto", "message": "ciao"
+    }
+    assert json.loads(requests[1].content)["prompt"] == {
+        "name": "spiega", "arguments": {"argomento": "MCP"}
+    }
+    assert requests[0].extensions["timeout"] == {
+        "connect": STREAM_CONNECT_TIMEOUT, "read": STREAM_IDLE_TIMEOUT,
+        "write": STREAM_IDLE_TIMEOUT, "pool": STREAM_IDLE_TIMEOUT,
+    }
+
+
+def test_chat_stream_ignores_pings_and_unknown_events():
+    client = scripted(sse_answer(
+        ("text", {"delta": "a"}), ("progress", {"x": 1}), ("done", chat_body("a"))
+    ))
+    assert streamed_events(client) == [("text", {"delta": "a"}), ("done", chat_body("a"))]
+
+
+def test_chat_stream_error_event():
+    client = agent(StreamingFakeModel(replies=[lm_studio_error()]))
+    error = raised(lambda: streamed_events(client))
+    assert (error.code, error.detail) == (
+        "model_unavailable", "LM Studio non raggiungibile: Connection error."
+    )
+
+
+def test_chat_stream_error_answer_before_the_stream():
+    client = FakeMcpClient(MCP_SPECS, prompts={"spiega": (EXPLAIN, explain_text)})
+    service = agent(client=client)
+    error = raised(lambda: service.chat_stream([], "", prompt=("spiega", {"livello": "x"})))
+    assert (error.code, error.detail) == (  # raised by the call, before any event is read
+        "prompt_rejected", "argomenti obbligatori mancanti per 'spiega': 'argomento'"
+    )
+
+
+def test_chat_stream_with_the_agent_switched_off():
+    error = raised(lambda: AgentClient("http://127.0.0.1:1").chat_stream([], "", message="x"))
+    assert (error.code, error.detail) == (
+        "agent_unreachable", "agente non raggiungibile su http://127.0.0.1:1"
+    )
+
+
+def test_chat_stream_unexpected_error_answer():
+    error = raised(lambda: scripted(httpx.Response(502, text="Bad Gateway")).chat_stream(
+        [], "", message="x"
+    ))
+    assert (error.code, error.detail) == (
+        "bad_response", "risposta inattesa dell'agente (HTTP 502)"
+    )
+
+
+def cut_stream(error: Exception):
+    def body():
+        yield sse_body(("text", {"delta": "a"}))
+        raise error
+    return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=body())
+
+
+@pytest.mark.parametrize(("response", "detail"), [
+    (sse_answer(("text", {"delta": "a"})), "flusso interrotto prima della fine del turno"),
+    (sse_answer(("text", {"delta": "a"}), end='event: done\ndata: {"reply": "a"}'),
+     "flusso interrotto prima della fine del turno"),
+    (cut_stream(httpx.RemoteProtocolError("connessione chiusa")),
+     "flusso interrotto prima della fine del turno"),
+    (sse_answer(("done", {"reply": "manca il resto"})), "evento 'done' non valido"),
+    (sse_answer(("text", "non json")), "dati non validi nell'evento 'text'"),
+    (sse_answer(("tool_start", [1, 2])), "dati non validi nell'evento 'tool_start'"),
+], ids=["no-done", "done-not-ended", "cut", "bad-done", "bad-json", "not-an-object"])
+def test_chat_stream_broken(response, detail):
+    error = raised(lambda: streamed_events(scripted(response)))
+    assert (error.code, error.detail) == ("bad_response", f"flusso dell'agente non valido: {detail}")
+
+
+def test_chat_stream_malformed_error_event():
+    error = raised(lambda: streamed_events(scripted(sse_answer(("error", {"error": 3})))))
+    assert (error.code, error.detail) == (
+        "bad_response", "risposta inattesa dell'agente (HTTP 200)"
+    )
+
+
+def test_chat_stream_too_long_without_data():
+    error = raised(lambda: streamed_events(scripted(cut_stream(httpx.ReadTimeout("lento")))))
+    assert (error.code, error.detail) == ("agent_timeout", "l'agente non ha risposto entro 60 s")
+
+
+def test_chat_stream_turn_too_long(monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr(api_client, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    client = scripted(sse_answer(("text", {"delta": "a"}), ("done", chat_body())))
+    events = client.chat_stream([], "", message="x")
+    assert next(events) == ("text", {"delta": "a"})
+    now[0] = 600.5
+    error = raised(lambda: next(events))
+    assert (error.code, error.detail) == (
+        "agent_timeout", "l'agente non ha finito il turno entro 600 s"
+    )
+
+
+def test_closing_the_stream_closes_the_connection():
+    def body():
+        yield sse_body(("text", {"delta": "a"}))
+        yield sse_body(("done", chat_body()))
+
+    response = httpx.Response(200, headers={"content-type": "text/event-stream"}, content=body())
+    events = scripted(response).chat_stream([], "", message="x")
+    assert next(events) == ("text", {"delta": "a"})
+    assert not response.is_closed
+    events.close()
+    assert response.is_closed
 
 
 # --- connection ---

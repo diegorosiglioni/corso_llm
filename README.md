@@ -271,6 +271,33 @@ resta nella chat senza risposta e lo stato dell'agente della chat non cambia: si
 messaggio. Dettagli nella [specifica](docs/superpowers/specs/2026-11-14-backend-chat-design.md)
 (§5–§7).
 
+### Streaming della risposta (Server-Sent Events)
+
+Accanto agli endpoint precedenti, che non cambiano (la CLI usa sempre `POST /chat`), agente e
+back-end offrono lo stesso turno in streaming, come `text/event-stream` con lo stesso corpo della
+richiesta:
+
+- agente: `POST /chat/stream` (corpo di `POST /chat`);
+- back-end: `POST /chats/{chat_id}/messages/stream` (corpo `{"content": "…"}`), che inoltra il
+  flusso dell'agente e salva la risposta solo alla fine.
+
+Eventi (nome e oggetto JSON): `question` (solo back-end, primo: la domanda salvata), `text`
+`{delta}` (un pezzo del testo dell'agente; router, revisore e riassunto non ne producono), `reset`
+`{reason, detail}` (il testo arrivato dall'ultimo reset non sarà la risposta: `tools` se l'agente
+chiama strumenti, `review` se il revisore la respinge, con il motivo), `tool_start` `{id, name,
+args}`, `tool_end` `{id, name, args, result, ok}`, e per ultimo `done` (agente: il corpo di
+`POST /chat`; back-end: `{question, answer}` salvati) oppure `error` `{error, detail}`. Ogni 15 s
+senza eventi arriva un commento `: ping`.
+
+**Bozza o sola risposta approvata**: il testo si mostra mentre l'agente lo scrive, come bozza che
+può ancora cambiare; se il revisore la respinge arriva `reset` `review` e poi la riscrittura. Nel
+database entra solo la risposta finale di `done`. Gli errori scoperti prima del flusso (richiesta,
+chat inesistente, database, agente non raggiungibile) restano risposte JSON con gli stessi codici
+degli endpoint senza streaming; quelli durante il turno arrivano come evento `error`, con la domanda
+salvata senza risposta. Il back-end aspetta l'agente al massimo 60 s senza dati e 600 s per il
+turno (`agent_timeout`). Dettagli nella
+[specifica](docs/superpowers/specs/2026-11-14-streaming-design.md).
+
 ### Front-end: la chat nel browser
 
 Il front-end (`python -m frontend`) serve una pagina in HTML, CSS e JavaScript, senza framework,

@@ -1778,6 +1778,73 @@ autonoma); i punti successivi seguono la specifica.
   chiamate a strumenti in streaming (prova reale al punto 3, CA-101); README e `CLAUDE.md` cambiano
   dal punto 2, quando c'è codice da descrivere.
 
+### Punto 2 · Streaming nell'agente e nel back-end — piano
+
+1. `assistant/model.py`: `_chat(config, streaming=…)`; router, revisore e riassunto con
+   `disable_streaming=True` (CA-96, test in `test_model.py` con una sottoclasse di `ChatOpenAI` che
+   registra le istanze).
+2. `assistant/agent.py`: `_turn_result` estratta da `run_turn` (stato finale → `TurnResult`),
+   `_tool_use` comune a `tools_used` e `tool_end`; `stream_turn` generatore su
+   `graph.stream(stream_mode=["messages", "updates", "values"])` con gli eventi della specifica §3–4.
+   `StreamingFakeModel` (sottoclasse di `BaseChatModel` con `_generate` e `_stream` a pezzi, chiamate
+   comprese) in `conftest.py`; test in `test_agent.py` (CA-94).
+3. `assistant/api.py`: controlli di `/chat` estratti (`_prepare`, `_model_error`), `POST /chat/stream`
+   con `EventSourceResponse`, controlli in una dipendenza (errore → `ApiError` → gestore che risponde
+   JSON), eventi da `_stream_events`; log d'inizio e fine (`done`, `error`, `client_gone`). Test in
+   `test_api.py` (CA-95).
+4. `assistant/api_client.py`: `iter_sse`, `AgentClient.chat_stream` (tempi 10 s connessione, 60 s
+   tra due dati, 600 s per il turno). Test in `test_api_client.py` (CA-97).
+5. `backend/api.py`: `POST /chats/{chat_id}/messages/stream` (dipendenza: domanda salvata e flusso
+   dell'agente aperto; poi `question`, eventi inoltrati, `add_answer` al `done`, `done`
+   `{question, answer}`). Test in `test_backend_api.py` (CA-98); contratto rigenerato con
+   `UPDATE_CONTRACT=1`.
+6. `pytest` completo (CA-103: i test esistenti non cambiano), README e `CLAUDE.md` (endpoint nuovi),
+   requisiti §18.
+
+Decisioni:
+- `chat_stream` apre la richiesta e controlla la risposta subito (errori prima del flusso sollevati
+  dalla chiamata) e restituisce il generatore degli eventi: il back-end può rispondere in JSON prima
+  del flusso senza consumare il primo evento, che con il modello locale arriva dopo decine di secondi.
+- L'endpoint dell'agente è un generatore asincrono che legge gli eventi in un thread e, se il client
+  chiude, chiude il generatore in un thread (protetto dalla cancellazione): con `stream_mode`
+  `messages` LangGraph esegue i nodi in thread separati e chiudere `graph.stream` aspetta il nodo in
+  corso, che non deve bloccare il ciclo degli eventi del servizio. Il back-end resta con un generatore
+  sincrono (chiudere il flusso dell'agente chiude solo una connessione).
+- `iter_sse` segue lo standard SSE: un evento senza la riga vuota finale (flusso troncato) si scarta,
+  ed è quindi un flusso interrotto per `chat_stream`.
+- Il punto è stato svolto in due sessioni: la prima ha scritto il codice e i test di agente, servizio
+  e client senza arrivare al commit; la seconda ha ripreso dal diff (`pytest` già verde, 984 passed),
+  scritto i test del back-end e i documenti.
+- `sse` (lettore dei corpi `text/event-stream` nei test) spostato da `test_api.py` a `conftest.py`:
+  lo usano anche i test del back-end.
+- Il caso «client che chiude» del back-end si prova chiamando `_forward` direttamente (generatore
+  chiuso dopo due eventi), non con `TestClient`, che non garantisce quando chiude il generatore:
+  stesso approccio dei test di `_stream_events` nel servizio.
+
+### Punto 2 · Streaming nell'agente e nel back-end — fatto
+
+- Codice: `assistant/model.py` (`disable_streaming` per router, revisore e riassunto),
+  `assistant/agent.py` (`stream_turn`, `_turn_input`/`_turn_result` comuni con `run_turn`,
+  `_tool_use`), `assistant/api.py` (`POST /chat/stream`, controlli in una dipendenza, gestore di
+  `ApiError`, `_stream_events` e `_in_thread`), `assistant/api_client.py` (`iter_sse`,
+  `AgentClient.chat_stream`), `backend/api.py` (`POST /chats/{chat_id}/messages/stream`,
+  `open_stream` come dipendenza, `_forward`); contratto `frontend/backend-openapi.json` rigenerato.
+- Test: `StreamingFakeModel` e `sse` in `conftest.py`; nuovi test in `test_model.py` (CA-96),
+  `test_agent.py` (CA-94), `test_api.py` (CA-95), `test_api_client.py` (CA-97),
+  `test_backend_api.py` (CA-98: eventi inoltrati e salvataggio uguale a `/messages`, cronologia e
+  riassunto rimandati, errori prima del flusso in JSON — 400, 404, 422, 503, 504, 502, archivio
+  guasto —, `error` durante il flusso con LM Studio spento, flusso troncato ed errore imprevisto,
+  chat eliminata durante il turno, righe di log, `client_gone`, OpenAPI, preflight CORS).
+- CA-103: i test esistenti non sono cambiati (solo import e un parametro facoltativo in più
+  nell'aiuto `invalid_call` di `test_agent.py`).
+- `pytest` → 1003 passed, 84 deselected.
+- Documenti: README (sezione «Streaming della risposta (Server-Sent Events)»: endpoint, eventi,
+  decisione sulla bozza, errori e tempi; nessun comando nuovo, perché non ancora provato con i
+  servizi reali), `CLAUDE.md` (struttura: endpoint e funzioni nuove, `StreamingFakeModel`).
+- Problemi aperti: nessuna prova reale ancora (LM Studio con `stream=true` e strumenti, CA-101);
+  la chiusura del flusso da parte del browser è provata solo su `_forward` e non con un server
+  vero; front-end, prove reali e voce di diagnosi del README al punto 3.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

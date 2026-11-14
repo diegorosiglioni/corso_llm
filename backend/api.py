@@ -9,13 +9,15 @@ except the 422 of FastAPI for a request that does not match the schema.
 import json
 import logging
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import Body, FastAPI, Response
+from fastapi import Body, Depends, FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import OperationalError
 
@@ -113,6 +115,35 @@ SERVICE_UNAVAILABLE = _error(
     "(database_unavailable)."
 )
 AGENT_TIMEOUT = _error("L'agente non ha risposto entro il tempo massimo (agent_timeout).")
+SEND_ERRORS = {
+    400: INVALID_REQUEST, 404: CHAT_NOT_FOUND, 500: INTERNAL_ERROR, 502: AGENT_ERROR,
+    503: SERVICE_UNAVAILABLE, 504: AGENT_TIMEOUT,
+}
+# The same error answers in JSON: with "model" FastAPI would give them the media type of the
+# route (text/event-stream). ErrorBody is in the components through the other operations.
+SEND_STREAM_ERRORS = {
+    status: {
+        "description": response["description"],
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorBody"}}},
+    }
+    for status, response in SEND_ERRORS.items()
+}
+SEND_STREAM_DESCRIPTION = """\
+Come POST /chats/{chat_id}/messages, con la risposta come Server-Sent Events mentre l'agente \
+lavora. Ogni evento ha un nome e un oggetto JSON:
+- `question`: la domanda salvata (ChatMessageInfo); primo evento;
+- `text` {delta}: un pezzo del testo dell'agente;
+- `reset` {reason, detail}: il testo arrivato dall'ultimo reset non sarà la risposta; reason \
+`tools` se l'agente chiama strumenti, `review` se il revisore la respinge (detail = motivo);
+- `tool_start` {id, name, args}: l'agente usa uno strumento;
+- `tool_end` {id, name, args, result, ok}: lo strumento ha risposto;
+- `done`: domanda e risposta salvate (come la risposta di POST /chats/{chat_id}/messages); ultimo;
+- `error` {error, detail}: il turno si è fermato, con i codici di POST \
+/chats/{chat_id}/messages; ultimo.
+
+La risposta si salva solo alla fine; dopo un errore la domanda resta senza risposta e la \
+cronologia dell'agente non cambia. Commenti `: ping` ogni 15 s senza eventi. Gli errori scoperti \
+prima del flusso (richiesta, chat, database, agente non raggiungibile) sono risposte JSON."""
 
 
 # --- Errors and logs (specification of step 7, §6 and §7) ---
@@ -179,24 +210,28 @@ def _log_error(prefix: str, error: ApiError, started: float, exc_info: bool = Fa
     )
 
 
+def _logged_error(prefix: str, exception: Exception, started: float) -> ApiError:
+    """The answer for `exception`, logged: errors of the archive and of the agent become their
+    HTTP answer, an unexpected exception 500 internal_error with the traceback in the log only."""
+    error = _api_error(exception)
+    if error is None:
+        error = ApiError(500, "internal_error", INTERNAL_DETAIL)
+        _log_error(prefix, error, started, exc_info=True)
+    else:
+        _log_error(prefix, error, started)
+    return error
+
+
 def _answer(prefix: str, work: Callable[[float], Any]):
     """Result of `work(started)` (which logs its own success), or the logged error response.
 
-    `prefix` starts the log line ("backend response=get_chat chat=3"). Errors of the archive
-    become their HTTP answer; an unexpected exception becomes 500 internal_error, with the
-    traceback in the log only.
+    `prefix` starts the log line ("backend response=get_chat chat=3").
     """
     started = time.monotonic()
     try:
         return work(started)
     except Exception as exception:  # every error becomes an answer
-        error = _api_error(exception)
-        if error is None:
-            error = ApiError(500, "internal_error", INTERNAL_DETAIL)
-            _log_error(prefix, error, started, exc_info=True)
-        else:
-            _log_error(prefix, error, started)
-        return error.response()
+        return _logged_error(prefix, exception, started).response()
 
 
 def _chat_info(chat: ChatRecord) -> dict:
@@ -218,16 +253,92 @@ def _message_info(message: MessageRecord) -> dict:
     }
 
 
+def _tool_names(tools_used: list[dict]) -> str:
+    return ",".join(str(tool.get("name")) for tool in tools_used)
+
+
+# --- Streaming (specification of the streaming, §6) ---
+
+@dataclass(frozen=True)
+class OpenStream:
+    """A question saved and the stream of the agent already open, before the answer starts."""
+
+    chat_id: int
+    question: MessageRecord
+    events: Iterator[tuple[str, dict]]  # AgentClient.chat_stream
+    started: float  # time.monotonic() of the request
+
+
+def _stream_prefix(chat_id: int) -> str:
+    return f"backend response=send_message_stream chat={chat_id}"
+
+
+def _forward(store: ChatStore, stream: OpenStream) -> Iterator[ServerSentEvent]:
+    """question, the events of the agent as they arrive, then done (answer saved) or error; logs
+    the outcome, client_gone if the generator is closed before the end."""
+    prefix = _stream_prefix(stream.chat_id)
+    finished = False
+    question = ChatMessageInfo.model_validate(_message_info(stream.question))
+    try:
+        yield ServerSentEvent(event="question", data=question)
+        for name, data in stream.events:
+            if name != "done":
+                yield ServerSentEvent(event=name, data=data)
+                continue
+            answer = store.add_answer(
+                stream.chat_id, data["reply"], data["tools_used"],
+                AgentState(history=data["history"], summary=data["summary"]),
+            )
+            log.info(
+                "%s status=200 outcome=done tools=%s reply_chars=%d duration_ms=%d",
+                prefix, _tool_names(answer.tools_used), len(answer.content),
+                _elapsed_ms(stream.started),
+            )
+            finished = True
+            body = SendMessageResponse(
+                question=question, answer=ChatMessageInfo.model_validate(_message_info(answer))
+            )
+            yield ServerSentEvent(event="done", data=body)
+            return
+        raise RuntimeError("flusso dell'agente finito senza 'done'")  # chat_stream never does it
+    except Exception as exception:  # every error of the turn becomes an "error" event
+        error = _api_error(exception)
+        unexpected = error is None
+        if unexpected:
+            error = ApiError(500, "internal_error", INTERNAL_DETAIL)
+        cause = f" cause={_json(error.cause.strip())}" if error.cause else ""
+        log.log(
+            logging.ERROR if unexpected else logging.WARNING,
+            "%s status=200 outcome=error error=%s detail=%s duration_ms=%d%s",
+            prefix, error.code, _json(error.detail), _elapsed_ms(stream.started), cause,
+            exc_info=unexpected,
+        )
+        finished = True
+        yield ServerSentEvent(event="error", data={"error": error.code, "detail": error.detail})
+    finally:
+        stream.events.close()  # closes the connection to the agent
+        if not finished:
+            log.info(
+                "%s status=200 outcome=client_gone duration_ms=%d",
+                prefix, _elapsed_ms(stream.started),
+            )
+
+
 def create_app(
     *, store: ChatStore, agent, cors_origins: Sequence[str] = ()
 ) -> FastAPI:
     """App on the chat archive `store`; `agent` answers the questions (an AgentClient or a fake
-    with the same `chat` method).
+    with the same `chat` and `chat_stream` methods).
 
     The browser pages served from `cors_origins` may call the API (CORS, step 8); the middleware
     wraps the whole app, so error answers carry the CORS headers too and the page can read them.
     """
     app = FastAPI(title=TITLE, description=DESCRIPTION)
+
+    @app.exception_handler(ApiError)
+    def api_error(_request, error: ApiError) -> JSONResponse:  # errors before a stream
+        return error.response()
+
     if cors_origins:
         app.add_middleware(
             CORSMiddleware,
@@ -301,10 +412,7 @@ def create_app(
         "/chats/{chat_id}/messages",
         status_code=201,
         response_model=SendMessageResponse,
-        responses={
-            400: INVALID_REQUEST, 404: CHAT_NOT_FOUND, 500: INTERNAL_ERROR, 502: AGENT_ERROR,
-            503: SERVICE_UNAVAILABLE, 504: AGENT_TIMEOUT,
-        },
+        responses=SEND_ERRORS,
         summary="Invia un messaggio",
         description=(
             "Salva la domanda, la manda all'agente con la cronologia e il riassunto della chat, "
@@ -331,12 +439,40 @@ def create_app(
             log.info(
                 "backend response=send_message chat=%d status=201 tools=%s reply_chars=%d "
                 "duration_ms=%d",
-                chat_id, ",".join(str(tool.get("name")) for tool in answer.tools_used),
-                len(answer.content), _elapsed_ms(started),
+                chat_id, _tool_names(answer.tools_used), len(answer.content),
+                _elapsed_ms(started),
             )
             return {"question": _message_info(question), "answer": _message_info(answer)}
 
         return _answer(f"backend response=send_message chat={chat_id}", work)
+
+    def open_stream(chat_id: int, request: SendMessageRequest) -> OpenStream:
+        """Before the stream: the question saved and the stream of the agent open; an error
+        becomes the JSON answer of /messages (with the question saved, if it was)."""
+        log.info(
+            "backend request=send_message_stream chat=%d chars=%d", chat_id, len(request.content)
+        )
+        started = time.monotonic()
+        try:
+            question, state = store.add_question(chat_id, request.content)
+            log.info(
+                "backend agent_call chat=%d history=%d summary_chars=%d stream=true",
+                chat_id, len(state.history), len(state.summary),
+            )
+            events = agent.chat_stream(state.history, state.summary, message=question.content)
+        except Exception as exception:
+            raise _logged_error(_stream_prefix(chat_id), exception, started) from None
+        return OpenStream(chat_id, question, events, started)
+
+    @app.post(
+        "/chats/{chat_id}/messages/stream",
+        response_class=EventSourceResponse,
+        responses=SEND_STREAM_ERRORS,
+        summary="Invia un messaggio con la risposta in streaming",
+        description=SEND_STREAM_DESCRIPTION,
+    )
+    def send_message_stream(stream: Annotated[OpenStream, Depends(open_stream)]):
+        yield from _forward(store, stream)
 
     @app.delete(
         "/chats/{chat_id}",

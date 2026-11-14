@@ -10,10 +10,11 @@ from assistant.agent import (
     messages_from_json,
     messages_to_json,
     run_turn,
+    stream_turn,
 )
 from assistant.reviewer import ReviewDecision, feedback_message, is_feedback
 from assistant.router import RouteDecision, refusal_text
-from conftest import FakeModel, fake_graph, lm_studio_error, tool_call
+from conftest import FakeModel, StreamingFakeModel, fake_graph, lm_studio_error, tool_call
 
 TOKYO = {"timezone": "Asia/Tokyo", "datetime": "2026-10-27T00:47:12+09:00"}
 
@@ -22,9 +23,9 @@ def contents(messages):
     return [m.content for m in messages]
 
 
-def invalid_call(id="c1"):
+def invalid_call(id="c1", args="{timezone", error="json"):
     return AIMessage("", invalid_tool_calls=[{
-        "name": "get_current_time", "args": "{timezone", "id": id, "error": "json",
+        "name": "get_current_time", "args": args, "id": id, "error": error,
         "type": "invalid_tool_call",
     }])
 
@@ -176,6 +177,154 @@ def test_feedback_of_the_reviewer_stays_in_the_history():
     result = run_turn(fake_graph(model, reviewer=reviewer), [], "", [HumanMessage("domanda")])
     assert result.reply == "completa"
     assert is_feedback(result.history[2])
+
+
+# --- stream_turn (CA-94) ---
+
+def streamed(replies, *, history=(), summary="", question="domanda", **options):
+    """(events without done, TurnResult of done) of a turn with a streaming fake model; checks
+    that done is the last event, the only one."""
+    graph = fake_graph(StreamingFakeModel(replies=list(replies)), **options)
+    events = list(stream_turn(graph, list(history), summary, [HumanMessage(question)]))
+    names = [name for name, _ in events]
+    assert names.count("done") == 1 and names[-1] == "done"
+    return events[:-1], events[-1][1]
+
+
+def same_result(streamed_result: TurnResult, result: TurnResult) -> bool:
+    return (
+        streamed_result.reply == result.reply
+        and streamed_result.tools_used == result.tools_used
+        and messages_to_json(streamed_result.history) == messages_to_json(result.history)
+        and streamed_result.summary == result.summary
+    )
+
+
+def texts(*pieces):
+    return [("text", {"delta": piece}) for piece in pieces]
+
+
+def test_stream_of_a_simple_reply():
+    events, result = streamed([AIMessage("Ciao, come stai?")])
+    assert events == texts("Ciao, ", "come ", "stai?")
+    assert result.reply == "Ciao, come stai?" and result.tools_used == []
+
+
+def test_stream_with_a_tool_and_text_before_the_call():
+    call = AIMessage("Controllo l'ora.", tool_calls=[
+        {"name": "get_current_time", "args": {"timezone": "Asia/Tokyo"}, "id": "c1"}
+    ])
+    events, result = streamed([call, AIMessage("Sono le 00:47.")])
+    used = {"name": "get_current_time", "args": {"timezone": "Asia/Tokyo"}, "result": TOKYO,
+            "ok": True}
+    assert events == texts("Controllo ", "l'ora.") + [
+        ("reset", {"reason": "tools", "detail": ""}),
+        ("tool_start", {"id": "c1", "name": "get_current_time", "args": {"timezone": "Asia/Tokyo"}}),
+        ("tool_end", {"id": "c1", **used}),
+    ] + texts("Sono ", "le ", "00:47.")
+    assert result.tools_used == [used]
+
+
+def test_no_reset_when_the_call_comes_without_text():
+    events, _ = streamed([tool_call(), AIMessage("Fatto.")])
+    assert [name for name, _ in events] == ["tool_start", "tool_end", "text"]
+
+
+def test_stream_with_a_tool_error():
+    events, result = streamed([tool_call("Marte/Base"), AIMessage("Fuso sconosciuto.")])
+    tool_end = dict(events)["tool_end"]
+    assert tool_end["ok"] is False and "Fuso orario sconosciuto" in tool_end["result"]["error"]
+    assert result.tools_used[0]["ok"] is False
+
+
+# In pieces LangChain completes truncated JSON ("{timezone" → {}): only text that is not JSON
+# stays an invalid call.
+NOT_JSON = "timezone=Asia/Tokyo"
+
+
+def test_stream_with_an_invalid_call():
+    events, result = streamed([invalid_call(args=NOT_JSON), AIMessage("Riprovo.")])
+    data = dict(events)
+    assert data["tool_start"] == {"id": "c1", "name": "get_current_time", "args": NOT_JSON}
+    assert data["tool_end"]["args"] == NOT_JSON and data["tool_end"]["ok"] is False
+    assert "non interpretabili" in data["tool_end"]["result"]["error"]
+    assert result.tools_used[0]["args"] == NOT_JSON
+
+
+def test_stream_at_the_step_limit():
+    events, result = streamed([tool_call(id="c1"), tool_call(id="c2")], max_steps=2)
+    assert [(name, data["id"]) for name, data in events] == [
+        ("tool_start", "c1"), ("tool_end", "c1"), ("tool_start", "c2"), ("tool_end", "c2"),
+    ]
+    assert events[-1][1]["result"] == {"error": "Non eseguito: limite di passaggi raggiunto."}
+    assert result.reply == "Ho raggiunto il limite di 2 passaggi senza una risposta finale."
+
+
+def test_stream_of_a_refusal_has_only_done():
+    router = FakeModel([RouteDecision(category="out_of_scope", reason="calcio")])
+    events, result = streamed([], router=router)
+    assert events == [] and result.reply == refusal_text("calcio")
+
+
+def test_stream_when_the_reviewer_rejects_and_then_approves():
+    reviewer = FakeModel([
+        ReviewDecision(reason="manca il fuso", coherent=False),
+        ReviewDecision(reason="ok", coherent=True),
+    ])
+    events, result = streamed([AIMessage("Prima bozza"), AIMessage("Risposta giusta")],
+                              reviewer=reviewer)
+    assert events == texts("Prima ", "bozza") + [
+        ("reset", {"reason": "review", "detail": "manca il fuso"}),
+    ] + texts("Risposta ", "giusta")
+    assert result.reply == "Risposta giusta"
+
+
+def test_rejection_at_the_review_limit_keeps_the_text():
+    reviewer = FakeModel([ReviewDecision(reason="manca", coherent=False)])
+    events, result = streamed([AIMessage("Unica bozza")], reviewer=reviewer, max_reviews=1)
+    assert events == texts("Unica ", "bozza") and result.reply == "Unica bozza"
+
+
+def test_summary_router_and_reviewer_produce_no_text():
+    summary_model = StreamingFakeModel(replies=[AIMessage("Riassunto nuovo")])
+    history = [HumanMessage("d1"), AIMessage("r1"), HumanMessage("d2"), AIMessage("r2")]
+    events, result = streamed(
+        [AIMessage("r3")], history=history, summary_model=summary_model,
+        summary_max_messages=4, summary_keep_messages=3,
+    )
+    assert events == texts("r3")
+    assert result.summary == "Riassunto nuovo"
+    assert contents(result.history) == ["d2", "r2", "domanda", "r3"]
+
+
+@pytest.mark.parametrize("replies", [
+    [AIMessage("Ciao!")],
+    [tool_call(), AIMessage("Sono le 00:47.")],
+    [invalid_call(args=NOT_JSON, error=None), AIMessage("Riprovo.")],  # no error in pieces
+    [tool_call(id="c1"), tool_call(id="c2"), tool_call(id="c3")],
+], ids=["text", "tool", "invalid", "limit"])
+def test_done_is_the_result_of_run_turn(replies):
+    history = [HumanMessage("Mi chiamo Paolo"), AIMessage("Piacere.")]
+    _, result = streamed(copy.deepcopy(replies), history=history, summary="S0", max_steps=3)
+    graph = fake_graph(StreamingFakeModel(replies=copy.deepcopy(replies)), max_steps=3)
+    expected = run_turn(graph, history, "S0", [HumanMessage("domanda")])
+    assert same_result(result, expected)
+
+
+def test_stream_errors_reach_the_caller():
+    graph = fake_graph(StreamingFakeModel(replies=[lm_studio_error()]))
+    with pytest.raises(openai.APIConnectionError):
+        list(stream_turn(graph, [], "", [HumanMessage("ciao")]))
+
+
+def test_stream_leaves_the_arguments_untouched_and_can_be_closed_early():
+    history = [HumanMessage("Mi chiamo Paolo"), AIMessage("Piacere.")]
+    before = copy.deepcopy(history)
+    graph = fake_graph(StreamingFakeModel(replies=[AIMessage("Una risposta lunga")]))
+    events = stream_turn(graph, history, "", [HumanMessage("ciao")])
+    assert next(events) == ("text", {"delta": "Una "})
+    events.close()
+    assert history == before
 
 
 # --- JSON form of the messages ---

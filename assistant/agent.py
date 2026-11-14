@@ -5,10 +5,20 @@ come from the caller and go back updated, nothing is kept between two calls.
 """
 
 import json
+from collections.abc import Iterator
+from contextlib import closing
 from dataclasses import dataclass
 from uuid import uuid4
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AIMessageChunk,
+    BaseMessage,
+    HumanMessage,
+    ToolMessage,
+)
+
+from assistant.reviewer import is_feedback
 
 EMPTY_REPLY = "(Il modello non ha fornito una risposta.)"
 
@@ -21,6 +31,37 @@ class TurnResult:
     summary: str  # updated summary
 
 
+def _turn_input(
+    history: list[BaseMessage], summary: str, messages: list[BaseMessage]
+) -> tuple[dict, str]:
+    """Input of the graph and id of the last opening message."""
+    if not messages:
+        raise ValueError("nessun messaggio per aprire il turno")
+    # Copies: add_messages assigns the missing ids by changing the messages it receives.
+    opening = [m.model_copy(update={"id": str(uuid4())}) for m in messages]
+    state = {
+        "messages": [m.model_copy() for m in history] + opening,
+        "summary": summary,
+        "steps": 0,
+        "reviews": 0,
+    }
+    return state, opening[-1].id
+
+
+def _turn_result(state: dict, last_id: str) -> TurnResult:
+    """The result of the turn from the final state of the graph."""
+    new_history = list(state["messages"])
+    # The summary node removes messages from the start only and keeps at least the last one,
+    # which is the last opening message: the turn is what comes after it.
+    start = next(i for i, m in enumerate(new_history) if m.id == last_id) + 1
+    return TurnResult(
+        reply=new_history[-1].text.strip() or EMPTY_REPLY,
+        tools_used=_tools_used(new_history[start:]),
+        history=new_history,
+        summary=state["summary"],
+    )
+
+
 def run_turn(
     graph, history: list[BaseMessage], summary: str, messages: list[BaseMessage]
 ) -> TurnResult:
@@ -28,27 +69,73 @@ def run_turn(
 
     The graph's exceptions (for example openai.APIError) reach the caller.
     """
-    if not messages:
-        raise ValueError("nessun messaggio per aprire il turno")
-    # Copies: add_messages assigns the missing ids by changing the messages it receives.
-    opening = [m.model_copy(update={"id": str(uuid4())}) for m in messages]
-    result = graph.invoke({
-        "messages": [m.model_copy() for m in history] + opening,
-        "summary": summary,
-        "steps": 0,
-        "reviews": 0,
-    })
-    new_history = list(result["messages"])
-    # The summary node removes messages from the start only and keeps at least the last one,
-    # which is the last opening message: the turn is what comes after it.
-    last_id = opening[-1].id
-    start = next(i for i, m in enumerate(new_history) if m.id == last_id) + 1
-    return TurnResult(
-        reply=new_history[-1].text.strip() or EMPTY_REPLY,
-        tools_used=_tools_used(new_history[start:]),
-        history=new_history,
-        summary=result["summary"],
-    )
+    state, last_id = _turn_input(history, summary, messages)
+    return _turn_result(graph.invoke(state), last_id)
+
+
+def stream_turn(
+    graph, history: list[BaseMessage], summary: str, messages: list[BaseMessage]
+) -> Iterator[tuple[str, object]]:
+    """The same turn as run_turn, as events (name, data) while the graph runs (specification of
+    the streaming, §3 and §4).
+
+    "text" {"delta"} for the pieces of the agent's text; "reset" {"reason", "detail"} when the
+    text sent since the last reset will not be the reply ("tools" before tool calls, "review"
+    when the reviewer rejects it); "tool_start" {"id", "name", "args"} and "tool_end"
+    {"id", "name", "args", "result", "ok"} for each call; last "done" with the TurnResult. The
+    graph's exceptions reach the caller; closing the generator closes the graph's stream.
+    """
+    state, last_id = _turn_input(history, summary, messages)
+    calls: dict[str, dict] = {}  # id → call of the agent, for the arguments of tool_end
+    text_sent = False  # a "text" since the last "reset"
+    final = state
+    with closing(graph.stream(state, stream_mode=["messages", "updates", "values"])) as stream:
+        for mode, data in stream:
+            if mode == "values":
+                final = data
+            elif mode == "messages":
+                chunk, metadata = data
+                if (
+                    isinstance(chunk, AIMessageChunk)
+                    and metadata.get("langgraph_node") == "llm"
+                    and chunk.text
+                ):
+                    text_sent = True
+                    yield "text", {"delta": chunk.text}
+            else:
+                for node, update in data.items():
+                    for event in _update_events(node, update or {}, calls, text_sent):
+                        if event[0] == "reset":
+                            text_sent = False
+                        yield event
+    yield "done", _turn_result(final, last_id)
+
+
+def _update_events(node: str, update: dict, calls: dict[str, dict], text_sent: bool):
+    """The events of what `node` added to the state."""
+    messages = update.get("messages") or []
+    if node == "llm":
+        for message in messages:
+            requested = _calls(message)
+            if requested and text_sent:
+                yield "reset", {"reason": "tools", "detail": ""}
+            for call in requested:
+                calls[call["id"]] = call
+                yield "tool_start", {"id": call["id"], "name": call["name"], "args": call["args"]}
+    elif node in ("tools", "limit"):
+        for message in messages:
+            if isinstance(message, ToolMessage):
+                call = calls.get(message.tool_call_id, {})
+                yield "tool_end", {"id": message.tool_call_id, **_tool_use(message, call)}
+    elif node == "reviewer" and text_sent and any(is_feedback(m) for m in messages):
+        yield "reset", {"reason": "review", "detail": update.get("review_reason", "")}
+
+
+def _calls(message: BaseMessage) -> list[dict]:
+    """Valid calls and calls with unparsable arguments of an agent's message."""
+    if not isinstance(message, AIMessage):
+        return []
+    return list(message.tool_calls) + list(message.invalid_tool_calls)
 
 
 def _decode(content: str):
@@ -58,23 +145,26 @@ def _decode(content: str):
         return content
 
 
+def _tool_use(message: ToolMessage, call: dict) -> dict:
+    """The entry of tools_used for a tool answer and its call."""
+    result = _decode(message.content)
+    return {
+        "name": message.name or call.get("name"),
+        "args": call.get("args"),
+        "result": result,
+        "ok": not (isinstance(result, dict) and "error" in result),
+    }
+
+
 def _tools_used(turn: list[BaseMessage]) -> list[dict]:
     """One entry for each tool answer of the turn, with the arguments of its call."""
     calls: dict[str, dict] = {}
     used = []
     for message in turn:
-        if isinstance(message, AIMessage):
-            for call in list(message.tool_calls) + list(message.invalid_tool_calls):
-                calls[call["id"]] = call
-        elif isinstance(message, ToolMessage):
-            call = calls.get(message.tool_call_id, {})
-            result = _decode(message.content)
-            used.append({
-                "name": message.name or call.get("name"),
-                "args": call.get("args"),
-                "result": result,
-                "ok": not (isinstance(result, dict) and "error" in result),
-            })
+        for call in _calls(message):
+            calls[call["id"]] = call
+        if isinstance(message, ToolMessage):
+            used.append(_tool_use(message, calls.get(message.tool_call_id, {})))
     return used
 
 

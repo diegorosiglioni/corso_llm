@@ -363,6 +363,131 @@
           }
         }
       }
+    },
+    "/chats/{chat_id}/messages/stream": {
+      "post": {
+        "summary": "Invia un messaggio con la risposta in streaming",
+        "description": "Come POST /chats/{chat_id}/messages, con la risposta come Server-Sent Events mentre l'agente lavora. Ogni evento ha un nome e un oggetto JSON:\n- `question`: la domanda salvata (ChatMessageInfo); primo evento;\n- `text` {delta}: un pezzo del testo dell'agente;\n- `reset` {reason, detail}: il testo arrivato dall'ultimo reset non sarà la risposta; reason `tools` se l'agente chiama strumenti, `review` se il revisore la respinge (detail = motivo);\n- `tool_start` {id, name, args}: l'agente usa uno strumento;\n- `tool_end` {id, name, args, result, ok}: lo strumento ha risposto;\n- `done`: domanda e risposta salvate (come la risposta di POST /chats/{chat_id}/messages); ultimo;\n- `error` {error, detail}: il turno si è fermato, con i codici di POST /chats/{chat_id}/messages; ultimo.\n\nLa risposta si salva solo alla fine; dopo un errore la domanda resta senza risposta e la cronologia dell'agente non cambia. Commenti `: ping` ogni 15 s senza eventi. Gli errori scoperti prima del flusso (richiesta, chat, database, agente non raggiungibile) sono risposte JSON.",
+        "operationId": "send_message_stream_chats__chat_id__messages_stream_post",
+        "parameters": [
+          {
+            "name": "chat_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Chat Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/event-stream": {
+                "itemSchema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "string"
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "retry": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Richiesta non valida (invalid_request).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Chat inesistente (chat_not_found).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Errore imprevisto (internal_error).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "L'agente ha risposto con un errore (agent_error).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Agente non raggiungibile (agent_unavailable) o database non disponibile (database_unavailable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "L'agente non ha risposto entro il tempo massimo (agent_timeout).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
