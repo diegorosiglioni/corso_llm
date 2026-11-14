@@ -66,4 +66,4 @@ streaming facoltativo). Si fa solo ciò che chiede la traccia (decisione dell'ut
 
 - [x] Specifica dello streaming (eventi di testo e strumenti, Server-Sent Events nel back-end, decisione documentata su bozza o sola risposta approvata con il revisore attivo)
 - [x] Streaming nell'agente e nel back-end (messaggio completo salvato alla fine) con test
-- [ ] Streaming nel front-end (testo mentre arriva, indicazione dell'uso di uno strumento) e prova reale; README aggiornato
+- [x] Streaming nel front-end (testo mentre arriva, indicazione dell'uso di uno strumento) e prova reale; README aggiornato

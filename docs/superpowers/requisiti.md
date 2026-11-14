@@ -657,7 +657,11 @@ servizi attivi, agente non raggiungibile dall'host, «17 * 23 fa 391.» con `cal
 Riferimento: `LLM_Lez_6.pdf`, «Facoltativo — streaming della risposta» (riassunto in `lezione6.md`).
 Stato: scritti il 2026-11-14 in modalità autonoma insieme alla specifica
 `specs/2026-11-14-streaming-design.md`; le scelte del progettista sono nella sua §1. Esiti delle
-verifiche in `PROGRESS.md`.
+verifiche in `PROGRESS.md`. CA-94…CA-99 e CA-103 verificati con `pytest` (CA-99 con Node 24.15.0);
+CA-100 con `pytest -m browser` (Edge e Chrome); CA-101 e CA-102 il 2026-11-14 con LM Studio
+(`google/gemma-4-e2b`), il PostgreSQL 18.6 del container dello Step 7 ed Edge; CA-104 nel README.
+Per CA-103: la prova dal browser dello Step 8 (CA-86) cambia solo nelle righe di log attese, perché
+la pagina ora usa l'endpoint con lo streaming.
 
 - **RF-81** *Agente in streaming* — `POST /chat/stream` riceve lo stesso corpo di `/chat` e risponde
   con Server-Sent Events: i pezzi del testo dell'agente man mano che il modello li scrive (`text`),

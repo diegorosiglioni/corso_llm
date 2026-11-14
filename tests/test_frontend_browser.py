@@ -2,7 +2,8 @@
 BROWSER_CHANNEL=chrome), driven by Playwright without a window.
 
 The back-end is the real app on SQLite in memory, with CORS for the front-end, and a fake agent
-the tests control; both services run with uvicorn on free ports in threads of this process.
+the tests control (its stream of events too); both services run with uvicorn on free ports in
+threads of this process.
 Marker `browser`: pytest -m browser.
 """
 
@@ -69,11 +70,19 @@ class ServerThread:
         self._thread.join(10)
 
 
-class FakeAgent:
-    """The agent behind the back-end, with the `chat` method of AgentClient.
+Event = tuple[str, dict]
 
-    Answers `reply` with `tools`; raises `error` when set; when `gate` is an Event, waits for it
-    before answering (a slow agent). `calls` records the messages received.
+
+class FakeAgent:
+    """The agent behind the back-end, with the `chat_stream` method of AgentClient (the page
+    sends with the streaming).
+
+    `error`, when set, is raised before the stream (an agent that cannot be reached or refuses
+    the request: a JSON answer of the back-end). Otherwise the stream waits for `gate` when it is
+    an Event (a slow agent), then gives `events` — pairs (name, data), or Events to wait for
+    before going on — by default tool_start and tool_end of every tool and the reply in two
+    pieces; then raises `stream_error` when set (an error during the turn: an "error" event of
+    the back-end) or ends with done: `reply` with `tools`. `calls` records the messages received.
     """
 
     def __init__(self):
@@ -83,17 +92,43 @@ class FakeAgent:
         self.reply = "17 * 23 fa 391."
         self.tools: list[dict] = [CALCULATE]
         self.error: Exception | None = None
+        self.stream_error: Exception | None = None
         self.gate: threading.Event | None = None
+        self.events: list[Event | threading.Event] | None = None
         self.calls: list[str] = []
 
-    def chat(self, history, summary, *, message=None, prompt=None):
+    def waits(self) -> list[threading.Event]:
+        """The Events the stream may wait for: set at the end of every test."""
+        return [item for item in [self.gate, *(self.events or [])]
+                if isinstance(item, threading.Event)]
+
+    def default_events(self) -> list[Event]:
+        events: list[Event] = []
+        for number, tool in enumerate(self.tools):
+            call = {"id": f"call-{number}", "name": tool["name"], "args": tool["args"]}
+            events += [("tool_start", call), ("tool_end", {**call, **tool})]
+        half = len(self.reply) // 2
+        return [*events, ("text", {"delta": self.reply[:half]}),
+                ("text", {"delta": self.reply[half:]})]
+
+    def chat_stream(self, history, summary, *, message=None, prompt=None):
         self.calls.append(message)
-        if self.gate is not None:
-            self.gate.wait(30)
         if self.error is not None:
             raise self.error
+        return self._stream(history, summary, message)
+
+    def _stream(self, history, summary, message):
+        if self.gate is not None:
+            self.gate.wait(30)
+        for item in self.default_events() if self.events is None else self.events:
+            if isinstance(item, threading.Event):
+                item.wait(30)
+            else:
+                yield item
+        if self.stream_error is not None:
+            raise self.stream_error
         turn = [{"role": "user", "content": message}, {"role": "assistant", "content": self.reply}]
-        return {
+        yield "done", {
             "reply": self.reply, "tools_used": self.tools,
             "history": [*history, *turn], "summary": summary,
         }
@@ -117,8 +152,8 @@ def agent(module_agent) -> Iterator[FakeAgent]:
     """The fake agent, reset for every test; a waiting answer is let go at the end."""
     module_agent.reset()
     yield module_agent
-    if module_agent.gate is not None:
-        module_agent.gate.set()
+    for wait in module_agent.waits():
+        wait.set()
 
 
 class Services:
@@ -595,3 +630,131 @@ def test_html_in_messages_is_shown_as_text(page, services, store, agent):  # CA-
     expect(messages(page).nth(1).locator("pre")).to_contain_text("<i>a</i>")
     assert page.locator("#messages b, #messages i, #messages img, #messages script").count() == 0
     assert page.evaluate("window.injected") is None
+
+
+# --- the answer arriving with the streaming (CA-100) ---
+
+DRAFT_LABEL = "Bozza: la risposta può ancora cambiare"
+CALL = {"id": "call-1", "name": "calculate", "args": {"expression": "17 * 23"}}
+CALCULATE_DETAIL = 'calculate\nargomenti: {"expression":"17 * 23"}\nrisultato: 391'
+
+
+def draft(page: Page):
+    return page.locator("#draft")
+
+
+def test_text_arrives_in_pieces_with_the_tool(page, services, store, agent):  # CA-100
+    chat = store.create_chat("Streaming")
+    tool_ran, text_started = threading.Event(), threading.Event()
+    agent.events = [
+        ("tool_start", CALL), tool_ran, ("tool_end", {**CALL, "result": 391, "ok": True}),
+        ("text", {"delta": "17 * 23 "}), text_started, ("text", {"delta": "fa 391."}),
+    ]
+    frontend_url, _ = services
+    open_page(page, f"{frontend_url}/#/chats/{chat.id}")
+    send(page, "Quanto fa 17 * 23?")
+    # the tool is shown while the agent waits for it, under the waiting line
+    expect(draft(page)).to_have_class("message assistant draft")
+    expect(draft(page).locator(".draft-label")).to_have_text(DRAFT_LABEL)
+    expect(draft(page).locator(".draft-tools li")).to_have_text(["Uso lo strumento calculate…"])
+    expect(draft(page).locator(".draft-text")).to_have_count(0)
+    expect(page.locator("#waiting")).to_have_text(WAITING)
+    expect(page.locator("#messages > li")).to_have_count(3)  # question, waiting line, draft
+    expect(field(page)).to_be_disabled()
+    tool_ran.set()
+    # the first piece of text before the end of the turn, the tool with its result
+    expect(draft(page).locator(".draft-text")).to_have_text("17 * 23 ")
+    assert draft(page).locator(".draft-tools li").all_inner_texts() == [CALCULATE_DETAIL]
+    expect(page.locator("#waiting")).to_be_visible()
+    # the draft is not a message: only the question has a message text
+    expect(page.locator("#messages .message-text")).to_have_text(["Quanto fa 17 * 23?"])
+    # another chat meanwhile, then back: the answer arriving is still there
+    page.get_by_role("button", name="Nuova chat").click()
+    expect(page.locator("#chat-title")).to_have_text("Nuova chat")
+    expect(draft(page)).to_have_count(0)
+    expect(field(page)).to_be_enabled()
+    chat_button(page, "Streaming").click()
+    expect(draft(page).locator(".draft-text")).to_have_text("17 * 23 ")
+    # the question saved is not shown twice
+    expect(page.locator("#messages .message.user")).to_have_count(1)
+    text_started.set()
+    # done: the saved messages in place of the question waiting and of the draft
+    expect(draft(page)).to_have_count(0)
+    expect(page.locator("#waiting")).to_have_count(0)
+    expect(messages(page).locator(".message-text")).to_have_text(
+        ["Quanto fa 17 * 23?", "17 * 23 fa 391."]
+    )
+    expect(messages(page)).to_have_class(["message user", "message assistant"])
+    expect(messages(page).nth(1).locator("summary")).to_have_text("Strumenti usati: calculate")
+    expect(field(page)).to_be_enabled()
+    _, saved = store.get_chat(chat.id)
+    assert [(m.role, m.content) for m in saved] == [
+        ("user", "Quanto fa 17 * 23?"), ("assistant", "17 * 23 fa 391."),
+    ]
+
+
+def test_resets_for_tools_and_for_the_reviewer(page, services, store, agent):  # CA-100
+    chat = store.create_chat("Revisore")
+    first_draft, rewritten = threading.Event(), threading.Event()
+    agent.events = [
+        ("text", {"delta": "Ci penso"}), ("reset", {"reason": "tools", "detail": ""}),
+        ("tool_start", CALL), ("tool_end", {**CALL, "result": 391, "ok": True}),
+        ("text", {"delta": "Il calcolo è fatto."}), first_draft,
+        ("reset", {"reason": "review", "detail": "La risposta non dà il risultato."}),
+        ("text", {"delta": "17 * 23 fa 391."}), rewritten,
+    ]
+    frontend_url, _ = services
+    open_page(page, f"{frontend_url}/#/chats/{chat.id}")
+    send(page, "Quanto fa 17 * 23?")
+    # reset for the tools: the text before the call is gone, without a notice
+    expect(draft(page).locator(".draft-text")).to_have_text("Il calcolo è fatto.")
+    expect(draft(page).locator(".draft-notice")).to_have_count(0)
+    first_draft.set()
+    # reset of the reviewer: the draft is written again, with the reason
+    expect(draft(page).locator(".draft-notice")).to_have_text(
+        "Il revisore ha chiesto di riscrivere la risposta: La risposta non dà il risultato."
+    )
+    expect(draft(page).locator(".draft-text")).to_have_text("17 * 23 fa 391.")
+    assert draft(page).locator(".draft-tools li").all_inner_texts() == [CALCULATE_DETAIL]
+    rewritten.set()
+    expect(draft(page)).to_have_count(0)
+    expect(messages(page).locator(".message-text")).to_have_text(
+        ["Quanto fa 17 * 23?", "17 * 23 fa 391."]
+    )
+
+
+def test_error_during_the_stream(page, services, store, agent):  # CA-100, RF-84
+    chat = store.create_chat("Interrotta")
+    agent.events = [("text", {"delta": "Sto calcol"})]
+    agent.stream_error = AgentError("model_unavailable", "LM Studio non risponde")
+    frontend_url, _ = services
+    open_page(page, f"{frontend_url}/#/chats/{chat.id}")
+    send(page, "Quanto fa 17 * 23?")
+    expect(page.locator("#error-text")).to_have_text(
+        "L'assistente ha risposto con un errore: l'agente ha risposto con un errore "
+        "(model_unavailable): LM Studio non risponde. La domanda è salvata nella chat: riprova."
+    )
+    expect(draft(page)).to_have_count(0)
+    expect(page.locator("#waiting")).to_have_count(0)
+    expect(messages(page).locator(".message-text")).to_have_text(["Quanto fa 17 * 23?"])
+    expect(messages(page)).to_have_class(["message user"])
+    expect(field(page)).to_be_enabled()
+    expect(field(page)).to_have_value("")  # saved: the text does not come back
+    _, saved = store.get_chat(chat.id)
+    assert [(m.role, m.content) for m in saved] == [("user", "Quanto fa 17 * 23?")]
+    page.get_by_role("button", name="Nuova chat").click()  # the page is still usable
+    expect(page.locator("#chat-title")).to_have_text("Nuova chat")
+
+
+def test_unexpected_error_of_the_backend_during_the_stream(page, services, store, agent):
+    # CA-100: an exception that is not of the agent becomes "error" internal_error
+    chat = store.create_chat("Guasto")
+    agent.stream_error = RuntimeError("guasto imprevisto")
+    frontend_url, _ = services
+    open_page(page, f"{frontend_url}/#/chats/{chat.id}")
+    send(page, "Ci sei?")
+    expect(page.locator("#error-text")).to_have_text(
+        "Errore del back-end durante la risposta: errore interno del back-end; dettagli nel log."
+    )
+    expect(messages(page).locator(".message-text")).to_have_text(["Ci sei?"])
+    expect(field(page)).to_have_value("")

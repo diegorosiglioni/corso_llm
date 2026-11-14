@@ -35,7 +35,9 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
 - Front-end (Step 8) nel pacchetto `frontend/`: `config.py` (`BACKEND_URL`,
   `FRONTEND_HOST`/`FRONTEND_PORT`), `app.py` (file statici e `/config.js`), `__main__.py` (avvio con
   `python -m frontend`), pagina in `frontend/static/` (HTML, CSS, JavaScript senza framework:
-  `api.js` client del back-end, `texts.js` testi e funzioni pure, `app.js` DOM), contratto
+  `api.js` client del back-end con il lettore SSE `readEvents` e `sendMessageStream`, `texts.js`
+  testi e funzioni pure, compresa `applyEvent` per la bozza in arrivo, `app.js` DOM; la pagina
+  invia con lo streaming), contratto
   `frontend/backend-openapi.json` (OpenAPI del back-end, rigenerato con `UPDATE_CONTRACT=1` su
   `tests/test_frontend_contract.py`). Da `assistant` importa solo la configurazione; nulla da
   `backend`.
@@ -69,7 +71,8 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
   - prove reali del back-end (PostgreSQL nel container del README, porta 5433):
     `$env:TEST_DATABASE_URL = "postgresql://lab:labprova@127.0.0.1:5433/assistente"`, poi
     `pytest tests/test_backend_store.py -m real` (solo PostgreSQL), `pytest tests/test_real.py -m real -k backend`
-    e, dal browser con tutti i servizi, `pytest tests/test_real.py -m real -k frontend`
+    e, dal browser con tutti i servizi, `pytest tests/test_real.py -m real -k frontend` (compreso lo
+    streaming; solo le prove dello streaming con `-k stream`)
   - avvio locale, in due terminali: servizio `.\.venv\Scripts\python.exe -m assistant.service`
     (variabili di LM Studio), poi CLI `.\.venv\Scripts\python.exe -m assistant`; back-end in un
     terzo terminale con `DATABASE_URL` impostata: `.\.venv\Scripts\python.exe -m backend`;

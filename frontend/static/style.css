@@ -167,7 +167,8 @@ button.primary {
   opacity: 0.75;
 }
 
-.message-text {
+.message-text,
+.draft-text {
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -203,6 +204,40 @@ button.primary {
 .waiting {
   align-self: flex-start;
   color: #59636e;
+  font-style: italic;
+}
+
+/* the answer arriving: provisional until the turn ends */
+.message.draft {
+  border-style: dashed;
+  background: #fff;
+}
+
+.draft-label {
+  margin: 0 0 0.25rem;
+  font-size: 0.8rem;
+  color: #59636e;
+}
+
+.draft-notice {
+  margin: 0 0 0.375rem;
+  padding: 0.25rem 0.5rem;
+  border-left: 3px solid #c08a1e;
+  background: #fdf5e4;
+  font-size: 0.9rem;
+}
+
+.draft-tools {
+  list-style: none;
+  margin: 0 0 0.375rem;
+  padding: 0;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.draft-tools li.running {
+  color: #24476b;
   font-style: italic;
 }
 

@@ -5,8 +5,8 @@ import { test } from "node:test";
 
 import { BackendError } from "../../frontend/static/api.js";
 import {
-  TEXTS, chatSubtitle, errorMessage, formatDate, questionSaved, toolDetail, toolsSummary,
-  visibleMessages,
+  EMPTY_DRAFT, TEXTS, applyEvent, chatSubtitle, draftToolLine, draftVisible, errorMessage,
+  formatDate, questionSaved, reviewNotice, toolDetail, toolsSummary, visibleMessages,
 } from "../../frontend/static/texts.js";
 
 const URL = "http://127.0.0.1:8001";
@@ -169,4 +169,131 @@ test("visibleMessages: the saved question waiting for its answer is not shown tw
   assert.deepEqual(visibleMessages([old, question], "altra domanda"), [old, question]);
   assert.deepEqual(visibleMessages([old], "Ciao"), [old]); // an answer is never removed
   assert.deepEqual(visibleMessages([], "Ciao"), []);
+});
+
+// --- streaming (specification of the streaming, §7; CA-99) ---
+
+test("errors inside a stream: the messages of the codes without streaming", () => {
+  assert.equal(
+    message(200, "agent_unavailable", "agente non raggiungibile"),
+    "L'assistente non è raggiungibile in questo momento. La domanda è salvata nella chat: " +
+      "riprova più tardi.",
+  );
+  assert.equal(
+    message(200, "agent_timeout", "x"),
+    "L'assistente non ha risposto in tempo. La domanda è salvata nella chat: riprova.",
+  );
+  assert.equal(
+    message(200, "agent_error", "l'agente ha risposto con un errore (model_unavailable): spento."),
+    "L'assistente ha risposto con un errore: l'agente ha risposto con un errore " +
+      "(model_unavailable): spento. La domanda è salvata nella chat: riprova.",
+  );
+  assert.equal(
+    message(200, "database_unavailable", "x"),
+    "L'archivio delle chat non è disponibile. Riprova tra poco.",
+  );
+  assert.equal(message(200, "chat_not_found", "x"), "Questa chat non esiste più.");
+});
+
+test("stream interrupted, and the other errors inside a stream", () => {
+  assert.equal(
+    message(200, "stream_interrupted", "flusso interrotto"),
+    "La risposta si è interrotta prima della fine. La domanda è salvata nella chat: riprova.",
+  );
+  assert.equal(
+    message(200, "internal_error", "errore interno del back-end; dettagli nel log"),
+    "Errore del back-end durante la risposta: errore interno del back-end; dettagli nel log.",
+  );
+  assert.equal(message(200, "other_code"), "Errore del back-end durante la risposta.");
+  // stream_interrupted happens only inside a stream
+  assert.equal(message(500, "stream_interrupted"), "Errore del back-end (500).");
+});
+
+test("questionSaved: after every error inside a stream", () => {
+  const saved = (status, code) => questionSaved(new BackendError(status, code, null));
+  assert.equal(saved(200, "stream_interrupted"), true);
+  assert.equal(saved(200, "agent_error"), true);
+  assert.equal(saved(200, "internal_error"), true);
+  assert.equal(saved(200, null), false); // a 2xx answer that is not JSON, not a stream
+});
+
+test("texts of the answer arriving", () => {
+  assert.equal(TEXTS.draftLabel, "Bozza: la risposta può ancora cambiare");
+  assert.equal(TEXTS.toolRunning("calculate"), "Uso lo strumento calculate…");
+  assert.equal(
+    reviewNotice("La risposta non dà il risultato."),
+    "Il revisore ha chiesto di riscrivere la risposta: La risposta non dà il risultato.",
+  );
+  assert.equal(reviewNotice(""), "Il revisore ha chiesto di riscrivere la risposta.");
+  assert.equal(reviewNotice(undefined), "Il revisore ha chiesto di riscrivere la risposta.");
+});
+
+// The answer arriving after `events` ([event, data] pairs), from the empty one.
+const draftAfter = (...events) =>
+  events.reduce((draft, [event, data]) => applyEvent(draft, { event, data }), EMPTY_DRAFT);
+
+const START = { id: "c1", name: "calculate", args: { expression: "17 * 23" } };
+const END = { ...START, result: 391, ok: true };
+
+test("applyEvent: the text pieces are joined", () => {
+  assert.deepEqual(draftAfter(["text", { delta: "17 * 23 " }], ["text", { delta: "fa 391." }]), {
+    text: "17 * 23 fa 391.", tools: [], notice: "",
+  });
+});
+
+test("applyEvent: a tool running, then with its result", () => {
+  const running = draftAfter(["tool_start", START]);
+  assert.deepEqual(running.tools, [{ ...START, running: true }]);
+  assert.equal(draftToolLine(running.tools[0]), "Uso lo strumento calculate…");
+  const ended = applyEvent(running, { event: "tool_end", data: END });
+  assert.deepEqual(ended.tools, [{ ...END, running: false }]);
+  assert.equal(
+    draftToolLine(ended.tools[0]), 'calculate\nargomenti: {"expression":"17 * 23"}\nrisultato: 391',
+  );
+  const failed = draftAfter(["tool_start", START], ["tool_end", { ...END, ok: false }]);
+  assert.match(draftToolLine(failed.tools[0]), /^calculate \(errore\)\n/);
+});
+
+test("applyEvent: tools matched by id, a result without its start is added", () => {
+  const second = { id: "c2", name: "convert_units", args: {} };
+  const draft = draftAfter(
+    ["tool_start", START], ["tool_start", second], ["tool_end", { ...second, result: 1, ok: true }],
+  );
+  assert.deepEqual(draft.tools.map((tool) => [tool.id, tool.running]), [["c1", true], ["c2", false]]);
+  const alone = draftAfter(["tool_end", END]);
+  assert.deepEqual(alone.tools, [{ ...END, running: false }]);
+});
+
+test("applyEvent: reset for tools empties the text without a notice", () => {
+  const draft = draftAfter(["text", { delta: "Calcolo" }], ["reset", { reason: "tools", detail: "" }]);
+  assert.deepEqual(draft, { text: "", tools: [], notice: "" });
+});
+
+test("applyEvent: reset of the reviewer empties the text and shows the reason", () => {
+  const draft = draftAfter(
+    ["tool_start", START], ["tool_end", END], ["text", { delta: "Bozza" }],
+    ["reset", { reason: "review", detail: "manca il risultato" }], ["text", { delta: "391" }],
+  );
+  assert.equal(draft.text, "391");
+  assert.equal(draft.notice, "Il revisore ha chiesto di riscrivere la risposta: manca il risultato.");
+  assert.equal(draft.tools.length, 1); // the tools of the turn stay
+  // a later reset for tools keeps the notice
+  const later = applyEvent(draft, { event: "reset", data: { reason: "tools", detail: "" } });
+  assert.equal(later.notice, draft.notice);
+});
+
+test("applyEvent: other events do not change the answer, which is never changed in place", () => {
+  const draft = draftAfter(["text", { delta: "a" }]);
+  assert.equal(applyEvent(draft, { event: "question", data: { id: 1 } }), draft);
+  assert.deepEqual(EMPTY_DRAFT, { text: "", tools: [], notice: "" });
+  applyEvent(draft, { event: "text", data: { delta: "b" } });
+  assert.equal(draft.text, "a");
+});
+
+test("draftVisible: only with text, tools or a notice", () => {
+  assert.equal(draftVisible(EMPTY_DRAFT), false);
+  assert.equal(draftVisible(draftAfter(["text", { delta: "a" }])), true);
+  assert.equal(draftVisible(draftAfter(["tool_start", START])), true);
+  assert.equal(draftVisible(draftAfter(["reset", { reason: "review", detail: "x" }])), true);
+  assert.equal(draftVisible(draftAfter(["reset", { reason: "tools", detail: "" }])), false);
 });

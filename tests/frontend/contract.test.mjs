@@ -32,9 +32,16 @@ const ANSWERS = [
 // The requests the client makes, recorded with a fake fetch.
 async function clientRequests() {
   const calls = [];
+  const done = 'event: done\ndata: {"question": {}, "answer": {}}\n\n';
   const fetch = async (url, init) => {
     calls.push({ method: init.method.toLowerCase(), path: new URL(url).pathname });
-    return { ok: true, status: 200, text: async () => "{}" };
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(done));
+        controller.close();
+      },
+    });
+    return { ok: true, status: 200, text: async () => "{}", body };
   };
   const client = new BackendClient("http://backend", { fetch });
   await client.listChats();
@@ -42,6 +49,7 @@ async function clientRequests() {
   await client.getChat(7);
   await client.deleteChat(7);
   await client.sendMessage(7, "ciao");
+  await client.sendMessageStream(7, "ciao", () => {});
   return calls;
 }
 
@@ -49,7 +57,7 @@ const template = (path) => path.replace(/\/\d+(?=\/|$)/g, "/{chat_id}");
 
 test("every request of the client is an operation of the contract", async () => {
   const calls = await clientRequests();
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 6);
   for (const { method, path } of calls) {
     const operations = contract.paths[template(path)];
     assert.ok(operations, `percorso ${path} assente dal contratto`);
@@ -99,10 +107,26 @@ test("the error answers of the chat operations use ErrorBody", () => {
 });
 
 test("the question is sent as the body SendMessageRequest", () => {
-  const body = contract.paths["/chats/{chat_id}/messages"].post.requestBody;
-  assert.equal(
-    body.content["application/json"].schema.$ref, "#/components/schemas/SendMessageRequest",
-  );
+  for (const path of ["/chats/{chat_id}/messages", "/chats/{chat_id}/messages/stream"]) {
+    const body = contract.paths[path].post.requestBody;
+    assert.equal(
+      body.content["application/json"].schema.$ref, "#/components/schemas/SendMessageRequest",
+      path,
+    );
+  }
+});
+
+test("the stream answers text/event-stream, its errors before the stream use ErrorBody", () => {
+  const operation = contract.paths["/chats/{chat_id}/messages/stream"].post;
+  assert.ok(operation.responses["200"].content["text/event-stream"]);
+  for (const status of ["400", "404", "502", "503", "504"]) {
+    const content = operation.responses[status].content["application/json"];
+    assert.equal(content.schema.$ref, "#/components/schemas/ErrorBody", status);
+  }
+  // the events the page reads are described in the contract
+  for (const event of ["question", "text", "reset", "tool_start", "tool_end", "done", "error"]) {
+    assert.ok(operation.description.includes(`\`${event}\``), `evento ${event} non descritto`);
+  }
 });
 
 test("the messages of a chat and of the answer to a question are ChatMessageInfo", () => {

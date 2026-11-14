@@ -754,10 +754,115 @@ def test_frontend_chat_from_the_browser(tmp_path):  # CA-86, CA-87
     assert "391" in answer, answer
     assert summary == "Strumenti usati: calculate", summary
     assert re.search(r"variant=\S+ tool=calculate call_id=", agent_log), agent_log
-    assert "api request=chat kind=message history=0" in agent_log, agent_log
-    assert "status=201 tools=calculate " in first_backend_log, first_backend_log
+    # the page sends with the streaming (specification of the streaming, §7)
+    assert "api request=chat_stream kind=message history=0" in agent_log, agent_log
+    assert "status=200 outcome=done tools=calculate " in first_backend_log, first_backend_log
     assert restored_summary == summary
     assert listed == [QUESTION]
     assert chat_address.startswith(f"{frontend_url}/#/chats/"), chat_address
     assert "status=503 error=agent_unavailable" in failed_backend_log, failed_backend_log
+    assert errors == [], f"errori JavaScript nella pagina: {errors}"
+
+
+# --- lesson 6, optional: streaming of the answer (CA-101, CA-102) ---
+
+def test_agent_stream_with_a_tool(tmp_path):  # CA-101
+    from assistant.api_client import AgentClient
+
+    with start_service(tmp_path) as (base_url, read_log):
+        with AgentClient(base_url) as client:
+            started = time.monotonic()
+            events = []
+            for name, data in client.chat_stream([], "", message=QUESTION):
+                events.append((round(time.monotonic() - started, 1), name, data))
+        log = read_log()
+
+    for seconds, name, data in events:
+        shown = data["delta"] if name == "text" else {k: data.get(k) for k in ("name", "reason")}
+        print(f"{seconds:6.1f} s  {name:10} {shown!r}")
+    names = [name for _, name, _ in events]
+    starts = [data for _, name, data in events if name == "tool_start"]
+    ends = [data for _, name, data in events if name == "tool_end"]
+    assert names[-1] == "done", names
+    assert any(data["name"] == "calculate" for data in starts), starts
+    assert any(data["name"] == "calculate" and data["ok"] for data in ends), ends
+    assert names.index("tool_start") < names.index("tool_end"), names
+    done = events[-1][2]
+    assert "391" in done["reply"], done
+    assert [tool["name"] for tool in done["tools_used"]] == ["calculate"], done
+    assert "text" in names, names  # LM Studio gave the text in pieces
+    assert "api request=chat_stream kind=message history=0" in log, log
+    assert "api response=chat_stream status=200 outcome=done tools=calculate " in log, log
+
+
+# Records in the page every text of the answer arriving and whether a tool was shown running,
+# with the time: the test reads them after the end of the turn.
+DRAFT_RECORDER = """
+window.draftTexts = [];
+window.toolsRunning = [];
+new MutationObserver(() => {
+  const text = document.querySelector("#draft .draft-text");
+  const value = text ? text.textContent : "";
+  const last = window.draftTexts[window.draftTexts.length - 1];
+  if (value && value !== last) {
+    window.draftTexts.push(value);
+  }
+  for (const line of document.querySelectorAll("#draft .draft-tools li.running")) {
+    if (!window.toolsRunning.includes(line.textContent)) {
+      window.toolsRunning.push(line.textContent);
+    }
+  }
+}).observe(document, { subtree: true, childList: true, characterData: true });
+"""
+
+
+def test_frontend_stream_from_the_browser(tmp_path):  # CA-102
+    from playwright.sync_api import expect
+
+    backend_port, frontend_port = free_port(), free_port()
+    backend_url = f"http://127.0.0.1:{backend_port}"
+    frontend_url = f"http://127.0.0.1:{frontend_port}"
+    texts = "#messages .message-text"
+    with (
+        postgres_schema("stream") as database,
+        start_frontend(tmp_path, frontend_port, backend_url),
+        open_browser_page() as (page, errors),
+        start_service(tmp_path) as (agent_url, read_agent_log),
+        start_backend(
+            tmp_path, backend_port, agent_url, database, frontend_url
+        ) as (_, read_backend_log),
+    ):
+        page.add_init_script(DRAFT_RECORDER)
+        page.goto(frontend_url)
+        page.get_by_role("button", name="Nuova chat").click()
+        expect(page.locator("#chat-title")).to_have_text("Nuova chat")
+        page.locator("#message-input").fill(QUESTION)
+        page.locator("#message-input").press("Enter")
+        expect(page.locator("#draft")).to_be_visible(timeout=ANSWER_TIMEOUT_MS)
+        page.screenshot(path=tmp_path / "1-bozza.png")
+        expect(page.locator(texts)).to_have_count(2, timeout=ANSWER_TIMEOUT_MS)
+        expect(page.locator("#draft")).to_have_count(0)
+        expect(page.locator("#error")).to_be_hidden()
+        page.screenshot(path=tmp_path / "2-risposta.png")
+        question, answer = page.locator(texts).all_inner_texts()
+        summary = page.locator("#messages .message.assistant summary").inner_text()
+        draft_texts = page.evaluate("window.draftTexts")
+        tools_running = page.evaluate("window.toolsRunning")
+        page.reload()
+        expect(page.locator(texts)).to_have_text([question, answer])
+        restored_summary = page.locator("#messages .message.assistant summary").inner_text()
+        agent_log, backend_log = read_agent_log(), read_backend_log()
+
+    print(f"bozza: {draft_texts!r}\nstrumenti in corso: {tools_running!r}\nrisposta: {answer!r}")
+    assert question == QUESTION
+    assert "391" in answer, answer
+    assert summary == restored_summary == "Strumenti usati: calculate", summary
+    assert len(draft_texts) >= 2, draft_texts  # the text grew before the end of the turn
+    assert "Uso lo strumento calculate…" in tools_running, tools_running
+    assert "api request=chat_stream kind=message history=0" in agent_log, agent_log
+    assert re.search(r"api response=chat_stream status=200 outcome=done tools=calculate .*"
+                     r"text_events=\d+", agent_log), agent_log
+    assert re.search(r"backend agent_call chat=\d+ history=0 summary_chars=0 stream=true",
+                     backend_log), backend_log
+    assert "status=200 outcome=done tools=calculate " in backend_log, backend_log
     assert errors == [], f"errori JavaScript nella pagina: {errors}"

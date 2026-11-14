@@ -1845,6 +1845,103 @@ Decisioni:
   la chiusura del flusso da parte del browser è provata solo su `_forward` e non con un server
   vero; front-end, prove reali e voce di diagnosi del README al punto 3.
 
+### Punto 3 · Streaming nel front-end e prova reale — piano
+
+Servizi verificati all'inizio: LM Studio con `google/gemma-4-e2b` (`GET /v1/models`), container
+`assistente-postgres` attivo (porta 5433), Node 24.15.0, Edge per Playwright.
+1. `frontend/static/api.js`: `readEvents(chunks)` (generatore asincrono, lettore SSE su pezzi di
+   testo qualsiasi, stesse regole di `iter_sse`, `data` decodificato da JSON) e
+   `BackendClient.sendMessageStream(id, text, onEvent)` (specifica §7).
+2. `texts.js`: `TEXTS.draftLabel`, `TEXTS.toolRunning`, `reviewNotice`, `applyEvent` (funzione pura:
+   stato della risposta in arrivo `{text, tools, notice}` dopo un evento), `draftToolLine`,
+   `errorMessage` per gli errori dentro il flusso (`status` 200, compreso `stream_interrupted`),
+   `questionSaved` vero per ogni errore dopo l'inizio del flusso.
+3. `app.js`: invio con `sendMessageStream`; eventi nello stato della chat che aspetta
+   (`pending.stream`); bozza `#draft` (classe `draft`, etichetta, avviso del revisore, strumenti,
+   testo) aggiornata da sola, senza ridisegnare i messaggi; `done` ed errori come oggi. CSS della bozza.
+4. Test Node: `readEvents` (pezzi a metà riga, `\r\n`, commenti, più righe di `data`, evento senza
+   fine), `sendMessageStream` (eventi, `done`, `error`, interruzione, dati non validi, errore JSON,
+   rete, tempo), testi e `applyEvent`; contratto con l'endpoint `/messages/stream`.
+5. Browser (`test_frontend_browser.py`): `FakeAgent.chat_stream` con eventi scritti dal test e
+   pause (`threading.Event`); test nuovi: testo a pezzi e strumento durante l'attesa, ritorno alla
+   chat con la bozza conservata, `reset` `tools` e `review` con l'avviso, errore durante il flusso
+   con la domanda salvata, errore imprevisto del back-end (CA-100). I test esistenti restano.
+6. Prove reali (`test_real.py`): CA-101 (`AgentClient.chat_stream` sul servizio vero), CA-102 (dal
+   browser con agente, back-end e front-end come processi: almeno due aggiornamenti della bozza
+   registrati da un `MutationObserver`, «Uso lo strumento calculate…» visto, risposta dopo la
+   ricarica); CA-86 aggiornata alle righe di log del flusso. Poi `pytest`, `pytest -m browser`.
+7. README (pagina con lo streaming, prove, diagnosi), `CLAUDE.md`, requisiti §18 con gli esiti.
+
+Decisioni:
+- La pagina usa solo l'endpoint con lo streaming; `sendMessage` resta nel client (endpoint del
+  contratto ancora valido, già provato) ma la pagina non lo chiama più.
+- Un errore dentro un flusso (`status` 200) vuol dire che la domanda è salvata (il back-end manda
+  `question` solo dopo averla salvata): niente testo rimesso nel campo, chat riletta.
+- Flusso chiuso senza evento finale o con dati non validi → un solo codice `stream_interrupted`:
+  per l'utente l'effetto è lo stesso (risposta mancante, domanda salvata).
+- Errore di rete o tempo scaduto durante la lettura del flusso → `BackendError(0, …)` come
+  chiede la specifica §7 (stesso messaggio di oggi).
+- La bozza si mostra solo quando ha qualcosa (testo, strumenti o avviso): durante l'elaborazione
+  del prompt resta la riga d'attesa come nello Step 8.
+- La prova CA-86 (Step 8) cambia solo nelle righe di log attese (`chat_stream`,
+  `send_message_stream … outcome=done`): la pagina ora usa l'endpoint con lo streaming. CA-103
+  riguarda `/chat`, `/messages` e la CLI, che non cambiano.
+
+### Punto 3 · Streaming nel front-end e prova reale — fatto
+
+- Codice: `frontend/static/api.js` (`readEvents`, `bodyText`, `BackendClient.sendMessageStream`,
+  `errorFromBody` estratta da `errorFrom`), `texts.js` (`TEXTS.draftLabel`, `TEXTS.toolRunning`,
+  `reviewNotice`, `EMPTY_DRAFT`, `applyEvent`, `draftVisible`, `draftToolLine`; `errorMessage` e
+  `questionSaved` con gli errori dentro il flusso), `app.js` (invio con lo streaming, `draftItem`,
+  `renderDraft`, bozza nello stato `pending.draft`), `style.css` (bozza tratteggiata, avviso,
+  strumenti). Nessun cambiamento a Python, contratto, Docker.
+- Decisioni prese durante l'esecuzione:
+  - Un errore lanciato da `onEvent` (errore della pagina) arriva al chiamante così com'è: la lettura
+    del flusso usa `next()` esplicito e solo gli errori di lettura diventano `stream_interrupted`
+    o `timeout`.
+  - Un errore dentro il flusso si riconosce da `status` 200 **con** un codice: `BackendError(200,
+    null, …)` resta la risposta 2xx non JSON dello Step 8 (test esistente invariato).
+  - Avviso del revisore con il punto finale («…: <motivo>.»): il motivo arriva senza punto da
+    `clean`.
+  - **Testo della bozza con la classe `draft-text`, non `message-text`**: la prima esecuzione delle
+    prove reali è fallita (2 su 2) perché `#messages .message-text` contava anche la bozza, e «due
+    messaggi» risultava vero prima della fine del turno. La bozza non è ancora un messaggio; test
+    nel browser con un controllo in più (solo la domanda ha `message-text` durante la bozza),
+    verificato con una mutazione temporanea (classe rimessa a `message-text` → test fallito).
+  - `FakeAgent` di `test_frontend_browser.py` ha ora solo `chat_stream` (la pagina non chiama più
+    `/messages`): `error` prima del flusso (risposta JSON), `stream_error` durante, `events` con
+    pause `threading.Event`; senza `events` produce `tool_start`/`tool_end` per strumento e la
+    risposta in due pezzi, così i 21 test esistenti restano invariati.
+- Test: Node 79 (+32: `readEvents` su pezzi da 1 a N caratteri, CRLF, commenti, più righe,
+  evento senza fine; `sendMessageStream` con eventi, `done` che chiude il corpo, `error`, sei casi
+  di `stream_interrupted`, corpo tagliato dalla rete, errore JSON prima del flusso, rete, tempo,
+  errore di `onEvent`; testi, `applyEvent`, `draftVisible`; contratto con `/messages/stream`);
+  browser 25 (+4: testo a pezzi e strumento durante l'attesa con ritorno alla chat, `reset`
+  `tools` e `review` con l'avviso, errore durante il flusso con la domanda salvata, errore
+  imprevisto del back-end); `test_real.py` +2 (CA-101, CA-102) e CA-86 aggiornata.
+
+| CA | Prova | Esito |
+|----|-------|-------|
+| CA-99 | `node --test tests/frontend/*.test.mjs` (anche da `pytest`) | ✅ 79 passed |
+| CA-100 | `pytest -m browser` (Edge, due volte; Chrome con `BROWSER_CHANNEL=chrome`) | ✅ 25 passed in circa 10 s ogni volta |
+| CA-101 | `LMSTUDIO_BASE_URL=http://127.0.0.1:1234/v1 LMSTUDIO_MODEL=google/gemma-4-e2b MAX_STEPS=5 pytest tests/test_real.py -m real -k agent_stream_with_a_tool -s` | ✅ 1 passed in 78 s: `tool_start` e `tool_end` di `calculate` a 44,9 s, 12 eventi `text` tra 50,9 e 51,8 s («1», «7», « *» … «.»), `done` a 73,3 s con «17 * 23 fa 391.» (tra testo e `done` il revisore). LM Studio accetta `stream=true` con gli strumenti di `google/gemma-4-e2b` |
+| CA-86, CA-102 | stesse variabili e `TEST_DATABASE_URL=postgresql://lab:…@127.0.0.1:5433/assistente`, `pytest tests/test_real.py -m real -k frontend -s` (prima esecuzione) | ❌ 2 failed: `#messages .message-text` contava il testo della bozza (vedi sopra); le schermate mostravano la pagina corretta (bozza con lo strumento durante l'attesa) |
+| CA-86, CA-102 | stesso comando dopo la correzione | ✅ 2 passed in 175 s. CA-102: bozza registrata in 12 stati da «1» a «17 * 23 fa 391.», «Uso lo strumento calculate…» visto durante l'attesa, risposta «17 * 23 fa 391.» con «Strumenti usati: calculate» anche dopo la ricarica; agente `api response=chat_stream status=200 outcome=done tools=calculate reply_chars=15 history=4 text_events=12 resets=0 duration_ms=74128`; back-end `agent_call … stream=true` e `send_message_stream chat=1 status=200 outcome=done tools=calculate`. CA-86: stesso esito dello Step 8 con le righe del flusso, back-end riavviato, agente fermato → `503 agent_unavailable` |
+| CA-103 | `pytest` | ✅ 1003 passed, 90 deselected (65 reali, 25 browser); i test di `/chat`, `/messages` e CLI non cambiati |
+
+- Schermate controllate a vista (`1-bozza.png`: domanda, riga d'attesa a 46 s, bozza tratteggiata con
+  etichetta e strumento; `2-risposta.png`: risposta salvata); cartella temporanea eliminata.
+- `-k stream` (comando del README) verificato con `--collect-only`: seleziona le due prove dello
+  streaming, eseguite prima con `-k agent_stream_with_a_tool` e `-k frontend`.
+- Documenti: README (introduzione, pagina con lo streaming, test nel browser, prove reali,
+  diagnosi «La bozza non compare…», conteggio dei test, che diceva ancora 927 dal punto 2),
+  `CLAUDE.md` (struttura del front-end, comando `-k stream`), requisiti §18 (esiti).
+- Problemi aperti: una sola esecuzione riuscita per CA-101 e CA-102 (dimostrano il comportamento con
+  quella domanda); `reset` `review` mostrato solo con l'agente finto (il revisore reale ha approvato);
+  interruzione del flusso (`stream_interrupted`) provata solo in Node, non con un back-end vero
+  fermato a metà turno; streaming non provato con Compose (Docker invariato, specifica §10); pagina
+  provata con Edge nelle prove reali e con Edge e Chrome nei test con l'agente finto.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

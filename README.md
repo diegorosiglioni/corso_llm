@@ -19,7 +19,8 @@ riassunto della conversazione.
 Un **back-end** separato (FastAPI, `python -m backend`) salva chat e messaggi in PostgreSQL e
 chiama l'agente con la cronologia salvata: le chat restano dopo il riavvio.
 Un **front-end** (`python -m frontend`) serve una pagina di chat per il browser che parla solo con il
-back-end: elenco, creazione ed eliminazione delle chat, messaggi con gli strumenti usati.
+back-end: elenco, creazione ed eliminazione delle chat, messaggi con gli strumenti usati, risposta
+mostrata mentre arriva (streaming con Server-Sent Events).
 Con **Docker Compose** front-end, back-end, agente e PostgreSQL girano ciascuno nel proprio container
 (`docker compose up -d --build`, sezione «Docker»).
 
@@ -71,19 +72,21 @@ PostgreSQL. Il JavaScript della pagina del front-end si prova con Node.js (`node
 da `pytest`; senza Node il test si salta col motivo). I Dockerfile si controllano come testo, senza
 costruire immagini, e `compose.yaml` con `docker compose config` su una copia con un `.env` di
 credenziali finte, senza il demone (`tests/test_docker.py`; senza la CLI di Docker questi test si
-saltano col motivo). Esito al 2026-11-14: `927 passed, 84
-deselected` (le 84 deselezionate sono le 63 prove reali, 25 con LM Studio e 38 test dell'archivio
-ripetuti su PostgreSQL, e i 21 test nel browser).
+saltano col motivo). Esito al 2026-11-14: `1003 passed, 90
+deselected` (le 90 deselezionate sono le 65 prove reali, 27 con LM Studio e 38 test dell'archivio
+ripetuti su PostgreSQL, e i 25 test nel browser).
 
 La pagina vera nel browser installato (Edge; Chrome con `$env:BROWSER_CHANNEL = "chrome"`), pilotato
 da Playwright senza finestra, con il back-end vero su SQLite in memoria, un agente finto (risposta con
-uno strumento, risposta lenta, agente spento o in errore) e nessun browser da scaricare:
+uno strumento, risposta lenta, agente spento o in errore, eventi dello streaming con pause scelte dal
+test: bozza a pezzi, strumento in corso, `reset` del revisore, errore durante il flusso) e nessun
+browser da scaricare:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -m browser
 ```
 
-Esito al 2026-11-14: `21 passed` in circa 9 s.
+Esito al 2026-11-14: `25 passed` in circa 10 s (anche con Chrome).
 
 ## Configurazione
 
@@ -317,6 +320,19 @@ aspetta la risposta fino a 660 s (il back-end aspetta l'agente fino a 600 s). Gl
 in un riquadro rosso in cima alla vista, chiudibile, senza bloccare la pagina; dopo un errore
 dell'agente la chat mostra la domanda salvata, negli altri casi il testo torna nel campo per
 riprovare.
+
+La pagina invia con lo **streaming** (`POST /chats/{chat_id}/messages/stream`, sezione precedente):
+sotto la riga d'attesa compare la **risposta in arrivo**, con il bordo tratteggiato e l'etichetta
+«Bozza: la risposta può ancora cambiare». Quando l'agente chiede uno strumento la bozza mostra «Uso
+lo strumento calculate…», che diventa nome, argomenti e risultato quando lo strumento risponde; il
+testo cresce man mano che il modello lo scrive. Se il revisore respinge la bozza, il testo sparisce,
+compare «Il revisore ha chiesto di riscrivere la risposta: <motivo>» e arriva la riscrittura; il
+testo scritto prima di una chiamata a strumenti sparisce senza avviso (non sarà la risposta). Alla
+fine domanda e risposta salvate prendono il posto della domanda in attesa e della bozza. La bozza
+resta legata alla sua chat: aprendo un'altra chat e tornando, riprende da dove era arrivata. Con il
+modello locale la bozza compare solo nella parte finale del turno: prima ci sono l'elaborazione del
+prompt, il router e (dopo il testo) il revisore, che non producono testo. Se il flusso si interrompe
+compare «La risposta si è interrotta prima della fine. La domanda è salvata nella chat: riprova.»
 
 | Variabile | Default | Significato |
 |-----------|---------|-------------|
@@ -655,7 +671,17 @@ la risposta con «391» e «Strumenti usati: calculate» (strumento presente anc
 dell'agente); riavvia il back-end, ricarica la pagina e ritrova chat e messaggi; ferma l'agente,
 manda un'altra domanda e controlla il messaggio d'errore, la domanda salvata nella chat e che si
 possa ancora creare una chat. Le schermate di ogni fase (`1-attesa.png` … `4-agente-fermato.png`)
-restano nella cartella temporanea del test, indicata nell'output con `-s`.
+restano nella cartella temporanea del test, indicata nell'output con `-s`. Con `-k frontend` parte
+anche la prova dello streaming dalla pagina: registra ogni cambiamento della bozza e controlla che
+il testo cresca prima della fine del turno, che «Uso lo strumento calculate…» compaia durante
+l'attesa e che la risposta resti dopo la ricarica (schermate `1-bozza.png`, `2-risposta.png`).
+
+Solo le due prove dello streaming (la prima chiama `POST /chat/stream` dell'agente e stampa gli
+eventi con i secondi, senza PostgreSQL; la seconda è quella dalla pagina, con `TEST_DATABASE_URL`):
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_real.py -m real -k stream -v -s
+```
 
 ## Strumenti
 
@@ -888,6 +914,17 @@ con un errore: …».** Il back-end funziona ma l'agente è spento (`503`) o ha 
 per esempio LM Studio spento (`502`, il motivo è nel messaggio). La domanda è salvata e compare nella
 chat senza risposta: avviare l'agente (o LM Studio) e scrivere di nuovo la domanda. «L'assistente
 non ha risposto in tempo» è il `504` del back-end dopo 600 s.
+
+**La bozza non compare, o la risposta arriva tutta alla fine.** È normale che per decine di secondi
+ci sia solo la riga d'attesa: elaborazione del prompt e router non producono testo. Alla fine del
+turno il log dell'agente ha `api response=chat_stream status=200 outcome=done tools=… text_events=…
+resets=…`: con `text_events=0` il modello non ha scritto testo nel nodo dell'agente (rifiuto del
+router, limite di passaggi), con `resets=` maggiore di zero c'è stato un `reset` (strumenti o
+revisore). Il log del back-end ha `backend response=send_message_stream chat=… status=200
+outcome=…`: `done`, `error` (con `error=` e `detail=`, come per i messaggi senza streaming) o
+`client_gone` (pagina chiusa o ricaricata durante il turno: la domanda resta senza risposta e si
+rimanda). «La risposta si è interrotta prima della fine» nella pagina vuol dire che la connessione
+con il back-end si è chiusa senza l'evento finale (back-end fermato durante il turno).
 
 **LM Studio non raggiungibile.** All'avvio la CLI mostra «Attenzione: modello non disponibile (LM
 Studio non raggiungibile su …)»; ogni domanda risponde `Errore: LM Studio non raggiungibile:

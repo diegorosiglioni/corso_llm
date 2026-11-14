@@ -3,8 +3,8 @@
 
 import { BackendClient, BackendError } from "./api.js";
 import {
-  TEXTS, chatSubtitle, errorMessage, formatDate, questionSaved, toolDetail, toolsSummary,
-  visibleMessages,
+  EMPTY_DRAFT, TEXTS, applyEvent, chatSubtitle, draftToolLine, draftVisible, errorMessage,
+  formatDate, questionSaved, toolDetail, toolsSummary, visibleMessages,
 } from "./texts.js";
 
 const backendUrl = (window.APP_CONFIG && window.APP_CONFIG.backendUrl) || "";
@@ -16,7 +16,9 @@ const state = {
   openId: null, // id in the address of the page
   openChat: null, // ChatDetail of the open chat, once read
   openLoading: false,
-  pending: new Map(), // chat id → {text, started}: questions waiting for their answer
+  // chat id → {text, started, draft}: questions waiting for their answer, with the answer
+  // arriving (the events are kept here, not in the DOM, so the draft survives a change of chat)
+  pending: new Map(),
   drafts: new Map(), // chat id → text written and not sent, while another chat is open
 };
 
@@ -110,6 +112,47 @@ function messageItem(message, pending = false) {
   return item;
 }
 
+// The answer arriving (#draft): label, notice of the reviewer, tools and text; null when there
+// is nothing to show yet.
+function draftItem(draft) {
+  if (!draftVisible(draft)) {
+    return null;
+  }
+  const item = document.createElement("li");
+  item.id = "draft";
+  item.className = "message assistant draft";
+  const label = document.createElement("p");
+  label.className = "draft-label";
+  label.textContent = TEXTS.draftLabel;
+  item.append(label);
+  if (draft.notice) {
+    const notice = document.createElement("p");
+    notice.className = "draft-notice";
+    notice.textContent = draft.notice;
+    item.append(notice);
+  }
+  if (draft.tools.length > 0) {
+    const tools = document.createElement("ul");
+    tools.className = "draft-tools";
+    for (const tool of draft.tools) {
+      const line = document.createElement("li");
+      if (tool.running) {
+        line.className = "running";
+      }
+      line.textContent = draftToolLine(tool);
+      tools.append(line);
+    }
+    item.append(tools);
+  }
+  if (draft.text) {
+    const text = document.createElement("p");
+    text.className = "draft-text"; // not "message-text": the draft is not a message yet
+    text.textContent = draft.text;
+    item.append(text);
+  }
+  return item;
+}
+
 const secondsSince = (started) => Math.floor((Date.now() - started) / 1000);
 
 function renderMessages(messages, pending) {
@@ -123,9 +166,34 @@ function renderMessages(messages, pending) {
     waiting.setAttribute("role", "status");
     waiting.textContent = TEXTS.waiting(secondsSince(pending.started));
     list.append(waiting);
+    const draft = draftItem(pending.draft);
+    if (draft) {
+      list.append(draft);
+    }
   }
   if (list.lastElementChild) {
     list.lastElementChild.scrollIntoView({ block: "nearest" });
+  }
+}
+
+// Only the answer arriving in chat `id` is drawn again, if that chat is shown: the messages
+// before it stay as they are (with their open details).
+function renderDraft(id) {
+  const pending = state.pending.get(id);
+  if (!pending || state.openChat === null || state.openChat.id !== id) {
+    return;
+  }
+  const old = element("draft");
+  const item = draftItem(pending.draft);
+  if (old && item) {
+    old.replaceWith(item);
+  } else if (old) {
+    old.remove();
+  } else if (item) {
+    element("messages").append(item);
+  }
+  if (item) {
+    item.scrollIntoView({ block: "nearest" });
   }
 }
 
@@ -328,13 +396,18 @@ async function sendMessage(event) {
   }
   clearError();
   input.value = "";
-  state.pending.set(id, { text, started: Date.now() });
+  const pending = { text, started: Date.now(), draft: EMPTY_DRAFT };
+  state.pending.set(id, pending);
   if (waitingTimer === null) {
     waitingTimer = setInterval(updateWaiting, 1000);
   }
   renderView();
+  const onEvent = (event) => {
+    pending.draft = applyEvent(pending.draft, event);
+    renderDraft(id);
+  };
   try {
-    const { question, answer } = await client.sendMessage(id, text);
+    const { question, answer } = await client.sendMessageStream(id, text, onEvent);
     state.pending.delete(id);
     if (state.openId === id && state.openChat !== null) {
       const saved = new Set([question.id, answer.id]); // the question may be there already
