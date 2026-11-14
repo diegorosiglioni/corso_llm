@@ -57,7 +57,8 @@ def test_startup_with_the_default_address(engines, server, caplog):  # CA-75
     assert url == "postgresql+psycopg://lab:segreta@db.example:5432/assistente"
     assert (
         "backend listening=http://127.0.0.1:8001 docs=/docs agent_url=http://127.0.0.1:8000 "
-        "database=postgresql+psycopg://lab:***@db.example:5432/assistente"
+        "database=postgresql+psycopg://lab:***@db.example:5432/assistente "
+        "cors_origins=http://127.0.0.1:8080,http://localhost:8080"
     ) in [r.getMessage() for r in caplog.records if r.name == "backend.service"]
 
 
@@ -149,3 +150,18 @@ def test_served_app_uses_the_database(engines, monkeypatch):
 def test_library_http_logs_hidden_at_info(engines, server):
     main(VALID)
     assert logging.getLogger("httpx").getEffectiveLevel() == logging.WARNING
+
+
+def test_served_app_allows_the_configured_origins(engines, monkeypatch):  # CA-81
+    answers = {}
+
+    def during(app):
+        http = TestClient(app)
+        for origin in ("http://pagina:9000", "http://127.0.0.1:8080"):
+            answers[origin] = http.get("/chats", headers={"Origin": origin})
+
+    monkeypatch.setattr(service.uvicorn, "run", FakeUvicorn(during))
+    assert main({**VALID, "CORS_ORIGINS": "http://pagina:9000"}) == 0
+    allowed = answers["http://pagina:9000"].headers.get("access-control-allow-origin")
+    assert allowed == "http://pagina:9000"
+    assert "access-control-allow-origin" not in answers["http://127.0.0.1:8080"].headers

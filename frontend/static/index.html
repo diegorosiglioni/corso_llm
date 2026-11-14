@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assistente del laboratorio</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/config.js"></script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <h1>Assistente del laboratorio</h1>
+  </header>
+  <main class="layout">
+    <nav class="chats" aria-label="Chat">
+      <button id="new-chat" class="primary" type="button">Nuova chat</button>
+      <p id="chats-status" class="status"></p>
+      <ul id="chat-list" class="chat-list"></ul>
+    </nav>
+    <section class="chat-view" aria-labelledby="chat-title">
+      <div id="error" class="error" role="alert" hidden>
+        <p id="error-text"></p>
+        <button id="error-close" type="button">Chiudi</button>
+      </div>
+      <h2 id="chat-title"></h2>
+      <p id="chat-status" class="status"></p>
+    </section>
+  </main>
+</body>
+</html>

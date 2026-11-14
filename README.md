@@ -63,8 +63,20 @@ programmate (anche per router e revisore). I test del server MCP lo avviano davv
 sottoprocesso stdio, con l'archivio delle note in una cartella temporanea (circa 1 s per test).
 Il servizio HTTP si prova con l'app vera su un grafo finto, senza rete (`TestClient`), e la CLI
 parla con quella stessa app. Il back-end si prova su SQLite in memoria, con lo stesso schema, senza
-PostgreSQL. Esito al 2026-11-14: `825 passed, 62 deselected` (le 62 deselezionate sono le prove
-reali: 24 con LM Studio e 38 test dell'archivio ripetuti su PostgreSQL).
+PostgreSQL. Il JavaScript della pagina del front-end si prova con Node.js (`node --test`, lanciato
+da `pytest`; senza Node il test si salta col motivo). Esito al 2026-11-14: `888 passed, 74
+deselected` (le 74 deselezionate sono le 62 prove reali, 24 con LM Studio e 38 test dell'archivio
+ripetuti su PostgreSQL, e i 12 test nel browser).
+
+La pagina vera nel browser installato (Edge; Chrome con `$env:BROWSER_CHANNEL = "chrome"`), pilotato
+da Playwright senza finestra, con il back-end vero su SQLite in memoria e nessun browser da
+scaricare:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -m browser
+```
+
+Esito al 2026-11-14: `12 passed` in circa 5 s.
 
 ## Configurazione
 
@@ -202,6 +214,7 @@ un container), il servizio dell'agente (punto 1 di «Avvio locale») e il back-e
 | `BACKEND_HOST` | no | `127.0.0.1` | indirizzo su cui ascolta il back-end |
 | `BACKEND_PORT` | no | `8001` | porta del back-end (intero tra 1 e 65535) |
 | `LOG_LEVEL` | no | `INFO` | come per l'agente |
+| `CORS_ORIGINS` | no | `http://127.0.0.1:8080,http://localhost:8080` | origini (`http(s)://host[:porta]`, separate da virgola) delle pagine del front-end che possono chiamare il back-end dal browser |
 
 **PostgreSQL in un container** (immagine ufficiale; utente, password e nome sono d'esempio). Sulla
 porta 5432 dell'host può esserci già un PostgreSQL installato: il comando pubblica il container
@@ -224,7 +237,7 @@ $env:DATABASE_URL = "postgresql://lab:labprova@127.0.0.1:5433/assistente"
 ```
 
 All'avvio crea le tabelle `chats` e `chat_messages` se mancano (i dati esistenti restano) e scrive
-`backend listening=http://127.0.0.1:8001 docs=/docs agent_url=… database=postgresql+psycopg://lab:***@…`
+`backend listening=http://127.0.0.1:8001 docs=/docs agent_url=… database=postgresql+psycopg://lab:***@… cors_origins=…`
 (la password non compare mai nei log). Con il database spento esce con codice 1 e «Database non
 raggiungibile: …»; l'agente spento invece non blocca l'avvio.
 
@@ -249,6 +262,36 @@ spento), `503 database_unavailable`, `500 internal_error`. Con un errore dell'ag
 resta nella chat senza risposta e lo stato dell'agente della chat non cambia: si può rimandare il
 messaggio. Dettagli nella [specifica](docs/superpowers/specs/2026-11-14-backend-chat-design.md)
 (§5–§7).
+
+### Front-end: la chat nel browser (in corso)
+
+Il front-end (`python -m frontend`) serve una pagina in HTML, CSS e JavaScript, senza framework,
+che parla solo con il back-end: il browser lo chiama direttamente all'indirizzo `BACKEND_URL`,
+ammesso dal back-end con `CORS_ORIGINS`. Per ora la pagina elenca le chat (dalla più recente, con
+la data dell'ultimo messaggio), ne crea una nuova e la apre, ne elimina una dopo la conferma; la
+chat aperta resta nell'indirizzo (`#/chats/3`) e si ritrova ricaricando la pagina. Vista dei
+messaggi e invio arrivano con il prossimo incremento dello Step 8.
+
+| Variabile | Default | Significato |
+|-----------|---------|-------------|
+| `BACKEND_URL` | `http://127.0.0.1:8001` | indirizzo del back-end **visto dal browser** (deve iniziare con `http://` o `https://`) |
+| `FRONTEND_HOST` | `127.0.0.1` | indirizzo su cui ascolta il front-end |
+| `FRONTEND_PORT` | `8080` | porta del front-end (intero tra 1 e 65535) |
+| `LOG_LEVEL` | `INFO` | come per l'agente |
+
+In un quarto terminale (back-end già avviato), poi si apre `http://127.0.0.1:8080` nel browser:
+
+```powershell
+.\.venv\Scripts\python.exe -m frontend
+```
+
+All'avvio scrive `frontend listening=http://127.0.0.1:8080 backend_url=http://127.0.0.1:8001`; il
+back-end spento non blocca l'avvio (lo segnala la pagina). La pagina riceve l'indirizzo del back-end
+da `http://127.0.0.1:8080/config.js`. Il contratto con il back-end è il suo documento OpenAPI,
+salvato in `frontend/backend-openapi.json`: se il back-end cambia, il test
+`tests/test_frontend_contract.py` fallisce e si rigenera con
+`$env:UPDATE_CONTRACT = "1"; .\.venv\Scripts\python.exe -m pytest tests/test_frontend_contract.py`
+(poi `Remove-Item Env:UPDATE_CONTRACT`), controllando la pagina.
 
 ## Router: domande in ambito e fuori ambito
 
@@ -730,6 +773,14 @@ dopo aver avviato l'agente si rimanda il messaggio. Nel log del back-end le righ
 request=send_message …`, `backend agent_call chat=… history=… summary_chars=…` (cronologia mandata
 all'agente) e `backend response=send_message … status=…` seguono ogni invio; il testo dei messaggi
 è solo nel log dell'agente.
+
+**La pagina del front-end dice «Il back-end non risponde (…)».** Il back-end non è avviato o non è
+all'indirizzo di `BACKEND_URL` (quello che vede il browser). Se il back-end risponde
+(`Invoke-RestMethod http://127.0.0.1:8001/chats`), la pagina è aperta da un'origine che non è in
+`CORS_ORIGINS` (per esempio `http://localhost:8080` con un elenco che contiene solo
+`http://127.0.0.1:8080`): il browser blocca la risposta e la pagina non può distinguere i due casi.
+Nella console del browser (F12) compare l'errore CORS; aggiungere l'origine a `CORS_ORIGINS` e
+riavviare il back-end.
 
 **LM Studio non raggiungibile.** All'avvio la CLI mostra «Attenzione: modello non disponibile (LM
 Studio non raggiungibile su …)»; ogni domanda risponde `Errore: LM Studio non raggiungibile:

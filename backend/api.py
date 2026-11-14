@@ -9,11 +9,12 @@ except the 422 of FastAPI for a request that does not match the schema.
 import json
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import Body, FastAPI, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import OperationalError
@@ -217,10 +218,23 @@ def _message_info(message: MessageRecord) -> dict:
     }
 
 
-def create_app(*, store: ChatStore, agent) -> FastAPI:
+def create_app(
+    *, store: ChatStore, agent, cors_origins: Sequence[str] = ()
+) -> FastAPI:
     """App on the chat archive `store`; `agent` answers the questions (an AgentClient or a fake
-    with the same `chat` method)."""
+    with the same `chat` method).
+
+    The browser pages served from `cors_origins` may call the API (CORS, step 8); the middleware
+    wraps the whole app, so error answers carry the CORS headers too and the page can read them.
+    """
     app = FastAPI(title=TITLE, description=DESCRIPTION)
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(cors_origins),
+            allow_methods=["GET", "POST", "DELETE"],
+            allow_headers=["Content-Type"],
+        )
 
     @app.post(
         "/chats",

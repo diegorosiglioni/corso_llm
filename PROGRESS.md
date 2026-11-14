@@ -1283,6 +1283,80 @@ autonoma); i punti successivi dello step seguono la specifica.
    back-end e front-end come sottoprocessi, Edge con Playwright); README e `CLAUDE.md`; esiti in
    requisiti §16 e qui. Servizio non raggiungibile → `[!]`.
 
+### Punto 2 · Front-end: elenco, creazione ed eliminazione — piano
+
+1. Back-end: `CORS_ORIGINS` in `backend/config.py` (`BackendConfig.cors_origins`, specifica §4),
+   `create_app(..., cors_origins=())` con `CORSMiddleware` (§6), riga d'avvio con `cors_origins=`;
+   `.env.example`.
+2. `frontend/`: `config.py` (`FrontendConfig`, `load_frontend_config`), `app.py` (`create_app`:
+   `/config.js` e `StaticFiles`), `__main__.py` (avvio con uvicorn), `backend-openapi.json`.
+3. Pagina: `static/index.html`, `style.css`, `api.js` (`BackendClient` con `listChats`,
+   `createChat`, `getChat`, `deleteChat`; `BackendError`), `texts.js` (`errorMessage`,
+   `formatDate`, testi), `app.js` (elenco, nuova chat, selezione con `#/chats/<id>`, eliminazione
+   con `confirm`, riquadro d'errore). Vista dei messaggi e invio al punto 3.
+4. `pytest.ini`: marcatore `browser` escluso dalla suite predefinita.
+5. Test: `test_frontend_config.py`, `test_frontend_app.py`, `test_frontend_service.py`,
+   `test_frontend_contract.py`, CORS in `test_backend_config.py`, `test_backend_api.py` e
+   `test_backend_service.py`; `tests/frontend/*.test.mjs` lanciati da `test_frontend_js.py`;
+   `test_frontend_browser.py` (Edge senza finestra, back-end vero su SQLite, CA-84). Poi `pytest`
+   e `pytest -m browser`.
+
+Decisioni:
+- `_log_level` di `assistant/config.py` diventa pubblico (`read_log_level`): il front-end valida
+  `LOG_LEVEL` con le stesse regole senza copiare il codice né importare un nome privato.
+- `errorMessage` copre già tutta la tabella della specifica §5 (funzione pura, una riga per caso);
+  `sendMessage`, `toolsSummary` e la vista dei messaggi arrivano al punto 3 con il loro uso.
+- Selezionare una chat la legge con `GET /chats/{id}` (titolo e `404`), anche se i messaggi si
+  mostrano dal punto 3: così ricarica e chat inesistente funzionano già.
+- Campi letti dalla pagina elencati nel test del contratto con Node (`contract.test.mjs`): il
+  JavaScript della pagina non è importabile senza DOM.
+
+### Punto 2 · Front-end: elenco, creazione ed eliminazione — fatto
+
+- Back-end: `CORS_ORIGINS` (`BackendConfig.cors_origins`), `create_app(..., cors_origins=())` con
+  `CORSMiddleware` (metodi `GET`/`POST`/`DELETE`, intestazione `Content-Type`, niente credenziali),
+  riga d'avvio con `cors_origins=…`. OpenAPI invariato.
+- `frontend/`: `config.py`, `app.py` (`/config.js` con `no-store`, `StaticFiles(html=True)`, niente
+  `/docs` né `/openapi.json`), `__main__.py`, `backend-openapi.json`; pagina `static/index.html`,
+  `style.css`, `api.js` (`BackendClient`: `listChats`, `createChat`, `getChat`, `deleteChat`;
+  `BackendError`), `texts.js` (`TEXTS`, `errorMessage` con tutta la tabella §5, `formatDate`,
+  `chatSubtitle`), `app.js` (elenco, nuova chat in cima e aperta, selezione con `#/chats/<id>`,
+  ricarica, chat inesistente → errore e nessuna selezione, eliminazione con `confirm`, riquadro
+  d'errore chiudibile). `assistant.config._log_level` → `read_log_level` (pubblico).
+- `pytest.ini`: marcatore `browser`, escluso come `real`. README (sezione front-end, variabili,
+  test nel browser, diagnosi CORS), `.env.example`, `CLAUDE.md` (struttura e comandi).
+- Decisioni prese durante l'esecuzione:
+  - Una voce non valida di `CORS_ORIGINS` si cita com'era scritta (prima di togliere la `/`
+    finale): `http://` diventerebbe `http:` nel messaggio.
+  - Ogni azione dell'utente (nuova chat, selezione, eliminazione) chiude il riquadro d'errore
+    precedente: altrimenti un errore vecchio resterebbe dopo che il back-end è tornato.
+  - Il client chiama `fetch` globale senza sé stesso come `this` (i browser rifiutano
+    `client.fetch(...)` con «Illegal invocation»); il tempo massimo copre anche la lettura del corpo.
+  - Risposta `2xx` non JSON → `BackendError(status, null, "risposta non in formato JSON")`.
+  - Nel browser, ogni test controlla anche che la pagina non abbia avuto errori JavaScript non
+    gestiti (`pageerror`).
+  - Il test «back-end spento» (CA-85 per elenco e creazione) è già qui, perché tocca il flusso
+    dell'elenco; quelli dell'invio restano al punto 3.
+- Test nuovi: `test_frontend_config.py` (13), `test_frontend_app.py` (15), `test_frontend_service.py`
+  (5), `test_frontend_contract.py` (1), `test_frontend_js.py` (1 → 35 test Node: client 16, testi
+  14, contratto 5), `test_backend_config.py` (+15 CORS), `test_backend_api.py` (+12 CORS: richiesta
+  preliminare per le quattro operazioni, risposte e errori 404/422/503 con l'intestazione, altra
+  origine senza, nessun CORS senza origini, OpenAPI invariato), `test_backend_service.py` (+1, riga
+  d'avvio aggiornata); `test_frontend_browser.py` (12, marcatore `browser`).
+- Verifiche:
+  - `pytest` → 888 passed, 74 deselected (62 reali, 12 browser).
+  - `pytest -m browser` → 12 passed in circa 5 s con Edge, 12 passed anche con
+    `BROWSER_CHANNEL=chrome`.
+  - `python -m frontend` avviato davvero (porta 8089, da Git Bash): riga d'avvio, `/config.js` con
+    l'indirizzo predefinito, `/` HTML, `/docs` 404; `BACKEND_URL=backend:8001` → «Configurazione non
+    valida: …», exit 1.
+  - Rigenerazione del contratto verificata da Git Bash (`UPDATE_CONTRACT=1 … pytest
+    tests/test_frontend_contract.py`); la forma PowerShell del README non è stata eseguita (comando
+    bloccato dai permessi della sessione: imposta una variabile d'ambiente).
+- Problemi aperti: vista dei messaggi, invio, attesa ed errori dell'agente al punto 3; il back-end
+  con CORS non è stato avviato su PostgreSQL in questo punto (coperto da `TestClient` e dai test nel
+  browser su SQLite), la prova reale è il punto 4.
+
 ### Decisioni (scelte del progettista, dettagli nella specifica §1)
 
 - HTML, CSS e JavaScript standard (moduli ES) senza framework né build: cinque operazioni e una vista

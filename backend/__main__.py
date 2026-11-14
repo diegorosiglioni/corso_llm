@@ -41,10 +41,14 @@ def main(env: Mapping[str, str] = os.environ) -> int:
 
     try:
         with AgentClient(config.agent_url) as agent:
-            app = create_app(store=ChatStore(engine), agent=agent)
+            app = create_app(
+                store=ChatStore(engine), agent=agent, cors_origins=config.cors_origins
+            )
             log.info(
-                "backend listening=http://%s:%d docs=/docs agent_url=%s database=%s",
+                "backend listening=http://%s:%d docs=/docs agent_url=%s database=%s "
+                "cors_origins=%s",
                 config.host, config.port, config.agent_url, display_url(config.database_url),
+                ",".join(config.cors_origins),
             )
             uvicorn.run(
                 app, host=config.host, port=config.port, access_log=False, log_config=None

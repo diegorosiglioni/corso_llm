@@ -108,7 +108,7 @@ def load_config(env: Mapping[str, str]) -> Config:
             f"ricevuti '{summary_keep_messages}' e '{summary_max_messages}'."
         )
 
-    log_level = _log_level(env, problems)
+    log_level = read_log_level(env, problems)
 
     notes_db = read("NOTES_DB") or DEFAULT_NOTES_DB
 
@@ -146,7 +146,7 @@ def load_config(env: Mapping[str, str]) -> Config:
     )
 
 
-def _log_level(env: Mapping[str, str], problems: list[str]) -> str:
+def read_log_level(env: Mapping[str, str], problems: list[str]) -> str:
     """LOG_LEVEL in upper case (default INFO); an invalid value is added to `problems`."""
     text = env.get("LOG_LEVEL", "").strip()
     log_level = text.upper() or "INFO"
@@ -171,7 +171,7 @@ def load_client_config(env: Mapping[str, str]) -> ClientConfig:
     agent_url = env.get("AGENT_URL", "").strip() or DEFAULT_AGENT_URL
     if not agent_url.startswith(("http://", "https://")):
         problems.append(f"AGENT_URL deve iniziare con http:// o https://, ricevuto '{agent_url}'.")
-    log_level = _log_level(env, problems)
+    log_level = read_log_level(env, problems)
     if problems:
         raise ConfigError(" ".join(problems))
     return ClientConfig(agent_url.rstrip("/"), log_level)

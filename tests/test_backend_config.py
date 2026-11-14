@@ -14,6 +14,7 @@ def test_defaults():  # CA-70
         host="127.0.0.1",
         port=8001,
         log_level="INFO",
+        cors_origins=("http://127.0.0.1:8080", "http://localhost:8080"),
     )
 
 
@@ -96,3 +97,52 @@ def test_every_problem_in_one_message():  # CA-70
 def test_display_url_hides_the_password():
     assert display_url(URL) == "postgresql+psycopg://lab:***@localhost:5432/assistente"
     assert display_url("postgresql+psycopg://db/assistente") == "postgresql+psycopg://db/assistente"
+
+
+# --- CORS_ORIGINS (step 8) ---
+
+@pytest.mark.parametrize("text", ["", "   "])
+def test_cors_origins_default(text):  # CA-79
+    config = load_backend_config({**VALID, "CORS_ORIGINS": text})
+    assert config.cors_origins == ("http://127.0.0.1:8080", "http://localhost:8080")
+
+
+def test_cors_origins_list_without_spaces_and_final_slash():  # CA-79
+    config = load_backend_config({
+        **VALID,
+        "CORS_ORIGINS": " http://localhost:3000/ , https://chat.example ,http://[::1]:8080",
+    })
+    assert config.cors_origins == (
+        "http://localhost:3000", "https://chat.example", "http://[::1]:8080"
+    )
+
+
+@pytest.mark.parametrize("text", [",", " , ,"])
+def test_cors_origins_empty_list(text):  # CA-79
+    with pytest.raises(ConfigError, match="^CORS_ORIGINS non contiene nessuna origine.$"):
+        load_backend_config({**VALID, "CORS_ORIGINS": text})
+
+
+@pytest.mark.parametrize("origin", [
+    "localhost:8080", "ftp://localhost", "http://", "http://localhost:8080/app",
+    "http://localhost:porta", "http://localhost:99999", "http://lab@localhost", "*",
+    "http://localhost?x=1",
+])
+def test_cors_origins_invalid_entry(origin):  # CA-79
+    with pytest.raises(ConfigError) as caught:
+        load_backend_config({**VALID, "CORS_ORIGINS": f"http://localhost:8080,{origin}"})
+    assert str(caught.value) == (
+        "CORS_ORIGINS deve elencare origini http(s)://host[:porta] senza percorso, ricevuto "
+        f"'{origin}'."
+    )
+
+
+def test_cors_problem_joins_the_others():  # CA-79
+    with pytest.raises(ConfigError) as caught:
+        load_backend_config({"BACKEND_PORT": "x", "CORS_ORIGINS": "a,b"})
+    assert str(caught.value) == (
+        "Manca DATABASE_URL. "
+        "BACKEND_PORT deve essere un intero tra 1 e 65535, ricevuto 'x'. "
+        "CORS_ORIGINS deve elencare origini http(s)://host[:porta] senza percorso, ricevuto "
+        "'a', 'b'."
+    )

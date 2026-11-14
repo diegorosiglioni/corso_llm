@@ -672,3 +672,77 @@ def test_titles_and_messages_do_not_enter_the_log(http, store, clock, caplog):
     answered_turn(store, clock, chat_id, "Domanda riservata", "Risposta riservata")
     http.get(f"/chats/{chat_id}")
     assert "riservat" not in " ".join(message for _, message in backend_lines(caplog))
+
+
+# --- CORS (step 8) ---
+
+PAGE = "http://127.0.0.1:8080"
+
+
+@pytest.fixture
+def cors_http(store):
+    return TestClient(create_app(store=store, agent=NoAgent(), cors_origins=(PAGE,)))
+
+
+@pytest.mark.parametrize(("method", "path"), [
+    ("GET", "/chats"), ("POST", "/chats"), ("DELETE", "/chats/1"), ("POST", "/chats/1/messages"),
+])
+def test_preflight_from_an_allowed_origin(cors_http, method, path):  # CA-81
+    response = cors_http.options(path, headers={
+        "Origin": PAGE, "Access-Control-Request-Method": method,
+        "Access-Control-Request-Headers": "content-type",
+    })
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == PAGE
+    assert method in response.headers["access-control-allow-methods"]
+    assert "content-type" in response.headers["access-control-allow-headers"].lower()
+    assert "access-control-allow-credentials" not in response.headers
+
+
+def test_answers_to_an_allowed_origin_carry_the_header(cors_http):  # CA-81
+    created = cors_http.post("/chats", json={}, headers={"Origin": PAGE})
+    assert created.status_code == 201
+    assert created.headers["access-control-allow-origin"] == PAGE
+    deleted = cors_http.delete(f"/chats/{created.json()['id']}", headers={"Origin": PAGE})
+    assert deleted.status_code == 204
+    assert deleted.headers["access-control-allow-origin"] == PAGE
+
+
+@pytest.mark.parametrize(("method", "path", "status"), [
+    ("GET", "/chats/99", 404), ("DELETE", "/chats/99", 404), ("GET", "/chats/abc", 422),
+])
+def test_error_answers_carry_the_header(cors_http, method, path, status):  # CA-81
+    response = cors_http.request(method, path, headers={"Origin": PAGE})
+    assert response.status_code == status
+    assert response.headers["access-control-allow-origin"] == PAGE
+
+
+def test_database_error_carries_the_header(store, monkeypatch):  # CA-81
+    def broken():
+        raise OperationalError("SELECT", {}, Exception("connessione rifiutata"))
+
+    monkeypatch.setattr(store, "list_chats", broken)
+    http = TestClient(create_app(store=store, agent=NoAgent(), cors_origins=(PAGE,)))
+    response = http.get("/chats", headers={"Origin": PAGE})
+    assert response.status_code == 503
+    assert response.headers["access-control-allow-origin"] == PAGE
+
+
+def test_no_header_for_another_origin(cors_http):  # CA-81
+    response = cors_http.get("/chats", headers={"Origin": "http://altro:8080"})
+    assert response.status_code == 200
+    assert "access-control-allow-origin" not in response.headers
+    preflight = cors_http.options("/chats", headers={
+        "Origin": "http://altro:8080", "Access-Control-Request-Method": "POST",
+    })
+    assert preflight.status_code == 400
+    assert "access-control-allow-origin" not in preflight.headers
+
+
+def test_no_cors_without_origins(http):  # CA-81
+    response = http.get("/chats", headers={"Origin": PAGE})
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_cors_does_not_change_the_openapi(store, http, cors_http):
+    assert cors_http.get("/openapi.json").json() == http.get("/openapi.json").json()

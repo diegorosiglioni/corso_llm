@@ -28,6 +28,13 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
   `/chats/{chat_id}`, `/chats/{chat_id}/messages` che inoltra la domanda all'agente), `config.py` (`DATABASE_URL`, `AGENT_URL`, `BACKEND_HOST`/`BACKEND_PORT`),
   `__main__.py` (avvio con `python -m backend`). Da `assistant` importa solo il client dell'agente
   e la configurazione (logging, `AGENT_URL`, `LOG_LEVEL`); `assistant` non importa nulla da
+  `backend`. Il back-end ammette il browser dalle origini di `CORS_ORIGINS`.
+- Front-end (Step 8, in corso) nel pacchetto `frontend/`: `config.py` (`BACKEND_URL`,
+  `FRONTEND_HOST`/`FRONTEND_PORT`), `app.py` (file statici e `/config.js`), `__main__.py` (avvio con
+  `python -m frontend`), pagina in `frontend/static/` (HTML, CSS, JavaScript senza framework:
+  `api.js` client del back-end, `texts.js` testi e funzioni pure, `app.js` DOM), contratto
+  `frontend/backend-openapi.json` (OpenAPI del back-end, rigenerato con `UPDATE_CONTRACT=1` su
+  `tests/test_frontend_contract.py`). Da `assistant` importa solo la configurazione; nulla da
   `backend`.
 - Test in `tests/`; il modello finto (`FakeModel`), il router finto (`ConversationRouter`), il
   revisore finto (`ApprovingReviewer`), il client MCP finto (`FakeMcpClient`), il servizio finto
@@ -35,6 +42,9 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
   `conftest.py`. I test MCP avviano il server
   reale via stdio. I test del back-end (`test_backend_*.py`) usano SQLite in memoria con lo stesso
   `init_db`, senza PostgreSQL. Le prove con LM Studio stanno in `test_real.py` (marcatore `real`).
+  Il JavaScript del front-end si prova con `node --test` (`tests/frontend/*.test.mjs`, lanciati da
+  `test_frontend_js.py`); la pagina in Edge con Playwright in `test_frontend_browser.py`
+  (marcatore `browser`, escluso dalla suite predefinita).
 - Note in SQLite: in locale `NOTES_DB` (default `data/notes.sqlite3`, ignorato da Git), in
   Docker il volume `notes-data`.
 - Dipendenze dirette in `requirements.txt` (app) e `requirements-dev.txt` (test); tutte le
@@ -42,13 +52,17 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
 - Comandi da PowerShell nella radice della repository, senza attivare l'ambiente:
   - ambiente: `py -3.13 -m venv .venv` e `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`
   - test senza modello: `.\.venv\Scripts\python.exe -m pytest`
+  - pagina del front-end nel browser (Edge installato; Chrome con `BROWSER_CHANNEL=chrome`):
+    `.\.venv\Scripts\python.exe -m pytest -m browser`
   - prove reali (LM Studio attivo, variabili impostate; circa 30 minuti): `.\.venv\Scripts\python.exe -m pytest -m real -v`
   - prove reali del back-end (PostgreSQL nel container del README, porta 5433):
     `$env:TEST_DATABASE_URL = "postgresql://lab:labprova@127.0.0.1:5433/assistente"`, poi
     `pytest tests/test_backend_store.py -m real` (solo PostgreSQL) e `pytest tests/test_real.py -m real -k backend`
   - avvio locale, in due terminali: servizio `.\.venv\Scripts\python.exe -m assistant.service`
     (variabili di LM Studio), poi CLI `.\.venv\Scripts\python.exe -m assistant`; back-end in un
-    terzo terminale con `DATABASE_URL` impostata: `.\.venv\Scripts\python.exe -m backend`
+    terzo terminale con `DATABASE_URL` impostata: `.\.venv\Scripts\python.exe -m backend`;
+    front-end in un quarto: `.\.venv\Scripts\python.exe -m frontend` (pagina su
+    `http://127.0.0.1:8080`)
   - Docker: `docker compose build` e `docker compose run --rm assistant` (non `up`; avvia anche il
     servizio `agent`, che resta attivo fino a `docker compose down`)
 
