@@ -1,5 +1,6 @@
 """Local MCP server (FastMCP, stdio) exposing unit converter, calculator, catalog and notes as
-tools, and the user preferences as the resource utente://preferenze.
+tools, the user preferences as the resource utente://preferenze, and the prompts spiega and
+riassumi_conversazione.
 
 Run as a subprocess by the client:
 python -m assistant.mcp_server --notes-db PATH --preferences-file PATH [--log-level L]
@@ -13,7 +14,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ResourceError, ToolError
+from fastmcp.exceptions import PromptError, ResourceError, ToolError
+from pydantic import Field
 
 from assistant.calculator import CALCULATOR_DESCRIPTION, calculate
 from assistant.catalog import GET_ITEM_DESCRIPTION, SEARCH_DESCRIPTION, Catalog
@@ -25,6 +27,15 @@ from assistant.notes import (
     NotesStore,
 )
 from assistant.preferences import PREFERENCES_URI, read_preferences_file
+from assistant.prompts import (
+    EXPLAIN_DESCRIPTION,
+    LEVEL_DESCRIPTION,
+    STYLE_DESCRIPTION,
+    SUMMARY_DESCRIPTION,
+    TOPIC_DESCRIPTION,
+    explain_prompt,
+    summary_prompt,
+)
 from assistant.units import UNITS_DESCRIPTION, convert_units
 
 # Explicit name: run with "python -m", __name__ would be "__main__".
@@ -50,6 +61,17 @@ def _run(function: Callable[..., dict], *args) -> dict:
         raise ToolError(str(error), log_level=logging.INFO) from None
 
 
+def _prompt(name: str, function: Callable[..., str], *args) -> str:
+    """Calls the pure logic of a prompt; an invalid value becomes an MCP prompt error."""
+    try:
+        text = function(*args)
+    except ValueError as error:
+        # An expected input error, not a server failure: logged by fastmcp only at INFO.
+        raise PromptError(str(error), log_level=logging.INFO) from None
+    log.info("event=prompt_get name=%s", name)
+    return text
+
+
 def _configure_library_logging(level: str) -> None:
     """Routes fastmcp's records through the standard handler (no Rich output) and quiets them."""
     fastmcp_logger = logging.getLogger("fastmcp")
@@ -62,8 +84,8 @@ def _configure_library_logging(level: str) -> None:
 
 
 def build_server(notes: NotesStore, catalog: Catalog, preferences_file: str | Path) -> FastMCP:
-    """Returns a FastMCP server with the seven tools bound to `notes` and `catalog` and the
-    preferences resource read from `preferences_file`."""
+    """Returns a FastMCP server with the seven tools bound to `notes` and `catalog`, the
+    preferences resource read from `preferences_file` and the two prompts."""
     server = FastMCP(SERVER_NAME)
 
     @server.resource(
@@ -80,6 +102,19 @@ def build_server(notes: NotesStore, catalog: Catalog, preferences_file: str | Pa
             raise ResourceError(str(error), log_level=logging.INFO) from None
         log.info("event=resource_read uri=%s", PREFERENCES_URI)
         return text
+
+    # Parameter names are the published argument names, hence Italian. Field as the default
+    # value (not Annotated): fastmcp 4.1.6 would add an English note to the description.
+    @server.prompt(name="spiega", description=EXPLAIN_DESCRIPTION)
+    def explain(
+        argomento: str = Field(description=TOPIC_DESCRIPTION),
+        livello: str = Field("base", description=LEVEL_DESCRIPTION),
+    ) -> str:
+        return _prompt("spiega", explain_prompt, argomento, livello)
+
+    @server.prompt(name="riassumi_conversazione", description=SUMMARY_DESCRIPTION)
+    def summarize(stile: str = Field(description=STYLE_DESCRIPTION)) -> str:
+        return _prompt("riassumi_conversazione", summary_prompt, stile)
 
     @server.tool(name="convert_units", description=UNITS_DESCRIPTION)
     def convert_units_tool(value: float, from_unit: str, to_unit: str) -> dict:

@@ -17,6 +17,15 @@ from assistant.mcp_client import server_command
 from assistant.mcp_server import PREFERENCES_DESCRIPTION, build_server
 from assistant.notes import ADD_NOTE_DESCRIPTION, NotesStore
 from assistant.preferences import PREFERENCES_URI
+from assistant.prompts import (
+    EXPLAIN_DESCRIPTION,
+    LEVEL_DESCRIPTION,
+    STYLE_DESCRIPTION,
+    SUMMARY_DESCRIPTION,
+    TOPIC_DESCRIPTION,
+    explain_prompt,
+    summary_prompt,
+)
 
 PREFERENCES = {"language": "inglese", "timezone": "America/New_York", "style": "dettagliato"}
 
@@ -148,3 +157,116 @@ def test_missing_preferences_file_adds_no_server_error_lines(tmp_path, capfd):
     err = capfd.readouterr().err
     assert "Error reading resource" not in err and "Traceback" not in err, err
     assert "event=resource_read" not in err
+
+
+# --- prompts spiega and riassumi_conversazione (lesson 6, step 5) ---
+
+
+def prompt_text(result):
+    """Role and text of the only message of a prompts/get result."""
+    [message] = result.messages
+    return message.role, message.content.text
+
+
+def test_prompts_are_listed_with_descriptions_and_arguments(server):
+    prompts = {p.name: p for p in session(server, lambda c: c.list_prompts())}
+    assert list(prompts) == ["spiega", "riassumi_conversazione"]
+    assert prompts["spiega"].description == EXPLAIN_DESCRIPTION
+    assert [(a.name, a.description, a.required) for a in prompts["spiega"].arguments] == [
+        ("argomento", TOPIC_DESCRIPTION, True),
+        ("livello", LEVEL_DESCRIPTION, False),
+    ]
+    assert prompts["riassumi_conversazione"].description == SUMMARY_DESCRIPTION
+    assert [
+        (a.name, a.description, a.required)
+        for a in prompts["riassumi_conversazione"].arguments
+    ] == [("stile", STYLE_DESCRIPTION, True)]
+
+
+def test_prompts_are_not_tools(server):
+    tools = {t.name for t in session(server, lambda c: c.list_tools())}
+    assert len(tools) == 7
+    assert not tools & {"spiega", "riassumi_conversazione"}
+
+
+def test_explain_prompt_returns_one_user_message(server, caplog):
+    caplog.set_level(logging.INFO, logger="assistant.mcp_server")
+    result = session(
+        server,
+        lambda c: c.get_prompt(
+            "spiega", {"argomento": "Model Context Protocol", "livello": "avanzato"}
+        ),
+    )
+    assert prompt_text(result) == ("user", explain_prompt("Model Context Protocol", "avanzato"))
+    assert "event=prompt_get name=spiega" in caplog.text
+
+
+def test_explain_prompt_level_defaults_to_base(server):
+    result = session(server, lambda c: c.get_prompt("spiega", {"argomento": "MCP"}))
+    assert prompt_text(result) == ("user", explain_prompt("MCP", "base"))
+
+
+def test_summary_prompt_returns_one_user_message(server, caplog):
+    caplog.set_level(logging.INFO, logger="assistant.mcp_server")
+    result = session(
+        server, lambda c: c.get_prompt("riassumi_conversazione", {"stile": "dettagliato"})
+    )
+    assert prompt_text(result) == ("user", summary_prompt("dettagliato"))
+    assert "event=prompt_get name=riassumi_conversazione" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments", "message"),
+    [
+        (
+            "spiega",
+            {"argomento": "MCP", "livello": "esperto"},
+            "Livello non valido: 'esperto'. Valori ammessi: base, intermedio, avanzato.",
+        ),
+        ("spiega", {"argomento": " "}, "L'argomento da spiegare è vuoto."),
+        (
+            "riassumi_conversazione",
+            {"stile": "breve"},
+            "Stile non valido: 'breve'. Valori ammessi: sintetico, dettagliato.",
+        ),
+    ],
+)
+def test_invalid_prompt_value_is_an_mcp_error(server, caplog, name, arguments, message):
+    caplog.set_level(logging.INFO, logger="assistant.mcp_server")
+    with pytest.raises(MCPError) as e:
+        session(server, lambda c: c.get_prompt(name, arguments))
+    assert message in str(e.value)
+    assert "event=prompt_get" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("spiega", {"livello": "base"}),  # required argument missing
+        ("riassumi_conversazione", {}),
+        ("inesistente", {}),
+    ],
+)
+def test_missing_argument_or_unknown_prompt_is_an_mcp_error(server, name, arguments):
+    with pytest.raises(MCPError):
+        session(server, lambda c: c.get_prompt(name, arguments))
+
+
+def test_prompts_over_stdio(tmp_path, capfd):
+    command, args, cwd = server_command(tmp_path / "n.sqlite3", "INFO")
+
+    async def check(c):
+        prompts = await c.list_prompts()
+        result = await c.get_prompt("spiega", {"argomento": "MCP"})
+        with pytest.raises(MCPError, match="Livello non valido"):
+            await c.get_prompt("spiega", {"argomento": "MCP", "livello": "esperto"})
+        return prompts, result
+
+    prompts, result = session(
+        StdioTransport(command, args, cwd=cwd, keep_alive=False, log_file=sys.stderr), check
+    )
+    assert [p.name for p in prompts] == ["spiega", "riassumi_conversazione"]
+    assert prompt_text(result) == ("user", explain_prompt("MCP", "base"))
+    err = capfd.readouterr().err
+    assert "event=prompt_get name=spiega" in err
+    assert "Traceback" not in err, err

@@ -335,6 +335,41 @@ autonoma); i punti successivi dello step seguono la specifica.
 - Problemi aperti: rischi nella specifica §11 (ambito più largo, revisore sul riassunto), da
   verificare nella prova reale del punto 6.
 
+### Punto 2 · Server MCP: prompt `spiega` e `riassumi_conversazione` — piano
+
+1. `assistant/prompts.py` (logica pura, specifica §3): `LEVELS`, `SUMMARY_STYLES`,
+   `MAX_TOPIC_LENGTH`, le cinque costanti delle descrizioni, `explain_prompt(topic, level)` e
+   `summary_prompt(style)` con i `ValueError` in italiano.
+2. `mcp_server.py`: prompt `spiega` e `riassumi_conversazione` con `Field(description=…)` come
+   default; `ValueError` → `PromptError(…, log_level=INFO)`; log `event=prompt_get name=<nome>`.
+3. Test: `tests/test_prompts.py` (testi per ogni livello e stile, spazi tolti, ogni errore);
+   `tests/test_mcp_server.py` in memoria (`prompts/list` con descrizioni, argomenti e `required`;
+   prompt assenti da `tools/list`; `prompts/get` col testo atteso e default `base`; valore non
+   ammesso, obbligatorio mancante, prompt inesistente → `MCPError`; log) e via stdio con
+   `server_command`. Poi `pytest` completo.
+
+Decisioni:
+- Un aiuto `_prompt(function, *args)` accanto a `_run`, invece di generalizzare `_run` con il tipo
+  d'errore: due funzioni da tre righe restano più leggibili di un parametro in più.
+- Log `event=prompt_get` scritto solo dopo un testo valido, come `event=resource_read`.
+
+### Punto 2 · Server MCP — fatto
+
+- Implementati `assistant/prompts.py` (testi, valori ammessi, descrizioni, `explain_prompt`,
+  `summary_prompt`) e i prompt `spiega` e `riassumi_conversazione` in `mcp_server.py` (`_prompt`:
+  `ValueError` → `PromptError` a livello INFO, log `event=prompt_get name=…`).
+- Test nuovi: `test_prompts.py` (21: ogni livello e stile, spazi tolti, apostrofo, lunghezza
+  massima, argomento vuoto/lungo/su più righe, livello e stile non ammessi anche con la maiuscola),
+  `test_mcp_server.py` (+12: `prompts/list` con descrizioni, argomenti e `required`, `livello`
+  facoltativo; prompt assenti da `tools/list` che resta a 7; `prompts/get` → un messaggio `user`
+  col testo della logica pura, default `base`, log; valori non ammessi → `MCPError` col messaggio
+  italiano e nessun log `prompt_get`; obbligatorio mancante e prompt inesistente → `MCPError`; via
+  stdio con `server_command`: elenco, lettura, valore rifiutato, `event=prompt_get` su stderr e
+  nessun traceback).
+- `pytest` → 408 passed, 17 deselected.
+- Problemi aperti: nessuno nuovo. I prompt non sono ancora usati dal client né dalla CLI (punti
+  3–5); README e `CLAUDE.md` si aggiornano al punto 6, come da piano dello step.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13
