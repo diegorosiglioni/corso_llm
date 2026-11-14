@@ -1,19 +1,23 @@
 """McpClient against the real MCP server started as a stdio subprocess (no LM Studio needed)."""
 
+import json
 import logging
 import sys
 
 import pytest
 from langchain_core.utils.function_calling import convert_to_openai_tool
+from mcp.types import BlobResourceContents, TextResourceContents
 
 from assistant.calculator import CALCULATOR_DESCRIPTION
 from assistant.mcp_client import (
     McpClient,
     McpStartupError,
+    ResourceUnavailableError,
     ToolSpec,
     create_mcp_tools,
     server_command,
 )
+from assistant.preferences import PREFERENCES_URI
 from assistant.tools import ToolUnavailableError
 from conftest import MCP_SPECS, FakeMcpClient
 
@@ -147,6 +151,89 @@ def test_expected_tool_errors_add_no_server_log_lines(tmp_path, capfd):
         c.call_tool("add_note", {})
     err = capfd.readouterr().err
     assert "Error calling tool" not in err and "Invalid arguments" not in err, err
+
+
+# --- resources ---
+
+
+def test_read_resource_returns_the_preferences_json(tmp_path):
+    preferences = tmp_path / "preferenze.json"
+    preferences.write_text(
+        '{"language": "inglese", "timezone": "America/New_York", "style": "dettagliato"}',
+        encoding="utf-8",
+    )
+    command, args, cwd = server_command(tmp_path / "n.sqlite3", "WARNING", preferences)
+    with McpClient(command, args, cwd=cwd) as c:
+        text = c.read_resource(PREFERENCES_URI)
+    assert json.loads(text) == {
+        "language": "inglese", "timezone": "America/New_York", "style": "dettagliato",
+    }
+
+
+def test_read_resource_with_the_default_file(client):
+    assert json.loads(client.read_resource(PREFERENCES_URI)) == {
+        "language": "italiano", "timezone": "Europe/Rome", "style": "sintetico",
+    }
+
+
+def test_unknown_resource_is_unavailable(client):
+    with pytest.raises(ResourceUnavailableError, match="utente://inesistente"):
+        client.read_resource("utente://inesistente")
+
+
+def test_missing_preferences_file_is_unavailable(tmp_path):
+    missing = tmp_path / "manca.json"
+    command, args, cwd = server_command(tmp_path / "n.sqlite3", "WARNING", missing)
+    with McpClient(command, args, cwd=cwd) as c:
+        with pytest.raises(ResourceUnavailableError, match="File delle preferenze non leggibile"):
+            c.read_resource(PREFERENCES_URI)
+        # the session survives the error: tools still work
+        assert c.call_tool("calculate", {"expression": "1+1"})["result"] == 2
+
+
+def test_read_resource_after_close_is_unavailable(tmp_path):
+    command, args, cwd = server_command(tmp_path / "n.sqlite3", "WARNING")
+    with McpClient(command, args, cwd=cwd) as c:
+        pass
+    with pytest.raises(ResourceUnavailableError, match="sessione MCP chiusa"):
+        c.read_resource(PREFERENCES_URI)
+
+
+def test_resource_error_is_not_a_tool_error():
+    assert not issubclass(ResourceUnavailableError, ToolUnavailableError)
+
+
+def test_resource_without_text_is_unavailable(monkeypatch):
+    blob = BlobResourceContents(uri=PREFERENCES_URI, mimeType="application/json", blob="e30=")
+    c = McpClient("unused", [])
+    monkeypatch.setattr(c, "_submit", lambda request: [blob])
+    with pytest.raises(ResourceUnavailableError, match="nessun contenuto testuale"):
+        c.read_resource(PREFERENCES_URI)
+
+
+def test_text_contents_are_joined(monkeypatch):
+    parts = [
+        TextResourceContents(uri=PREFERENCES_URI, mimeType="application/json", text='{"a": '),
+        TextResourceContents(uri=PREFERENCES_URI, mimeType="application/json", text="1}"),
+    ]
+    c = McpClient("unused", [])
+    monkeypatch.setattr(c, "_submit", lambda request: parts)
+    assert c.read_resource(PREFERENCES_URI) == '{"a": 1}'
+
+
+def test_fake_client_reads_registered_resources():
+    fake = FakeMcpClient(MCP_SPECS, resources={PREFERENCES_URI: '{"style": "dettagliato"}'})
+    assert fake.read_resource(PREFERENCES_URI) == '{"style": "dettagliato"}'
+    with pytest.raises(ResourceUnavailableError):
+        fake.read_resource("utente://altro")
+    assert fake.resource_reads == [PREFERENCES_URI, "utente://altro"]
+
+
+def test_fake_client_without_resources_is_unavailable():
+    fake = FakeMcpClient(MCP_SPECS)
+    with pytest.raises(ResourceUnavailableError):
+        fake.read_resource(PREFERENCES_URI)
+    assert fake.resource_reads == [PREFERENCES_URI]
 
 
 def test_close_releases_the_database(tmp_path):

@@ -5,7 +5,7 @@ import openai
 from langchain_core.messages import AIMessage, BaseMessage
 
 from assistant.graph import build_graph
-from assistant.mcp_client import McpStartupError, ToolSpec
+from assistant.mcp_client import McpStartupError, ResourceUnavailableError, ToolSpec
 from assistant.reviewer import ReviewDecision
 from assistant.router import RouteDecision
 from assistant.tools import create_current_time_tool
@@ -90,12 +90,20 @@ MCP_SPECS = [
 
 
 class FakeMcpClient:
-    """Stands in for McpClient: publishes `specs`, records calls and answers {"ok": True}."""
+    """Stands in for McpClient: publishes `specs`, records calls and answers {"ok": True}.
 
-    def __init__(self, specs: list[ToolSpec], fail_on_enter: bool = False):
+    `resources` maps URI → text; any other URI is unavailable. Reads go to `resource_reads`.
+    """
+
+    def __init__(
+        self, specs: list[ToolSpec], fail_on_enter: bool = False,
+        resources: dict[str, str] | None = None,
+    ):
         self._specs = list(specs)
         self._fail_on_enter = fail_on_enter
+        self._resources = dict(resources or {})
         self.calls: list[tuple[str, dict]] = []
+        self.resource_reads: list[str] = []
 
     def __enter__(self):
         if self._fail_on_enter:
@@ -111,6 +119,12 @@ class FakeMcpClient:
     def call_tool(self, name: str, arguments: dict) -> dict:
         self.calls.append((name, arguments))
         return {"ok": True}
+
+    def read_resource(self, uri: str) -> str:
+        self.resource_reads.append(uri)
+        if uri not in self._resources:
+            raise ResourceUnavailableError(f"Resource not found: {uri!r}")
+        return self._resources[uri]
 
 
 def lm_studio_error() -> openai.APIConnectionError:

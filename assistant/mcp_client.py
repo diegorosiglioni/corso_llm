@@ -14,6 +14,7 @@ from pathlib import Path
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 from langchain_core.tools import BaseTool, StructuredTool
+from mcp.types import TextResourceContents
 
 from assistant.config import DEFAULT_PREFERENCES_FILE
 from assistant.tools import ToolUnavailableError
@@ -34,6 +35,13 @@ class ToolSpec:
 
 class McpStartupError(Exception):
     """The MCP server could not be started or did not complete the handshake."""
+
+
+class ResourceUnavailableError(Exception):
+    """A resource could not be read: MCP error, closed session, timeout or no text content.
+
+    Kept apart from ToolUnavailableError: resources are not tools, in the code and in the logs.
+    """
 
 
 def server_command(
@@ -142,6 +150,17 @@ class McpClient:
         if result.is_error:
             return {"error": "\n".join(getattr(c, "text", "") for c in result.content)}
         return result.structured_content or {}
+
+    def read_resource(self, uri: str) -> str:
+        """Text of the resource (resources/read); binary contents are ignored."""
+        try:
+            contents = self._submit(lambda client: client.read_resource(uri))
+        except ToolUnavailableError as error:
+            raise ResourceUnavailableError(str(error)) from error
+        texts = [c.text for c in contents if isinstance(c, TextResourceContents)]
+        if not texts:
+            raise ResourceUnavailableError("nessun contenuto testuale")
+        return "".join(texts)
 
     def _submit(self, request):
         """Runs `request(client)` on the session loop; connection problems → ToolUnavailableError."""

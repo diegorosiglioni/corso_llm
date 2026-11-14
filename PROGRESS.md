@@ -144,6 +144,37 @@ Decisioni:
 - `pytest` → 320 passed, 15 deselected.
 - Problemi aperti: nessuno nuovo. README e `CLAUDE.md` si aggiornano al punto 5, come da piano.
 
+### Punto 3 · Client MCP: `read_resource` — piano
+
+1. `mcp_client.py`: `ResourceUnavailableError(Exception)`; `McpClient.read_resource(uri) -> str`
+   con `_submit(lambda c: c.read_resource(uri))`, `ToolUnavailableError` → `ResourceUnavailableError`
+   con lo stesso motivo; concatenazione dei `text` dei contenuti testuali, nessun testo →
+   `ResourceUnavailableError("nessun contenuto testuale")` (specifica §5, «Client»).
+2. `tests/conftest.py`: `FakeMcpClient(specs, fail_on_enter=False, resources=None)` con
+   `read_resource(uri)` (testo registrato oppure `ResourceUnavailableError`) e `resource_reads`.
+3. Test in `tests/test_mcp_client.py`: via stdio resource leggibile (JSON del file passato con
+   `--preferences-file`), URI inesistente, file mancante, dopo la chiusura →
+   `ResourceUnavailableError`; contenuto solo binario → errore (con un finto `_submit`, il server
+   non ne espone); `FakeMcpClient.read_resource` registrata e assente. Poi `pytest` completo.
+
+Decisioni:
+- `ResourceUnavailableError` non deriva da `ToolUnavailableError`: altrimenti un `except` sugli
+  strumenti catturerebbe anche la resource, mentre la specifica le vuole separate.
+- Il contenuto binario (`BlobResourceContents`) è ignorato: la resource delle preferenze è testo
+  JSON e decodificare base64 sarebbe codice senza uso.
+
+### Punto 3 · Client MCP — fatto
+
+- Implementati `ResourceUnavailableError` e `McpClient.read_resource` in `mcp_client.py`;
+  `FakeMcpClient(..., resources=…)` con `read_resource` e `resource_reads` in `conftest.py`.
+- Test nuovi in `test_mcp_client.py` (+10): via stdio file passato con `--preferences-file`, file
+  di esempio predefinito, URI inesistente (il motivo contiene l'URI), file mancante (messaggio
+  italiano del server; la sessione resta usabile per gli strumenti), lettura dopo la chiusura;
+  contenuto solo binario e concatenazione dei testi con un `_submit` sostituito; eccezione distinta
+  da `ToolUnavailableError`; `FakeMcpClient` con resource registrata e senza.
+- `pytest` → 330 passed, 15 deselected.
+- Problemi aperti: nessuno nuovo. Il client non è ancora usato dall'host (punto 4).
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13
