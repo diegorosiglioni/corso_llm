@@ -1421,6 +1421,57 @@ Decisioni:
   una lettura della chat partita prima che arrivi la risposta e conclusa dopo potrebbe mostrare la
   domanda senza risposta fino alla prossima apertura (finestra stretta, non osservata nei test).
 
+### Punto 4 · Prova reale Step 8 dal browser — piano
+
+Servizi verificati all'inizio: LM Studio con `google/gemma-4-e2b` (`GET /v1/models`), container
+`assistente-postgres` riavviato con `docker start` (porta 5433), Edge per Playwright.
+1. `tests/test_real.py`: `start_frontend` (`python -m frontend` come sottoprocesso con
+   `BACKEND_URL`), `start_backend` con `CORS_ORIGINS` facoltativo; prova
+   `test_frontend_chat_from_the_browser` (CA-86, CA-87): schema temporaneo in `TEST_DATABASE_URL`,
+   agente, back-end e front-end come sottoprocessi, Edge senza finestra. Nuova chat, «Quanto fa
+   17 * 23?» → attesa, risposta con «391», «Strumenti usati: calculate», `tool=calculate` nel log
+   dell'agente; back-end fermato e riavviato sulla stessa porta, pagina ricaricata → chat e messaggi;
+   agente fermato → messaggio d'errore, domanda salvata visibile, «Nuova chat» funziona. Schermate in
+   `tmp_path`.
+2. Esecuzione con `pytest tests/test_real.py -m real -k frontend`; poi `pytest` e `pytest -m browser`.
+3. README (prova reale del front-end, avvio dei quattro processi), `CLAUDE.md` (comando), esiti in
+   requisiti §16 (CA-86, CA-87) e qui. Servizio non raggiungibile → `[!]`.
+
+Decisioni:
+- Una sola prova con le tre fasi (come CA-78): agente, schema e pagina si avviano una volta, e la
+  fase «agente fermato» usa la chat creata prima, come chiede CA-87 («domanda salvata visibile»).
+- Solo marcatore `real` (quello del modulo), non `browser`: `pytest -m browser` resta senza LM Studio.
+
+### Punto 4 · Prova reale Step 8 dal browser — fatto
+
+- `tests/test_real.py`: `start_backend(..., cors_origins="")` (imposta `CORS_ORIGINS` se dato),
+  `start_frontend`, `open_browser_page` (Edge o `BROWSER_CHANNEL`, senza finestra, errori JavaScript
+  raccolti), prova `test_frontend_chat_from_the_browser`. Playwright importato dentro le funzioni:
+  il modulo resta raccoglibile anche senza la dipendenza di test del browser. Nessun codice
+  dell'applicazione cambiato.
+- Prima esecuzione fallita per l'ambiente, non per il codice: senza `LMSTUDIO_BASE_URL` e
+  `LMSTUDIO_MODEL` nell'ambiente l'agente esce con «Configurazione non valida» (come documentato).
+
+| CA | Prova | Esito |
+|----|-------|-------|
+| CA-86, CA-87 | `LMSTUDIO_BASE_URL=http://127.0.0.1:1234/v1 LMSTUDIO_MODEL=google/gemma-4-e2b MAX_STEPS=5 TEST_DATABASE_URL=postgresql://lab:…@127.0.0.1:5433/assistente pytest tests/test_real.py -m real -k frontend -s` (Edge) | ✅ 1 passed in 92 s. Pagina: «Nuova chat», «Quanto fa 17 * 23?» con l'attesa (schermata), risposta «391» dopo 74 s con «Strumenti usati: calculate» (argomenti `{"expression":"17 * 23"}`, risultato 391), titolo dalla domanda. Log dell'agente: `variant=mcp tool=calculate`, `api response=chat status=200 tools=calculate`; back-end: `agent_call chat=1 history=0`, `send_message … status=201 tools=calculate`, `cors_origins=` con la porta del front-end. Back-end riavviato, pagina ricaricata → stessa chat e due messaggi con gli strumenti. Agente fermato → riquadro «L'assistente non è raggiungibile… riprova più tardi», domanda «Quanto fa 2 + 2?» visibile (`get_chat … messages=3`), `503 agent_unavailable` nel log; «Nuova chat» → seconda chat creata e aperta; nessun errore JavaScript. Dopo la prova `\dn` mostra solo `public` |
+| — | `pytest` | ✅ 888 passed, 84 deselected; `pytest -m real --collect-only` raccoglie 63 prove |
+| — | `pytest -m browser` | ✅ 21 passed in 9 s (Edge) |
+
+- Schermate controllate a vista (`1-attesa.png`, `2-risposta.png`, `4-agente-fermato.png`): attesa
+  con il contatore, risposta con il dettaglio dello strumento aperto, riquadro d'errore con la
+  domanda salvata.
+- Documenti: README (introduzione con il front-end, titolo della sezione senza «in corso», prova
+  reale `-k frontend` con le fasi e le schermate, conteggio dei test), `CLAUDE.md` (comando della
+  prova; «in corso» tolto da back-end e front-end), requisiti §16 (esiti di CA-79…CA-87).
+- Container `assistente-postgres` lasciato attivo per lo Step 9 (dati conservati; `docker stop
+  assistente-postgres` per fermarlo).
+- Problemi aperti: una sola esecuzione (dimostra il comportamento con quella domanda, non che il
+  modello usi sempre `calculate`); prova solo con Edge, non con Chrome; i comandi del README per i
+  quattro terminali non sono stati rieseguiti a mano (la prova avvia gli stessi `python -m …` con le
+  stesse variabili). La finestra stretta del punto 3 (lettura della chat partita prima della risposta)
+  non si è vista.
+
 ### Decisioni (scelte del progettista, dettagli nella specifica §1)
 
 - HTML, CSS e JavaScript standard (moduli ES) senza framework né build: cinque operazioni e una vista

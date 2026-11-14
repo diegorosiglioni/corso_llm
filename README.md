@@ -18,6 +18,8 @@ documentato con OpenAPI); il terminale è un **client** di quel servizio e conse
 riassunto della conversazione.
 Un **back-end** separato (FastAPI, `python -m backend`) salva chat e messaggi in PostgreSQL e
 chiama l'agente con la cronologia salvata: le chat restano dopo il riavvio.
+Un **front-end** (`python -m frontend`) serve una pagina di chat per il browser che parla solo con il
+back-end: elenco, creazione ed eliminazione delle chat, messaggi con gli strumenti usati.
 
 Requisiti e specifica: [`docs/superpowers/`](docs/superpowers/).
 
@@ -64,8 +66,8 @@ sottoprocesso stdio, con l'archivio delle note in una cartella temporanea (circa
 Il servizio HTTP si prova con l'app vera su un grafo finto, senza rete (`TestClient`), e la CLI
 parla con quella stessa app. Il back-end si prova su SQLite in memoria, con lo stesso schema, senza
 PostgreSQL. Il JavaScript della pagina del front-end si prova con Node.js (`node --test`, lanciato
-da `pytest`; senza Node il test si salta col motivo). Esito al 2026-11-14: `888 passed, 83
-deselected` (le 83 deselezionate sono le 62 prove reali, 24 con LM Studio e 38 test dell'archivio
+da `pytest`; senza Node il test si salta col motivo). Esito al 2026-11-14: `888 passed, 84
+deselected` (le 84 deselezionate sono le 63 prove reali, 25 con LM Studio e 38 test dell'archivio
 ripetuti su PostgreSQL, e i 21 test nel browser).
 
 La pagina vera nel browser installato (Edge; Chrome con `$env:BROWSER_CHANNEL = "chrome"`), pilotato
@@ -263,7 +265,7 @@ resta nella chat senza risposta e lo stato dell'agente della chat non cambia: si
 messaggio. Dettagli nella [specifica](docs/superpowers/specs/2026-11-14-backend-chat-design.md)
 (§5–§7).
 
-### Front-end: la chat nel browser (in corso)
+### Front-end: la chat nel browser
 
 Il front-end (`python -m frontend`) serve una pagina in HTML, CSS e JavaScript, senza framework,
 che parla solo con il back-end: il browser lo chiama direttamente all'indirizzo `BACKEND_URL`,
@@ -606,12 +608,21 @@ bene anche il database del back-end.
 $env:TEST_DATABASE_URL = "postgresql://lab:labprova@127.0.0.1:5433/assistente"
 .\.venv\Scripts\python.exe -m pytest tests/test_backend_store.py -m real -v    # archivio su PostgreSQL, senza LM Studio
 .\.venv\Scripts\python.exe -m pytest tests/test_real.py -m real -k backend -v  # back-end, agente e LM Studio
+.\.venv\Scripts\python.exe -m pytest tests/test_real.py -m real -k frontend -v # pagina nel browser con tutti i servizi
 ```
 
 La prima riesegue su PostgreSQL i test dell'archivio (di solito su SQLite in memoria); la seconda
 avvia agente e back-end come processi, manda «Quanto fa 17 * 23?», riavvia il back-end e controlla
 che la chat ci sia ancora e che il messaggio successivo usi la cronologia salvata, poi ferma
 l'agente e controlla la risposta `503 agent_unavailable`.
+
+La terza avvia anche il front-end e pilota Edge senza finestra (Chrome con
+`$env:BROWSER_CHANNEL = "chrome"`): crea una chat dalla pagina, manda «Quanto fa 17 * 23?» e aspetta
+la risposta con «391» e «Strumenti usati: calculate» (strumento presente anche nel log
+dell'agente); riavvia il back-end, ricarica la pagina e ritrova chat e messaggi; ferma l'agente,
+manda un'altra domanda e controlla il messaggio d'errore, la domanda salvata nella chat e che si
+possa ancora creare una chat. Le schermate di ogni fase (`1-attesa.png` … `4-agente-fermato.png`)
+restano nella cartella temporanea del test, indicata nell'output con `-s`.
 
 ## Strumenti
 

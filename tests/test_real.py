@@ -575,9 +575,11 @@ FOLLOW_UP = "Moltiplica per 2 il risultato di prima."
 
 
 @contextmanager
-def start_backend(tmp_path, port: int, agent_url: str, database: tuple[str, str]):
+def start_backend(tmp_path, port: int, agent_url: str, database: tuple[str, str],
+                  cors_origins: str = ""):
     """`python -m backend` on `port` with the database in the temporary schema `database`
-    (url, schema); PGOPTIONS (read by libpq) sets the search_path of every connection."""
+    (url, schema); PGOPTIONS (read by libpq) sets the search_path of every connection.
+    `cors_origins`, when given, is CORS_ORIGINS (the pages allowed to call the back-end)."""
     url, schema = database
     env = {
         "BACKEND_HOST": "127.0.0.1",
@@ -586,6 +588,8 @@ def start_backend(tmp_path, port: int, agent_url: str, database: tuple[str, str]
         "DATABASE_URL": url,
         "PGOPTIONS": f"-csearch_path={schema}",
     }
+    if cors_origins:
+        env["CORS_ORIGINS"] = cors_origins
     with start_process("backend", tmp_path, port, env) as started:
         yield started
 
@@ -650,3 +654,110 @@ def test_backend_keeps_chats_across_restarts(tmp_path):  # CA-78
     contents = [m["content"] for m in final.json()["messages"]]
     assert len(contents) == 5 and contents[-1] == "Quanto fa 2 + 2?", contents
     print(f"risposte: {answer['content']!r} / {second.json()['answer']['content']!r}")
+
+
+# --- lesson 6, step 8: the page in the browser with the real services (CA-86, CA-87) ---
+
+AGENT_DOWN = (
+    "L'assistente non è raggiungibile in questo momento. La domanda è salvata nella chat: "
+    "riprova più tardi."
+)
+ANSWER_TIMEOUT_MS = 900_000  # the local model may take minutes (the page waits up to 660 s)
+
+
+@contextmanager
+def start_frontend(tmp_path, port: int, backend_url: str):
+    """`python -m frontend` on `port`, the page calling the back-end at `backend_url`."""
+    env = {"FRONTEND_HOST": "127.0.0.1", "FRONTEND_PORT": str(port), "BACKEND_URL": backend_url}
+    with start_process("frontend", tmp_path, port, env) as started:
+        yield started
+
+
+@contextmanager
+def open_browser_page():
+    """A page of Edge (or BROWSER_CHANNEL) without a window; yields (page, errors), errors being
+    the uncaught JavaScript errors of the page."""
+    from playwright.sync_api import sync_playwright
+
+    channel = os.environ.get("BROWSER_CHANNEL", "msedge")
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel=channel, headless=True)
+        try:
+            page = browser.new_context(locale="it-IT").new_page()
+            page.set_default_timeout(30_000)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            yield page, errors
+        finally:
+            browser.close()
+
+
+def test_frontend_chat_from_the_browser(tmp_path):  # CA-86, CA-87
+    from playwright.sync_api import expect
+
+    backend_port, frontend_port = free_port(), free_port()
+    backend_url = f"http://127.0.0.1:{backend_port}"
+    frontend_url = f"http://127.0.0.1:{frontend_port}"
+    texts = "#messages .message-text"
+    with (
+        postgres_schema("frontend") as database,
+        start_frontend(tmp_path, frontend_port, backend_url),
+        open_browser_page() as (page, errors),
+    ):
+        def backend(agent_url):
+            return start_backend(tmp_path, backend_port, agent_url, database, frontend_url)
+
+        with start_service(tmp_path) as (agent_url, read_agent_log):
+            with backend(agent_url) as (_, read_backend_log):
+                page.goto(frontend_url)
+                page.get_by_role("button", name="Nuova chat").click()
+                expect(page.locator("#chat-title")).to_have_text("Nuova chat")
+                chat_address = page.url
+                page.locator("#message-input").fill(QUESTION)
+                page.locator("#message-input").press("Enter")
+                expect(page.locator("#waiting")).to_be_visible()
+                page.screenshot(path=tmp_path / "1-attesa.png")
+                expect(page.locator(texts)).to_have_count(2, timeout=ANSWER_TIMEOUT_MS)
+                expect(page.locator("#error")).to_be_hidden()
+                question, answer = page.locator(texts).all_inner_texts()
+                summary = page.locator("#messages .message.assistant summary").inner_text()
+                expect(page.locator("#chat-title")).to_have_text(QUESTION)
+                page.locator("#messages .message.assistant summary").click()
+                page.screenshot(path=tmp_path / "2-risposta.png")
+                first_backend_log = read_backend_log()
+            # back-end stopped and started again on the same port and database
+            with backend(agent_url):
+                page.reload()
+                expect(page.locator("#chat-title")).to_have_text(QUESTION)
+                expect(page.locator(texts)).to_have_text([question, answer])
+                restored_summary = page.locator("#messages .message.assistant summary").inner_text()
+                listed = page.locator("#chat-list .chat-name").all_inner_texts()
+                page.screenshot(path=tmp_path / "3-dopo-il-riavvio.png")
+            agent_log = read_agent_log()
+        # agent stopped
+        with backend(agent_url) as (_, read_backend_log):
+            page.reload()
+            expect(page.locator(texts)).to_have_count(2)
+            page.locator("#message-input").fill("Quanto fa 2 + 2?")
+            page.locator("#message-input").press("Enter")
+            expect(page.locator("#error-text")).to_have_text(AGENT_DOWN)
+            expect(page.locator(texts)).to_have_text([question, answer, "Quanto fa 2 + 2?"])
+            expect(page.locator("#message-input")).to_be_enabled()
+            page.screenshot(path=tmp_path / "4-agente-fermato.png")
+            page.get_by_role("button", name="Nuova chat").click()  # the page is still usable
+            expect(page.locator("#chat-list .chat-open")).to_have_count(2)
+            expect(page.locator("#chat-title")).to_have_text("Nuova chat")
+            failed_backend_log = read_backend_log()
+
+    print(f"risposta: {answer!r}; {summary!r}; schermate in {tmp_path}")
+    assert question == QUESTION
+    assert "391" in answer, answer
+    assert summary == "Strumenti usati: calculate", summary
+    assert re.search(r"variant=\S+ tool=calculate call_id=", agent_log), agent_log
+    assert "api request=chat kind=message history=0" in agent_log, agent_log
+    assert "status=201 tools=calculate " in first_backend_log, first_backend_log
+    assert restored_summary == summary
+    assert listed == [QUESTION]
+    assert chat_address.startswith(f"{frontend_url}/#/chats/"), chat_address
+    assert "status=503 error=agent_unavailable" in failed_backend_log, failed_backend_log
+    assert errors == [], f"errori JavaScript nella pagina: {errors}"

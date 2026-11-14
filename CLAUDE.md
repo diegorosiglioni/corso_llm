@@ -22,14 +22,14 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
   prompt MCP `spiega` e `riassumi_conversazione` in `prompts.py`; server
   FastMCP in `mcp_server.py`, client sincrono e adattatore in `mcp_client.py`. Solo
   `service.py` collega grafo, MCP e modelli; `__main__.py` collega client HTTP e terminale.
-- Back-end (Step 7, in corso) nel pacchetto `backend/`, servizio distinto dall'agente: `db.py`
+- Back-end (Step 7) nel pacchetto `backend/`, servizio distinto dall'agente: `db.py`
   (schema SQLAlchemy `chats`/`chat_messages`, `create_db_engine`, `init_db`), `store.py`
   (`ChatStore`: chat, messaggi visibili e stato dell'agente), `api.py` (app FastAPI: `/chats`,
   `/chats/{chat_id}`, `/chats/{chat_id}/messages` che inoltra la domanda all'agente), `config.py` (`DATABASE_URL`, `AGENT_URL`, `BACKEND_HOST`/`BACKEND_PORT`),
   `__main__.py` (avvio con `python -m backend`). Da `assistant` importa solo il client dell'agente
   e la configurazione (logging, `AGENT_URL`, `LOG_LEVEL`); `assistant` non importa nulla da
   `backend`. Il back-end ammette il browser dalle origini di `CORS_ORIGINS`.
-- Front-end (Step 8, in corso) nel pacchetto `frontend/`: `config.py` (`BACKEND_URL`,
+- Front-end (Step 8) nel pacchetto `frontend/`: `config.py` (`BACKEND_URL`,
   `FRONTEND_HOST`/`FRONTEND_PORT`), `app.py` (file statici e `/config.js`), `__main__.py` (avvio con
   `python -m frontend`), pagina in `frontend/static/` (HTML, CSS, JavaScript senza framework:
   `api.js` client del back-end, `texts.js` testi e funzioni pure, `app.js` DOM), contratto
@@ -57,7 +57,8 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
   - prove reali (LM Studio attivo, variabili impostate; circa 30 minuti): `.\.venv\Scripts\python.exe -m pytest -m real -v`
   - prove reali del back-end (PostgreSQL nel container del README, porta 5433):
     `$env:TEST_DATABASE_URL = "postgresql://lab:labprova@127.0.0.1:5433/assistente"`, poi
-    `pytest tests/test_backend_store.py -m real` (solo PostgreSQL) e `pytest tests/test_real.py -m real -k backend`
+    `pytest tests/test_backend_store.py -m real` (solo PostgreSQL), `pytest tests/test_real.py -m real -k backend`
+    e, dal browser con tutti i servizi, `pytest tests/test_real.py -m real -k frontend`
   - avvio locale, in due terminali: servizio `.\.venv\Scripts\python.exe -m assistant.service`
     (variabili di LM Studio), poi CLI `.\.venv\Scripts\python.exe -m assistant`; back-end in un
     terzo terminale con `DATABASE_URL` impostata: `.\.venv\Scripts\python.exe -m backend`;

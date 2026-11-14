@@ -561,7 +561,10 @@ PostgreSQL, agente e LM Studio (`google/gemma-4-e2b`) dalla prova `test_backend_
 
 Riferimento: `LLM_Lez_6.pdf`, Blocco C e Step 8 (riassunto in `lezione6.md`). Stato: scritti il
 2026-11-14 in modalità autonoma insieme alla specifica `specs/2026-11-14-frontend-chat-design.md`; le
-scelte del progettista sono nella sua §1. Esiti delle verifiche in `PROGRESS.md`.
+scelte del progettista sono nella sua §1. Esiti delle verifiche in `PROGRESS.md`. CA-79…CA-83
+verificati con `pytest`; CA-84 e CA-85 con `pytest -m browser` in Edge (e Chrome); CA-86 e CA-87 il
+2026-11-14 con PostgreSQL 18.6 nel container, LM Studio (`google/gemma-4-e2b`), agente, back-end e
+front-end come processi ed Edge senza finestra, dalla prova `test_frontend_chat_from_the_browser`.
 
 - **RF-68** *Front-end* — Un'interfaccia di chat nel browser, in italiano, usabile da chi non conosce
   il progetto, scritta in HTML, CSS e JavaScript senza framework né passo di build, servita da un
