@@ -16,6 +16,8 @@ richiama dal terminale con i comandi `/prompts` e `/prompt`.
 Grafo, server MCP e modelli girano in un **servizio HTTP dell'agente** (FastAPI, senza stato,
 documentato con OpenAPI); il terminale è un **client** di quel servizio e conserva cronologia e
 riassunto della conversazione.
+Un **back-end** separato (FastAPI, `python -m backend`) salva chat e messaggi in PostgreSQL e
+chiama l'agente con la cronologia salvata: le chat restano dopo il riavvio.
 
 Requisiti e specifica: [`docs/superpowers/`](docs/superpowers/).
 
@@ -23,7 +25,7 @@ Requisiti e specifica: [`docs/superpowers/`](docs/superpowers/).
 
 - Python 3.13 (con il launcher `py` su Windows)
 - LM Studio con il modello caricato e il server avviato
-- Docker Desktop (solo per l'avvio con Docker Compose)
+- Docker Desktop (per l'avvio con Docker Compose e per PostgreSQL del back-end)
 
 ## Installazione
 
@@ -60,8 +62,9 @@ Non richiedono LM Studio né la rete: il modello è sostituito da un modello fin
 programmate (anche per router e revisore). I test del server MCP lo avviano davvero come
 sottoprocesso stdio, con l'archivio delle note in una cartella temporanea (circa 1 s per test).
 Il servizio HTTP si prova con l'app vera su un grafo finto, senza rete (`TestClient`), e la CLI
-parla con quella stessa app. Esito al 2026-11-14: `689 passed, 19 deselected` (le 19 deselezionate
-sono le prove reali).
+parla con quella stessa app. Il back-end si prova su SQLite in memoria, con lo stesso schema, senza
+PostgreSQL. Esito al 2026-11-14: `825 passed, 62 deselected` (le 62 deselezionate sono le prove
+reali: 24 con LM Studio e 38 test dell'archivio ripetuti su PostgreSQL).
 
 ## Configurazione
 
@@ -184,6 +187,68 @@ cronologia e riassunto del chiamante. Formato dei messaggi e tabella completa ne
 Invoke-RestMethod http://127.0.0.1:8000/status
 Invoke-RestMethod http://127.0.0.1:8000/chat -Method Post -ContentType "application/json" -Body '{"message": "Quanto fa 17 * 23?"}'
 ```
+
+### Back-end: chat salvate su PostgreSQL
+
+Il back-end (`python -m backend`) è un servizio distinto dall'agente: salva chat e messaggi in
+PostgreSQL e, per ogni messaggio, chiama l'agente via HTTP con la cronologia e il riassunto salvati
+nella chat. Le chat restano dopo il riavvio del back-end. Servono tre processi: PostgreSQL (qui in
+un container), il servizio dell'agente (punto 1 di «Avvio locale») e il back-end.
+
+| Variabile | Obbligatoria | Default | Significato |
+|-----------|--------------|---------|-------------|
+| `DATABASE_URL` | sì | — | database PostgreSQL, `postgresql+psycopg://utente:password@host:porta/nome` (anche `postgresql://…`) |
+| `AGENT_URL` | no | `http://127.0.0.1:8000` | indirizzo del servizio dell'agente |
+| `BACKEND_HOST` | no | `127.0.0.1` | indirizzo su cui ascolta il back-end |
+| `BACKEND_PORT` | no | `8001` | porta del back-end (intero tra 1 e 65535) |
+| `LOG_LEVEL` | no | `INFO` | come per l'agente |
+
+**PostgreSQL in un container** (immagine ufficiale; utente, password e nome sono d'esempio). Sulla
+porta 5432 dell'host può esserci già un PostgreSQL installato: il comando pubblica il container
+sulla 5433.
+
+```powershell
+docker run -d --name assistente-postgres -e POSTGRES_USER=lab -e POSTGRES_PASSWORD=labprova -e POSTGRES_DB=assistente -p 5433:5432 postgres:18.6
+docker exec assistente-postgres pg_isready -U lab -d assistente    # «accepting connections»
+```
+
+I dati restano nel container (anche dopo `docker stop assistente-postgres` e
+`docker start assistente-postgres`); `docker rm -f assistente-postgres` lo elimina con le chat.
+Compose con PostgreSQL e un volume arriva con lo Step 9.
+
+**Avvio del back-end**, in un terzo terminale (servizio dell'agente già avviato):
+
+```powershell
+$env:DATABASE_URL = "postgresql://lab:labprova@127.0.0.1:5433/assistente"
+.\.venv\Scripts\python.exe -m backend
+```
+
+All'avvio crea le tabelle `chats` e `chat_messages` se mancano (i dati esistenti restano) e scrive
+`backend listening=http://127.0.0.1:8001 docs=/docs agent_url=… database=postgresql+psycopg://lab:***@…`
+(la password non compare mai nei log). Con il database spento esce con codice 1 e «Database non
+raggiungibile: …»; l'agente spento invece non blocca l'avvio.
+
+OpenAPI su `http://127.0.0.1:8001/openapi.json`, pagina interattiva su `http://127.0.0.1:8001/docs`.
+Endpoint: `POST /chats` (corpo `{"title": "…"}` facoltativo; senza titolo lo prende dalla prima
+domanda), `GET /chats` (titolo e data dell'ultimo messaggio, la più recente prima),
+`GET /chats/{chat_id}` (messaggi in ordine, con gli strumenti usati), `DELETE /chats/{chat_id}`
+(con i messaggi) e `POST /chats/{chat_id}/messages` (corpo `{"content": "…"}`: salva la domanda,
+chiama l'agente, salva e restituisce domanda e risposta).
+
+```powershell
+$chat = Invoke-RestMethod http://127.0.0.1:8001/chats -Method Post
+Invoke-RestMethod "http://127.0.0.1:8001/chats/$($chat.id)/messages" -Method Post -ContentType "application/json" -Body '{"content": "Quanto fa 17 * 23?"}'
+Invoke-RestMethod http://127.0.0.1:8001/chats
+(Invoke-RestMethod "http://127.0.0.1:8001/chats/$($chat.id)").messages | Format-Table role, content
+```
+
+Gli errori hanno il corpo `{"error", "detail"}`: `400 invalid_request` (titolo oltre 200 caratteri,
+messaggio vuoto), `404 chat_not_found`, `503 agent_unavailable` (agente non raggiungibile), `504
+agent_timeout`, `502 agent_error` (l'agente ha risposto con un errore, per esempio LM Studio
+spento), `503 database_unavailable`, `500 internal_error`. Con un errore dell'agente la domanda
+resta nella chat senza risposta e lo stato dell'agente della chat non cambia: si può rimandare il
+messaggio. Dettagli nella [specifica](docs/superpowers/specs/2026-11-14-backend-chat-design.md)
+(§5–§7).
 
 ## Router: domande in ambito e fuori ambito
 
@@ -478,6 +543,22 @@ Senza variabili le prove falliscono con un messaggio esplicito invece di essere 
 Una risposta simulata non dimostra che il modello locale sappia usare lo strumento: lo dimostra
 solo questa prova.
 
+Le prove del back-end richiedono anche PostgreSQL (il container della sezione «Back-end: chat
+salvate su PostgreSQL») e la variabile `TEST_DATABASE_URL`. Ogni prova lavora in uno schema
+temporaneo del database, eliminato alla fine: le tabelle di `public` non vengono toccate, quindi va
+bene anche il database del back-end.
+
+```powershell
+$env:TEST_DATABASE_URL = "postgresql://lab:labprova@127.0.0.1:5433/assistente"
+.\.venv\Scripts\python.exe -m pytest tests/test_backend_store.py -m real -v    # archivio su PostgreSQL, senza LM Studio
+.\.venv\Scripts\python.exe -m pytest tests/test_real.py -m real -k backend -v  # back-end, agente e LM Studio
+```
+
+La prima riesegue su PostgreSQL i test dell'archivio (di solito su SQLite in memoria); la seconda
+avvia agente e back-end come processi, manda «Quanto fa 17 * 23?», riavvia il back-end e controlla
+che la chat ci sia ancora e che il messaggio successivo usi la cronologia salvata, poi ferma
+l'agente e controlla la risposta `503 agent_unavailable`.
+
 ## Strumenti
 
 Il modello richiede gli strumenti tramite tool calling; il programma li esegue davvero e gli
@@ -634,6 +715,21 @@ sessione, ogni domanda dà `Errore: agente non raggiungibile su http://127.0.0.1
 la cronologia resta nella CLI: si può riprovare dopo averlo riavviato. Lo stato si controlla con
 `curl.exe -s http://127.0.0.1:8000/status`, che mostra il corpo anche con `503` (con `503`
 `Invoke-RestMethod` dà invece un errore di PowerShell).
+
+**Il back-end non parte.** «Configurazione non valida: Manca DATABASE_URL.» (o lo schema ricevuto, mai
+l'indirizzo intero): impostare `DATABASE_URL`. «Database non raggiungibile: …» dopo al più 10 s:
+il container di PostgreSQL è fermo (`docker ps`, poi `docker start assistente-postgres`) o la porta
+è sbagliata. «password authentication failed for user …» con il container avviato: sulla porta
+risponde un altro PostgreSQL (per esempio uno installato sull'host sulla 5432); `netstat -ano |
+findstr :5432` mostra chi ascolta.
+
+**Un messaggio del back-end dà `503 agent_unavailable` (o `502 agent_error`).** Il servizio
+dell'agente non è avviato o non è su `AGENT_URL` (`503`), oppure ha risposto con un errore, per
+esempio LM Studio spento (`502`, il codice dell'agente è nel `detail`). La domanda resta nella chat:
+dopo aver avviato l'agente si rimanda il messaggio. Nel log del back-end le righe `backend
+request=send_message …`, `backend agent_call chat=… history=… summary_chars=…` (cronologia mandata
+all'agente) e `backend response=send_message … status=…` seguono ogni invio; il testo dei messaggi
+è solo nel log dell'agente.
 
 **LM Studio non raggiungibile.** All'avvio la CLI mostra «Attenzione: modello non disponibile (LM
 Studio non raggiungibile su …)»; ogni domanda risponde `Errore: LM Studio non raggiungibile:

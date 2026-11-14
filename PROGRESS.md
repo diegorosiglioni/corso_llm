@@ -1200,6 +1200,63 @@ Decisioni:
   back-end, PostgreSQL in un container, diagnosi) ed esiti in requisiti §15 al punto 5, come da piano
   dello step. Invii contemporanei nella stessa chat non bloccati (rischio della specifica §13).
 
+### Punto 5 · Prova reale Step 7 — piano
+
+Servizi verificati: Docker 29.9.1 con l'immagine `postgres:18.6`, LM Studio con `google/gemma-4-e2b`.
+1. PostgreSQL in un container avviato a mano (`docker run -d --name assistente-postgres -e
+   POSTGRES_USER=lab -e POSTGRES_PASSWORD=… -e POSTGRES_DB=assistente -p 5432:5432
+   postgres:18.6`), comando da riportare nel README.
+2. CA-77, `tests/test_backend_store.py`: fixture `engine` parametrizzata (`sqlite` e `postgresql`
+   con marcatore `real`); su PostgreSQL ogni test usa uno schema temporaneo (`search_path` alla
+   connessione) eliminato alla fine; `TEST_DATABASE_URL` mancante → `pytest.fail` come per LM
+   Studio. Test solo SQLite (`PRAGMA`) saltato su PostgreSQL; `DELETE` diretto con `text()` e
+   parametro con nome (lo stile `?` è solo di SQLite).
+3. CA-78, `tests/test_real.py`: agente (`start_service`) e back-end (`python -m backend`) come
+   sottoprocessi su porte libere, database in uno schema temporaneo; chat creata, «Quanto fa
+   17 * 23?» → `201`, `calculate`, «391»; back-end fermato e riavviato → chat e due messaggi
+   presenti, secondo messaggio con la cronologia salvata (riga `agent_call` con `history>0`);
+   agente fermato → `503 agent_unavailable`, domanda salvata.
+4. `pytest` completo; README (PostgreSQL nel container, avvio del back-end, prove reali, diagnosi),
+   `CLAUDE.md` (comandi), esiti in requisiti §15 e qui. Servizio non raggiungibile → `[!]`.
+
+Decisioni:
+- Schema temporaneo per test invece di un database apposito: chiede solo `TEST_DATABASE_URL` (anche
+  quello di esercizio) e non tocca le tabelle di `public` (specifica §11).
+- Il back-end della prova CA-78 usa lo schema temporaneo tramite `PGOPTIONS=-csearch_path=…`
+  (variabile standard di libpq, letta da psycopg): nessun codice del back-end cambia per la prova.
+
+### Punto 5 · Prova reale Step 7 — fatto
+
+- Container `assistente-postgres` (`postgres:18.6`, utente `lab`, database `assistente`) pubblicato
+  sulla **porta 5433**: sulla 5432 ascolta un PostgreSQL installato come servizio di Windows
+  (`postgres.exe`, non toccato), che rifiutava la password («password authentication failed»).
+  Scelta annotata nella specifica §9 e nel README (anche in «Diagnosi»). A fine punto il container è
+  fermato con `docker stop` (dati conservati; `docker start assistente-postgres` per lo Step 8).
+- Test: `conftest.py` ha `postgres_schema(prefix)` (schema nuovo in `TEST_DATABASE_URL`, eliminato
+  con `DROP SCHEMA … CASCADE`; variabile mancante o database spento → `pytest.fail` col motivo) ed
+  `engine_on_schema(url, schema)` (`search_path` a ogni connessione); in `test_backend_store.py` la
+  fixture `engine` è parametrizzata `sqlite`/`postgresql` (`real`), il test del `PRAGMA` si salta su
+  PostgreSQL e il `DELETE` diretto usa `text()` con parametro con nome. In `test_real.py`
+  `start_process` generico (agente e back-end), `start_backend`, `send_message` e la prova
+  `test_backend_keeps_chats_across_restarts`.
+
+| CA | Prova | Esito |
+|----|-------|-------|
+| CA-77 | `TEST_DATABASE_URL=postgresql://lab:…@127.0.0.1:5433/assistente pytest tests/test_backend_store.py -m real` | ✅ 37 passed, 1 skipped (`PRAGMA`) in 2 s; dopo la prova `\dn` mostra solo `public` e `public` non ha tabelle |
+| CA-78 | `pytest tests/test_real.py -m real -k backend` (LM Studio `google/gemma-4-e2b`, `MAX_STEPS=5`) | ✅ 1 passed in 295 s: chat creata, «Quanto fa 17 * 23?» → `201`, `calculate`, «17 * 23 fa 391.», `agent_call … history=0`; back-end riavviato sulla stessa porta → elenco con la chat e titolo dalla domanda, due messaggi con lo strumento; «Moltiplica per 2 il risultato di prima.» → `agent_call` con `history>0`, ricevuta dall'agente (`api request=chat … history=N`), risposta con «782»; agente fermato → `503 agent_unavailable`, quinta riga della chat = la domanda |
+| — | Comandi del README eseguiti a mano (PowerShell con `-File`, agente e back-end avviati come nel README) | ✅ riga d'avvio con `lab:***`, `POST /chats`, invio con `calculate` e «391» (71 s), elenco, messaggi; back-end riavviato → chat e messaggi presenti; `404 chat_not_found`; `DATABASE_URL` sulla 5432 → «Database non raggiungibile: … password authentication failed for user "lab"», exit 1; `docker stop`/`docker start` → la chat resta (verificato con `psql`) |
+| — | `pytest` | ✅ 825 passed, 62 deselected; `pytest -m real --collect-only` raccoglie 62 prove |
+
+- Documenti: README (introduzione, requisiti dell'host, conteggio dei test, nuova sezione «Back-end:
+  chat salvate su PostgreSQL» con variabili, container, avvio, endpoint ed errori; prove reali del
+  back-end; due voci di «Diagnosi»), `CLAUDE.md` (comandi), requisiti §15 (esiti di CA-70…CA-78),
+  specifica §9–§10.
+- Problemi aperti: una sola esecuzione di CA-78 (dimostra il comportamento con quelle domande, non
+  che il modello usi sempre `calculate` o la cronologia); la suite reale completa non è stata
+  rieseguita (nessun codice dell'agente cambiato dallo Step 6). Invii contemporanei nella stessa
+  chat non bloccati (specifica §13). Nei log rediretti su file le lettere accentate della risposta
+  possono uscire in cp1252 (già noto).
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

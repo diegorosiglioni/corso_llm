@@ -47,7 +47,7 @@ streaming facoltativo). Si fa solo ciò che chiede la traccia (decisione dell'ut
 - [x] Back-end: modello dati e archivio di chat e messaggi (creare, elencare con titolo e data dell'ultimo messaggio, leggere in ordine cronologico, eliminare con i messaggi); test dell'archivio
 - [x] Back-end: endpoint di creazione, elenco, lettura ed eliminazione delle chat con OpenAPI; test dell'API
 - [x] Back-end: invio di un messaggio (salva la domanda, chiama l'agente via HTTP con cronologia e riassunto, salva e restituisce la risposta); agente non raggiungibile → errore chiaro e documentato; test con l'agente simulato
-- [ ] Prova reale Step 7 con PostgreSQL e agente attivi: chat presenti dopo il riavvio del back-end; README aggiornato
+- [x] Prova reale Step 7 con PostgreSQL e agente attivi: chat presenti dopo il riavvio del back-end; README aggiornato
 
 ## Step 8 · Front-end: interfaccia di chat
 

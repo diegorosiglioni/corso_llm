@@ -509,7 +509,10 @@ lettera).
 
 Riferimento: `LLM_Lez_6.pdf`, Blocco C e Step 7 (riassunto in `lezione6.md`). Stato: scritti il
 2026-11-14 in modalità autonoma insieme alla specifica `specs/2026-11-14-backend-chat-design.md`; le
-scelte del progettista sono nella sua §1. Esiti delle verifiche in `PROGRESS.md`.
+scelte del progettista sono nella sua §1. Esiti delle verifiche in `PROGRESS.md`. CA-70…CA-76
+verificati con `pytest`; CA-77 il 2026-11-14 su PostgreSQL 18.6 in un container (37 test
+dell'archivio passati, il solo test del `PRAGMA` di SQLite saltato); CA-78 il 2026-11-14 con
+PostgreSQL, agente e LM Studio (`google/gemma-4-e2b`) dalla prova `test_backend_keeps_chats_across_restarts`.
 
 - **RF-60** *Servizio back-end* — Un servizio HTTP distinto dall'agente (pacchetto `backend`, avvio con
   `python -m backend`, indirizzo da `BACKEND_HOST` e `BACKEND_PORT`, predefiniti `127.0.0.1` e

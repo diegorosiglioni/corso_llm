@@ -36,6 +36,7 @@ from assistant.reviewer import is_feedback
 from assistant.session import Session
 from assistant.summary import is_user_question
 from assistant.tools import create_current_time_tool
+from conftest import postgres_schema
 
 pytestmark = pytest.mark.real
 
@@ -441,19 +442,26 @@ def start_service(tmp_path, **overrides):
     a file; yields (base_url, read_log). The process is stopped on exit."""
     port = free_port()
     env = {
-        **os.environ,
         "AGENT_HOST": "127.0.0.1",
         "AGENT_PORT": str(port),
         "NOTES_DB": str(tmp_path / "notes.sqlite3"),
-        "LOG_LEVEL": "INFO",
-        "PYTHONIOENCODING": "utf-8",
         **overrides,
     }
-    log_path = tmp_path / f"service-{port}.log"
+    with start_process("assistant.service", tmp_path, port, env) as started:
+        yield started
+
+
+@contextmanager
+def start_process(module: str, tmp_path, port: int, env: dict):
+    """`python -m <module>` as a subprocess listening on `port`, with `env` added to the
+    environment and its log in a new file of tmp_path; yields (base_url, read_log) once
+    /openapi.json answers. The process is stopped on exit."""
+    env = {**os.environ, "LOG_LEVEL": "INFO", "PYTHONIOENCODING": "utf-8", **env}
+    log_path = tmp_path / f"{module}-{port}-{time.monotonic_ns()}.log"
     base_url = f"http://127.0.0.1:{port}"
     with open(log_path, "wb") as log_file:
         process = subprocess.Popen(
-            [sys.executable, "-m", "assistant.service"],
+            [sys.executable, "-m", module],
             cwd=REPO_ROOT, env=env, stdout=log_file, stderr=subprocess.STDOUT,
         )
         try:
@@ -559,3 +567,86 @@ def test_service_without_lm_studio(tmp_path):  # CA-69
     assert chat.status_code == 503, chat.text
     assert chat.json()["error"] == "model_unavailable", chat.json()
     assert "api response=chat status=503 error=model_unavailable" in log, log
+
+
+# --- lesson 6, step 7: back-end with PostgreSQL and the agent (CA-78) ---
+
+FOLLOW_UP = "Moltiplica per 2 il risultato di prima."
+
+
+@contextmanager
+def start_backend(tmp_path, port: int, agent_url: str, database: tuple[str, str]):
+    """`python -m backend` on `port` with the database in the temporary schema `database`
+    (url, schema); PGOPTIONS (read by libpq) sets the search_path of every connection."""
+    url, schema = database
+    env = {
+        "BACKEND_HOST": "127.0.0.1",
+        "BACKEND_PORT": str(port),
+        "AGENT_URL": agent_url,
+        "DATABASE_URL": url,
+        "PGOPTIONS": f"-csearch_path={schema}",
+    }
+    with start_process("backend", tmp_path, port, env) as started:
+        yield started
+
+
+def send_message(base_url, chat_id: int, content: str) -> httpx.Response:
+    return httpx.post(
+        f"{base_url}/chats/{chat_id}/messages", json={"content": content}, timeout=900.0
+    )
+
+
+def agent_call_histories(log: str) -> list[int]:
+    return [int(n) for n in re.findall(r"backend agent_call chat=\d+ history=(\d+)", log)]
+
+
+def test_backend_keeps_chats_across_restarts(tmp_path):  # CA-78
+    backend_port = free_port()
+    with postgres_schema("backend") as database:
+        with start_service(tmp_path) as (agent_url, read_agent_log):
+            with start_backend(tmp_path, backend_port, agent_url, database) as (base_url, read_log):
+                created = httpx.post(f"{base_url}/chats", timeout=30.0)
+                chat_id = created.json()["id"]
+                first = send_message(base_url, chat_id, QUESTION)
+                first_log = read_log()
+            # back-end stopped and started again on the same database
+            with start_backend(tmp_path, backend_port, agent_url, database) as (base_url, read_log):
+                listed = httpx.get(f"{base_url}/chats", timeout=30.0)
+                restored = httpx.get(f"{base_url}/chats/{chat_id}", timeout=30.0)
+                second = send_message(base_url, chat_id, FOLLOW_UP)
+                second_log = read_log()
+            agent_log = read_agent_log()
+        # agent stopped
+        with start_backend(tmp_path, backend_port, agent_url, database) as (base_url, read_log):
+            failed = send_message(base_url, chat_id, "Quanto fa 2 + 2?")
+            final = httpx.get(f"{base_url}/chats/{chat_id}", timeout=30.0)
+            failed_log = read_log()
+
+    assert created.status_code == 201, created.text
+    assert first.status_code == 201, first.text
+    answer = first.json()["answer"]
+    assert [t["name"] for t in answer["tools_used"]] == ["calculate"], answer
+    assert "391" in answer["content"], answer
+    assert agent_call_histories(first_log) == [0], first_log
+    assert "status=201 tools=calculate " in first_log, first_log
+
+    assert listed.status_code == 200, listed.text
+    assert [(c["id"], c["title"]) for c in listed.json()] == [(chat_id, QUESTION)], listed.json()
+    messages = restored.json()["messages"]
+    assert [(m["role"], m["content"]) for m in messages] == [
+        ("user", QUESTION), ("assistant", answer["content"]),
+    ], messages
+    assert messages[1]["tools_used"] == answer["tools_used"], messages
+
+    assert second.status_code == 201, second.text
+    (history,) = agent_call_histories(second_log)
+    assert history > 0, second_log  # the saved history reached the agent
+    assert f"api request=chat kind=message history={history}" in agent_log, agent_log
+    assert "782" in second.json()["answer"]["content"], second.json()
+
+    assert failed.status_code == 503, failed.text
+    assert failed.json()["error"] == "agent_unavailable", failed.json()
+    assert "status=503 error=agent_unavailable" in failed_log, failed_log
+    contents = [m["content"] for m in final.json()["messages"]]
+    assert len(contents) == 5 and contents[-1] == "Quanto fa 2 + 2?", contents
+    print(f"risposte: {answer['content']!r} / {second.json()['answer']['content']!r}")

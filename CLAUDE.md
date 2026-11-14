@@ -43,8 +43,12 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
   - ambiente: `py -3.13 -m venv .venv` e `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`
   - test senza modello: `.\.venv\Scripts\python.exe -m pytest`
   - prove reali (LM Studio attivo, variabili impostate; circa 30 minuti): `.\.venv\Scripts\python.exe -m pytest -m real -v`
+  - prove reali del back-end (PostgreSQL nel container del README, porta 5433):
+    `$env:TEST_DATABASE_URL = "postgresql://lab:labprova@127.0.0.1:5433/assistente"`, poi
+    `pytest tests/test_backend_store.py -m real` (solo PostgreSQL) e `pytest tests/test_real.py -m real -k backend`
   - avvio locale, in due terminali: servizio `.\.venv\Scripts\python.exe -m assistant.service`
-    (variabili di LM Studio), poi CLI `.\.venv\Scripts\python.exe -m assistant`
+    (variabili di LM Studio), poi CLI `.\.venv\Scripts\python.exe -m assistant`; back-end in un
+    terzo terminale con `DATABASE_URL` impostata: `.\.venv\Scripts\python.exe -m backend`
   - Docker: `docker compose build` e `docker compose run --rm assistant` (non `up`; avvia anche il
     servizio `agent`, che resta attivo fino a `docker compose down`)
 

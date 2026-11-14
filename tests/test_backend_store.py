@@ -1,7 +1,8 @@
+from contextlib import ExitStack
 from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import func, inspect, select
+from sqlalchemy import func, inspect, select, text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from backend.db import ChatMessage, create_db_engine, init_db
@@ -14,7 +15,7 @@ from backend.store import (
     InvalidInputError,
     title_from_question,
 )
-from conftest import Clock
+from conftest import Clock, engine_on_schema, postgres_schema
 
 START = datetime(2026, 11, 14, 10, 0, 0, tzinfo=UTC)
 TOOL = {"name": "calculate", "args": {"expression": "17 * 23"}, "result": {"result": 391}, "ok": True}
@@ -24,12 +25,18 @@ HISTORY = [
 ]
 
 
-@pytest.fixture
-def engine():
-    engine = create_db_engine("sqlite://")
-    init_db(engine)
-    yield engine
-    engine.dispose()
+@pytest.fixture(params=["sqlite", pytest.param("postgresql", marks=pytest.mark.real)])
+def engine(request):
+    """SQLite in memory; with `pytest -m real` also PostgreSQL (TEST_DATABASE_URL), each test in
+    a temporary schema (CA-77)."""
+    with ExitStack() as stack:
+        if request.param == "sqlite":
+            engine = create_db_engine("sqlite://")
+        else:
+            engine = engine_on_schema(*stack.enter_context(postgres_schema("store")))
+        stack.callback(engine.dispose)  # before the schema is dropped
+        init_db(engine)
+        yield engine
 
 
 @pytest.fixture
@@ -80,6 +87,8 @@ def test_init_db_keeps_existing_data(engine, store):
 
 
 def test_sqlite_engine_enforces_foreign_keys(engine):
+    if engine.dialect.name != "sqlite":
+        pytest.skip("PRAGMA solo su SQLite; PostgreSQL applica sempre le chiavi esterne")
     with engine.connect() as connection:
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
 
@@ -243,7 +252,7 @@ def test_database_cascade_removes_messages_without_the_orm(store, engine):
     chat = store.create_chat()
     complete_turn(store, chat.id)
     with engine.begin() as connection:
-        connection.exec_driver_sql("DELETE FROM chats WHERE id = ?", (chat.id,))
+        connection.execute(text("DELETE FROM chats WHERE id = :id"), {"id": chat.id})
     assert count_messages(engine) == 0
 
 

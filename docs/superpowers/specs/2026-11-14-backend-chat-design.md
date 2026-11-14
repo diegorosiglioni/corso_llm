@@ -206,6 +206,9 @@ accesso di uvicorn disattivati, come nell'agente. Riga d'avvio (logger `backend.
 `compose.yaml` e `Dockerfile` non cambiano: i quattro container, PostgreSQL in Compose e l'immagine
 del back-end sono lo Step 9. Per le prove di questo step PostgreSQL gira in un container avviato a
 mano con l'immagine ufficiale (`docker run … postgres:18`), comando nel README.
+Al punto 5 (prove reali): immagine `postgres:18.6`, pubblicata sulla porta 5433 dell'host perché
+sulla 5432 di questo computer risponde un PostgreSQL installato come servizio di Windows (che
+rifiutava la password del container).
 
 ## 10. Test
 
@@ -232,6 +235,9 @@ mano con l'immagine ufficiale (`docker run … postgres:18`), comando nel README
 
 - **Archivio su PostgreSQL** (CA-77): i test dell'archivio rieseguiti su PostgreSQL vero quando è
   impostata `TEST_DATABASE_URL` (tabelle create in uno schema temporaneo ed eliminate alla fine).
+  Realizzato al punto 5 con la fixture `engine` parametrizzata (`sqlite` e `postgresql`, questa con
+  il marcatore `real`) e gli aiuti `postgres_schema`/`engine_on_schema` di `conftest.py`; il back-end
+  della prova CA-78 usa lo schema temporaneo tramite `PGOPTIONS=-csearch_path=…` di libpq.
 - **Back-end, agente e PostgreSQL** (CA-78): back-end e agente avviati come sottoprocessi, LM Studio
   attivo; creazione di una chat, «Quanto fa 17 * 23?» → `201`, `calculate` negli strumenti usati,
   «391»; back-end fermato e riavviato → la chat e i due messaggi ci sono ancora e un secondo messaggio

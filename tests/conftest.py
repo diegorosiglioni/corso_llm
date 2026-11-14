@@ -1,12 +1,19 @@
-from collections.abc import Callable
+import os
+import uuid
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 import httpx2
 import openai
+import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, BaseMessage
+from sqlalchemy import Engine, event
+from sqlalchemy.exc import OperationalError
 
 from assistant.api import create_app
+from assistant.config import ConfigError
 from assistant.graph import build_graph
 from assistant.mcp_client import (
     McpStartupError,
@@ -19,6 +26,8 @@ from assistant.mcp_client import (
 from assistant.reviewer import ReviewDecision
 from assistant.router import RouteDecision
 from assistant.tools import create_current_time_tool
+from backend.config import load_backend_config
+from backend.db import create_db_engine
 
 FIXED_NOW = datetime(2026, 10, 26, 15, 47, 12, 345678, tzinfo=timezone.utc)
 
@@ -203,3 +212,46 @@ class Clock:
 
     def advance(self, seconds: int) -> None:
         self.current += timedelta(seconds=seconds)
+
+
+@contextmanager
+def postgres_schema(prefix: str) -> Iterator[tuple[str, str]]:
+    """New empty schema in the PostgreSQL of TEST_DATABASE_URL (real tests only); yields
+    (database URL with the psycopg driver, schema name) and drops the schema, with its tables,
+    at the end. The tables of the other schemas are never touched."""
+    try:
+        url = load_backend_config(
+            {"DATABASE_URL": os.environ.get("TEST_DATABASE_URL", "")}
+        ).database_url
+    except ConfigError as error:
+        pytest.fail(f"Prova reale: imposta TEST_DATABASE_URL con un database PostgreSQL ({error})")
+    schema = f"{prefix}_{uuid.uuid4().hex[:12]}"
+    admin = create_db_engine(url)
+    try:
+        try:
+            with admin.begin() as connection:
+                connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+        except OperationalError as error:
+            pytest.fail(f"PostgreSQL non raggiungibile: {str(error.orig).strip()}")
+        try:
+            yield url, schema
+        finally:
+            with admin.begin() as connection:
+                connection.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
+    finally:
+        admin.dispose()
+
+
+def engine_on_schema(url: str, schema: str) -> Engine:
+    """`create_db_engine(url)` whose connections use only `schema` (search_path)."""
+    engine = create_db_engine(url)
+
+    @event.listens_for(engine, "connect", insert=True)  # before SQLAlchemy reads the schema
+    def use_schema(dbapi_connection, _record) -> None:
+        autocommit = dbapi_connection.autocommit
+        dbapi_connection.autocommit = True
+        with dbapi_connection.cursor() as cursor:
+            cursor.execute(f'SET search_path TO "{schema}"')
+        dbapi_connection.autocommit = autocommit
+
+    return engine
