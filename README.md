@@ -9,7 +9,8 @@ Dopo l'agente un revisore LLM controlla che la risposta sia coerente con la doma
 il motivo torna all'agente, che riscrive la risposta (al più `MAX_REVIEWS` revisioni per turno).
 All'inizio di ogni turno, quando la cronologia supera `SUMMARY_MAX_MESSAGES` messaggi, un nodo
 riassunto comprime i turni vecchi in un riassunto che agente, router e revisore ricevono nel prompt
-di sistema.
+di sistema. All'avvio l'applicazione legge dal server MCP la resource `utente://preferenze` (lingua
+delle risposte, fuso orario predefinito, stile) e la mette in cima al prompt di sistema dell'agente.
 
 Requisiti e specifica: [`docs/superpowers/`](docs/superpowers/).
 
@@ -53,7 +54,7 @@ ripetere le verifiche e rigenerarlo.
 Non richiedono LM Studio né la rete: il modello è sostituito da un modello finto con risposte
 programmate (anche per router e revisore). I test del server MCP lo avviano davvero come
 sottoprocesso stdio, con l'archivio delle note in una cartella temporanea (circa 1 s per test).
-Esito al 2026-11-13: `297 passed, 15 deselected` (le 15 deselezionate sono le prove reali).
+Esito al 2026-11-14: `375 passed, 17 deselected` (le 17 deselezionate sono le prove reali).
 
 ## Configurazione
 
@@ -70,6 +71,7 @@ L'applicazione legge variabili d'ambiente e il file con l'ambito dell'assistente
 | `LOG_LEVEL` | no | `INFO` | `DEBUG`, `INFO`, `WARNING` o `ERROR` |
 | `NOTES_DB` | no | `data/notes.sqlite3` | file SQLite delle note, relativo alla cartella di avvio |
 | `SCOPE_FILE` | no | `assistant/data/scope.txt` del pacchetto | file di testo (UTF-8) con l'ambito dell'assistente; un percorso relativo vale dalla cartella di avvio |
+| `PREFERENCES_FILE` | no | `assistant/data/preferenze.json` del pacchetto | file JSON delle preferenze dell'utente, letto dal server MCP (sezione «Preferenze dell'utente»); un percorso relativo vale dalla cartella di avvio; un file mancante non blocca l'avvio |
 
 `.env.example` è il modello versionato; la copia reale `.env` resta fuori da Git ed è letta da
 Docker Compose:
@@ -274,6 +276,62 @@ INFO assistant.graph: node=summary messages=5/4 skipped=nothing_to_compress next
 WARNING assistant.graph: node=summary messages=5/4 fallback=empty_summary next_node=router
 ```
 
+## Preferenze dell'utente
+
+Oltre ai sette strumenti, il server MCP espone una **resource** `utente://preferenze`
+(`application/json`), letta dal file [`assistant/data/preferenze.json`](assistant/data/preferenze.json)
+(o da quello indicato con `PREFERENCES_FILE`):
+
+```json
+{
+  "language": "italiano",
+  "timezone": "Europe/Rome",
+  "style": "sintetico"
+}
+```
+
+| Chiave | Valori ammessi | Predefinito |
+|--------|----------------|-------------|
+| `language` | lingua delle risposte, testo libero su una riga, al più 40 caratteri (es. `"inglese"`) | `"italiano"` |
+| `timezone` | nome IANA, lo stesso controllo dello strumento orologio (es. `"America/New_York"`) | `"Europe/Rome"` |
+| `style` | `"sintetico"` (breve) o `"dettagliato"` (con spiegazioni ed esempi) | `"sintetico"` |
+
+- L'applicazione legge la resource **una sola volta**, all'avvio, prima della prima domanda
+  (`resources/read`), e mette in cima al prompt di sistema dell'agente un testo con lingua, fuso e
+  stile. Una modifica del file vale quindi dalla **sessione successiva**, senza toccare il codice.
+- Con un fuso predefinito, a «Che ore sono?» senza luogo l'agente chiama `get_current_time` con
+  quel fuso invece di chiederlo.
+- La resource non è uno strumento: non compare in `tools/list` e il modello non la può chiamare.
+  Router, revisore e riassunto non la ricevono.
+- Un campo mancante o non valido prende il suo predefinito (WARNING `field=…`) senza far perdere gli
+  altri; se la resource non è leggibile (file mancante, JSON non valido), la sessione parte con i tre
+  predefiniti e un WARNING `status=unavailable`.
+- Con Docker il file di esempio è nell'immagine: dopo averlo modificato serve `docker compose
+  build`; in alternativa `PREFERENCES_FILE` indica un percorso dentro il container.
+
+Log della prova reale del 2026-11-14 `test_default_timezone_from_preferences`, con
+`"timezone": "America/New_York"` nel file e la domanda «Che ore sono?»:
+
+```
+INFO assistant.preferences: resources/read uri=utente://preferenze status=ok language="italiano" timezone=America/New_York style=sintetico
+INFO assistant.graph: node=summary messages=1/20 skipped=below_threshold next_node=router
+...
+INFO assistant.graph: step=1/5 variant=local tool=get_current_time call_id=pRqbbvDb3EVkqZXJW83V2liIxSFClrE1 arguments={'timezone': 'America/New_York'}
+...
+INFO assistant.graph: node=reviewer review=1/2 coherent=true reason="La risposta fornisce un orario, rispondendo alla domanda dell'utente." next_node=end
+```
+
+All'avvio da terminale la riga di configurazione termina con `preferences_file=<percorso
+assoluto>`. Le righe delle preferenze cominciano tutte con `resources/read` (logger
+`assistant.preferences`) e si distinguono da quelle degli strumenti (`step=… variant=… call_id=…`).
+Righe di ripiego, nel formato verificato dai test automatici:
+
+```
+WARNING assistant.preferences: resources/read uri=utente://preferenze field=style problem=invalid value="lungo" fallback=sintetico
+INFO assistant.preferences: resources/read uri=utente://preferenze status=partial language="italiano" timezone=Europe/Rome style=sintetico
+WARNING assistant.preferences: resources/read uri=utente://preferenze status=unavailable error="File delle preferenze non leggibile: '…' (No such file or directory)." fallback=defaults language="italiano" timezone=Europe/Rome style=sintetico
+```
+
 ## Prove reali con LM Studio
 
 Sono separate dai test automatici e partono solo su richiesta, con le variabili impostate:
@@ -349,8 +407,11 @@ INFO assistant.graph: step=2/5 node=llm
 Tu> Assistente> Nota aggiunta: Ricordati di comprare il latte.
 ```
 
-Le prove reali (`pytest -m real`, 15 prove, circa 30 minuti il 2026-11-13) passano tutte da
-riassunto, router e revisore e verificano con il modello locale: l'orario a Tokyo e poi a Roma; un nome ricordato senza strumenti;
+Le prove reali (`pytest -m real`, 17 prove, circa 34 minuti il 2026-11-14) passano tutte da
+riassunto, router e revisore, con le preferenze lette dalla resource, e verificano con il modello
+locale: con il fuso predefinito `America/New_York` nelle preferenze, «Che ore sono?» risolta con
+quel fuso senza chiederlo; la stessa domanda in italiano con le preferenze predefinite e in inglese
+con `"language": "inglese"`; l'orario a Tokyo e poi a Roma; un nome ricordato senza strumenti;
 `calculate` e `convert_units`; una sola `add_note` per una richiesta di ricordare; `delete_note` su
 un id inesistente che non elimina nulla; le note ritrovate dopo il riavvio del server;
 `search_catalog` seguito da `get_item`; una ricerca senza risultati; i log correlati dallo stesso
@@ -381,7 +442,7 @@ correttamente l'input del terminale. Per una prova non interattiva serve `-T`:
 ```
 
 L'immagine (`python:3.13.18-slim-trixie`, fissata per digest nel `Dockerfile`) contiene solo il
-pacchetto `assistant` (con `assistant/data/catalog.json` e `assistant/data/scope.txt`) e le dipendenze dell'applicazione, ed
+pacchetto `assistant` (con `assistant/data/catalog.json`, `assistant/data/scope.txt` e `assistant/data/preferenze.json`) e le dipendenze dell'applicazione, ed
 esegue come utente non root. Il server MCP gira nello stesso container, come sottoprocesso. Nel
 container l'orario dei log è in UTC; l'orario restituito dallo strumento dipende solo dal fuso
 richiesto.
@@ -426,6 +487,32 @@ con domande brevi che continuano la conversazione («E a Roma?»). Un rifiuto in
 `MAX_REVIEWS - 1` riscritture, poi passa l'ultima risposta; con `MAX_REVIEWS=1` il revisore controlla
 ma non fa mai riscrivere.
 
+**Le preferenze non hanno effetto.** All'avvio cercare la riga `resources/read
+uri=utente://preferenze`: `status=ok` con i valori letti; `status=partial` preceduta da un WARNING
+`field=<campo> problem=missing|invalid` per ogni campo che ha preso il predefinito;
+`status=unavailable … fallback=defaults` se il file manca o non è JSON valido (il motivo è in
+`error="…"`, con il percorso). Il file si legge solo all'avvio: dopo una modifica va riavviata la
+sessione (con Docker anche `docker compose build`, se si cambia il file dell'immagine). La resource
+si legge da sola così (deve stampare il JSON del file):
+
+```powershell
+@'
+from pathlib import Path
+from assistant.mcp_client import McpClient, server_command
+command, args, cwd = server_command(Path("data/notes.sqlite3").resolve(), "WARNING")
+with McpClient(command, args, cwd=cwd) as client:
+    print(client.read_resource("utente://preferenze"))
+'@ | .\.venv\Scripts\python.exe -
+```
+
+Se i valori sono letti ma il modello non li segue (risponde in un'altra lingua, chiede il fuso), è un
+limite del modello: il testo delle preferenze è in cima al prompt di sistema dell'agente. Vale anche
+il contrario: quel testo può cambiare l'uso degli strumenti. Nella prima prova reale del 2026-11-14
+la descrizione dello stile sintetico «breve ed essenziale, in poche frasi» faceva rispondere
+«Quanto fa 17 * 23?» senza `calculate` (0 volte su 8); senza «in poche frasi» lo strumento è chiamato
+(dettagli nella §11 della [specifica](docs/superpowers/specs/2026-11-14-preferenze-design.md)). Dopo
+una modifica di `preferences.py` o del prompt si ripete `pytest -m real`.
+
 **Più dettagli.** Con `$env:LOG_LEVEL = "DEBUG"` i log mostrano la traccia completa degli errori
 e le richieste HTTP verso LM Studio.
 
@@ -437,9 +524,11 @@ si può avviare a mano: con l'ingresso chiuso deve uscire subito con codice 0, a
 l'errore (dipendenza mancante, modulo non trovato):
 
 ```powershell
-$null | .\.venv\Scripts\python.exe -m assistant.mcp_server --notes-db data\notes.sqlite3
+$null | .\.venv\Scripts\python.exe -m assistant.mcp_server --notes-db data\notes.sqlite3 --preferences-file assistant\data\preferenze.json
 $LASTEXITCODE    # 0
 ```
+
+Senza `--preferences-file` il server esce con codice 2 («the following arguments are required»).
 
 **2. Il catalogo degli strumenti è vuoto o incompleto.** All'avvio la riga `tools=[…]` deve
 elencare otto strumenti; un nome atteso ma assente produce il WARNING «strumento MCP consentito ma

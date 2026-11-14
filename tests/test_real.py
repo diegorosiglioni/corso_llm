@@ -15,7 +15,7 @@ import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
 from assistant.catalog import DEFAULT_CATALOG_PATH
-from assistant.config import ConfigError, load_config
+from assistant.config import DEFAULT_PREFERENCES_FILE, ConfigError, load_config
 from assistant.graph import build_graph
 from assistant.mcp_client import McpClient, create_mcp_tools, server_command
 from assistant.model import (
@@ -24,7 +24,7 @@ from assistant.model import (
     create_router_model,
     create_summary_model,
 )
-from assistant.preferences import load_preferences, preferences_prompt
+from assistant.preferences import DEFAULT_PREFERENCES, load_preferences, preferences_prompt
 from assistant.reviewer import is_feedback
 from assistant.session import Session
 from assistant.summary import is_user_question
@@ -42,12 +42,13 @@ def config():
 
 
 @contextmanager
-def open_session(config, db, wrap_agent=None):
+def open_session(config, db, wrap_agent=None, preferences_file=DEFAULT_PREFERENCES_FILE):
     """Session with the eight tools on the notes store `db`; the MCP server closes on exit.
 
     `wrap_agent`, if given, wraps the agent's model; router and reviewer stay real.
+    The preferences are read from `preferences_file` through the resource, as in `__main__`.
     """
-    command, args, cwd = server_command(db, "WARNING")
+    command, args, cwd = server_command(db, "WARNING", preferences_file)
     with McpClient(command, args, cwd=cwd) as client:
         tools = [create_current_time_tool(), *create_mcp_tools(client)]
         model = create_model(config, tools)
@@ -245,14 +246,18 @@ def reviewer_lines(caplog) -> list[str]:
     return [r.getMessage() for r in caplog.records if r.getMessage().startswith("node=reviewer")]
 
 
-def tokyo_times(messages) -> list[str]:
-    """Tokyo times returned by get_current_time, as HH:MM and H:MM."""
+def tool_times(messages, timezone: str) -> list[str]:
+    """Times returned by get_current_time for `timezone`, as HH:MM and H:MM."""
     times = []
     for r in results(messages, "get_current_time"):
-        if r.get("timezone") == "Asia/Tokyo":
+        if r.get("timezone") == timezone:
             t = datetime.fromisoformat(r["datetime"])
             times += [f"{t.hour:02d}:{t.minute:02d}", f"{t.hour}:{t.minute:02d}"]
     return times
+
+
+def tokyo_times(messages) -> list[str]:
+    return tool_times(messages, "Asia/Tokyo")
 
 
 def test_reviewer_rejects_an_imposed_partial_answer(config, tmp_path, caplog):
@@ -309,3 +314,57 @@ def test_first_turn_information_survives_compression(config, tmp_path, caplog):
     assert not any("Paolo" in m.text for m in messages[:last]), messages
     assert "Paolo" in summary, (summary, lines)
     assert "Paolo" in reply, (reply, summary, lines)
+
+
+# --- lesson 6, step 4: preferences resource (CA-50, CA-51) ---
+
+def write_preferences(path, **fields):
+    """A preferences file with the defaults changed by `fields`."""
+    data = {**dataclasses.asdict(DEFAULT_PREFERENCES), **fields}
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def preferences_lines(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.getMessage().startswith("resources/read")]
+
+
+def test_default_timezone_from_preferences(config, tmp_path, caplog):  # CA-50
+    caplog.set_level(logging.INFO, logger="assistant.preferences")
+    prefs = write_preferences(tmp_path / "preferenze.json", timezone="America/New_York")
+    with open_session(config, tmp_path / "notes.sqlite3", preferences_file=prefs) as (session, _):
+        reply = session.send("Che ore sono?")
+        messages = session.messages
+    assert any("status=ok" in line and "timezone=America/New_York" in line
+               for line in preferences_lines(caplog)), caplog.text
+    # answered in the first turn with the default timezone, without asking for it
+    assert {"timezone": "America/New_York"} in calls(messages, "get_current_time"), messages
+    assert any(t in reply for t in tool_times(messages, "America/New_York")), (reply, messages)
+
+
+ITALIAN_WORDS = {"il", "lo", "la", "di", "che", "e", "è", "per", "posso", "con", "un", "una",
+                 "del", "della", "ti", "le", "sono", "ora", "corsi", "ciao"}
+ENGLISH_WORDS = {"the", "and", "you", "i", "can", "to", "of", "for", "with", "your", "is",
+                 "help", "time", "courses", "notes", "hello", "hi"}
+
+
+def language_counts(text: str) -> tuple[int, int]:
+    """Common Italian and English words in `text` (fixed lists, see the specification §7)."""
+    words = re.findall(r"[a-zàèéìòù]+", text.lower())
+    return sum(w in ITALIAN_WORDS for w in words), sum(w in ENGLISH_WORDS for w in words)
+
+
+def test_language_from_preferences(config, tmp_path, caplog):  # CA-51
+    caplog.set_level(logging.INFO, logger="assistant.preferences")
+    question = "Ciao, che cosa sai fare?"
+    with open_session(config, tmp_path / "notes.sqlite3") as (session, _):
+        italian = session.send(question)
+    prefs = write_preferences(tmp_path / "preferenze.json", language="inglese")
+    with open_session(config, tmp_path / "notes.sqlite3", preferences_file=prefs) as (session, _):
+        english = session.send(question)
+    lines = preferences_lines(caplog)
+    assert any('language="inglese"' in line for line in lines), lines
+    it, en = language_counts(italian)
+    assert it > en, (italian, it, en)
+    it, en = language_counts(english)
+    assert en > it, (english, it, en)

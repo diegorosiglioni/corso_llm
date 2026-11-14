@@ -122,7 +122,7 @@ class Preferences:
     style: str = "sintetico"
 
 DEFAULT_PREFERENCES = Preferences()
-STYLES = {"sintetico": "breve ed essenziale, in poche frasi",
+STYLES = {"sintetico": "breve ed essenziale",  # «in poche frasi» tolto dopo la prova reale (§11)
           "dettagliato": "completo, con spiegazioni ed esempi quando servono"}
 ```
 
@@ -314,3 +314,27 @@ Prompt MCP e comandi `/prompts` e `/prompt` (Step 5), servizio HTTP e passi succ
 delle preferenze dal modello o dall'utente in conversazione; resource template, sottoscrizioni e
 notifiche di cambiamento; preferenze per router, revisore e riassunto; rilettura delle preferenze
 durante la sessione.
+
+## 11. Correzione dopo la prova reale (2026-11-14)
+
+Prima esecuzione della suite reale (`google/gemma-4-e2b`, contesto 8192): 16 passate, 1 fallita.
+In CA-16 l'agente ha risposto «17 * 23 fa 391.» senza chiamare `calculate`. Prova diretta (solo la
+prima chiamata dell'agente, «Quanto fa 17 * 23?», 4–8 chiamate per variante, script usa e getta
+fuori dal progetto):
+
+| Variante del prompt dell'agente | `calculate` |
+|---------------------------------|-------------|
+| prompt dello Step 3 (prima delle preferenze) | 8/8 |
+| prompt dello Step 4, preferenze predefinite in cima | 0/8 |
+| `SYSTEM_PROMPT` nuovo senza preferenze | 4/4 |
+| preferenze in fondo invece che in cima | 4/4 |
+| preferenze in cima senza la riga dello stile | 4/4 |
+| stile `dettagliato` | 4/4 |
+| stile `sintetico` descritto «breve ed essenziale» (senza «, in poche frasi») | 4/4 (anche `convert_units` 4/4 e `get_current_time` con il fuso predefinito 4/4) |
+
+Causa: la descrizione «in poche frasi» dello stile sintetico, in cima al prompt, porta il modello a
+rispondere direttamente ai calcoli. Altre formulazioni che dicevano di usare comunque gli strumenti
+non sono bastate (0/4). Decisione: `STYLES["sintetico"] = "breve ed essenziale"`; le preferenze
+restano in cima, come chiede la traccia. Il rischio resta: un modello piccolo è sensibile alla
+formulazione del prompt di sistema, e un'altra lingua o un altro stile possono cambiare l'uso degli
+strumenti.

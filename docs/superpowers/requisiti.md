@@ -359,7 +359,9 @@ Riferimento: `LLM_Lez_6.pdf`, slide 3 e 6 (riassunto in `lezione6.md`). Stato: a
 
 Riferimento: `LLM_Lez_6.pdf`, Blocco B e Step 4 (riassunto in `lezione6.md`). Stato: scritti il
 2026-11-14 in modalità autonoma insieme alla specifica `specs/2026-11-14-preferenze-design.md`; le
-scelte del progettista sono nella sua §1.
+scelte del progettista sono nella sua §1. CA-46…CA-52 verificati il 2026-11-14 (comandi ed esiti in
+`PROGRESS.md`); CA-52 è passata dopo la correzione della descrizione dello stile sintetico
+(specifica §11).
 
 - **RF-39** *File delle preferenze* — Le preferenze dell'utente stanno in un file JSON, non nel
   codice: per default `assistant/data/preferenze.json`, sostituibile con la variabile

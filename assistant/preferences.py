@@ -20,7 +20,9 @@ PREFERENCES_URI = "utente://preferenze"
 MAX_LANGUAGE_LENGTH = 40
 
 STYLES = {
-    "sintetico": "breve ed essenziale, in poche frasi",
+    # Not "in poche frasi": at the top of the prompt it made the model answer calculations
+    # without calling calculate (0/8 in a direct test with gemma-4-e2b, 8/8 without it).
+    "sintetico": "breve ed essenziale",
     "dettagliato": "completo, con spiegazioni ed esempi quando servono",
 }
 

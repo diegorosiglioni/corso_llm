@@ -227,6 +227,61 @@ Decisioni:
 - Problemi aperti: l'effetto sul modello (fuso, lingua, stile) e le 15 prove reali con il nuovo
   `SYSTEM_PROMPT` restano da verificare al punto 5 con LM Studio. README e `CLAUDE.md` al punto 5.
 
+### Punto 5 · Prova reale e documentazione — piano
+
+LM Studio raggiungibile (`GET /v1/models` → `google/gemma-4-e2b`, contesto 8192).
+1. `tests/test_real.py`: `open_session(config, db, wrap_agent=None, preferences_file=…)` passa il
+   file a `server_command`; aiuto `write_preferences(tmp_path, **campi)` che scrive un JSON
+   temporaneo partendo dai predefiniti.
+2. Prove nuove: CA-50 (`timezone="America/New_York"`, «Che ore sono?» → `get_current_time` con
+   quel fuso, ora dello strumento nella risposta, nessuna domanda sul fuso) e CA-51 (stessa domanda
+   «Ciao, che cosa sai fare?» in due sessioni: predefinite → italiano, `language="inglese"` →
+   inglese, conteggio di parole comuni su due elenchi fissi).
+3. Esecuzione: prima le due prove nuove, poi l'intera suite reale (CA-52), poi `pytest`.
+4. README (sezione preferenze, diagnosi con le righe `resources/read`), `CLAUDE.md` (struttura:
+   `preferences.py`, `data/preferenze.json`, `PREFERENCES_FILE`), requisiti §12 con gli esiti.
+
+Decisioni:
+- CA-51 verifica la lingua, non lo stile: la specifica §7 lo fissa così (un conteggio di parole è
+  oggettivo, la «sinteticità» no); lo stile resta coperto dai test senza modello sul testo del prompt.
+- «Non chiede il fuso» = `get_current_time` chiamato già nel primo turno con `America/New_York` e
+  ora dello strumento nella risposta: un controllo su «?» o «fuso» darebbe falsi errori (il modello
+  può nominare il fuso o chiudere con una domanda di cortesia).
+
+### Punto 5 · Prova reale e documentazione — fatto
+
+Prove reali con LM Studio, `google/gemma-4-e2b`, contesto 8192, `MAX_STEPS=5`, altre variabili non
+impostate.
+
+| CA | Comando | Esito |
+|----|---------|-------|
+| CA-50, CA-51 | `pytest -m real -v -k preferences` | ✅ 2 passed in 298 s: `resources/read … status=ok … timezone=America/New_York`, `get_current_time` con `{'timezone': 'America/New_York'}` al primo passaggio, revisore `coherent=true`; risposta in italiano con i predefiniti e in inglese con `language="inglese"` |
+| CA-52 | `pytest -m real -v -o log_cli=true --log-cli-level=INFO` (prima esecuzione) | ❌ 16 passed, 1 failed in 2066 s: `test_calculate_and_convert`, risposta «17 * 23 fa 391.» senza `calculate` |
+| — | prova diretta (script usa e getta in `%TEMP%`, solo la prima chiamata dell'agente) | prompt dello Step 3 `calculate` 8/8, prompt dello Step 4 0/8; senza la riga dello stile, con le preferenze in fondo o con stile `dettagliato` 4/4; frasi «usa comunque gli strumenti» 0/4; «breve ed essenziale» senza «, in poche frasi» 4/4 (anche `convert_units` e l'ora con il fuso predefinito 4/4) |
+| CA-16, CA-50 | `pytest -m real -k "calculate_and_convert or default_timezone"` dopo la correzione | ✅ 2 passed in 271 s, `calculate` e `convert_units` chiamati |
+| CA-52 | `pytest -m real -v -o log_cli=true --log-cli-level=INFO` (dopo la correzione) | ✅ 17 passed in 2054 s (34 min). Due `review_limit_reached` già noti: CA-4 (nome «senza contesto precedente») e la domanda in due parti (orario «non verificabile»); le prove passano |
+| — | `docker compose build`, poi `esci` in pipe verso `docker compose run --rm -T assistant` | ✅ `preferences_file=/app/assistant/data/preferenze.json`, `event=resource_read`, `resources/read … status=ok`, exit 0 |
+| — | `pytest` | ✅ 375 passed, 17 deselected |
+| — | server avviato a mano senza e con `--preferences-file` (comando del README, da Git Bash) | senza: exit 2 («the following arguments are required»); con: exit 0. README corretto |
+
+Decisioni prese durante l'esecuzione:
+- **Regressione dello Step 4 corretta** (non fragilità del test): la descrizione dello stile
+  sintetico «breve ed essenziale, in poche frasi», in cima al prompt, faceva rispondere ai calcoli
+  senza `calculate`. Ora `STYLES["sintetico"] = "breve ed essenziale"`; le preferenze restano in
+  cima come chiede la traccia. Dettagli nella specifica §11; README, sezione «Diagnosi».
+- Il comando di diagnosi del README che avvia il server a mano era rotto dal punto 2
+  (`--preferences-file` obbligatorio): corretto e annotato.
+- Il log di esempio nel README per CA-50 viene dalla prima esecuzione (prima della correzione):
+  la correzione tocca solo la riga dello stile e CA-50 è ripassata dopo.
+
+Problemi aperti:
+- Il modello è sensibile alla formulazione del prompt: un'altra lingua o lo stile `dettagliato`
+  potrebbero cambiare l'uso degli strumenti; verificato solo lo stile `dettagliato` su calcolo e
+  conversione (4/4) e la lingua inglese su un saluto.
+- CA-51 controlla la lingua, non lo stile (scelta della specifica §7).
+- Una sola esecuzione della suite dopo la correzione: dimostra il comportamento con quelle domande.
+- I falsi rifiuti del revisore (CA-4, orari) restano quelli degli Step 2 e 3, fuori traccia.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13
