@@ -60,6 +60,16 @@ def _is_status(body) -> bool:
     ) and isinstance(body["model"].get("id"), str)
 
 
+CHAT_FIELDS = {"reply": str, "tools_used": list, "history": list, "summary": str}
+
+
+def _is_chat(body) -> bool:
+    """True for the body of a 200 POST /chat: the four fields with their JSON types."""
+    return isinstance(body, dict) and all(
+        isinstance(body.get(key), kind) for key, kind in CHAT_FIELDS.items()
+    )
+
+
 def _prompt_specs(data) -> list[PromptSpec]:
     """The body of GET /prompts as the PromptSpec of prompts/list; ValueError if malformed."""
     try:
@@ -127,9 +137,7 @@ class AgentClient:
             request["prompt"] = {"name": prompt[0], "arguments": dict(prompt[1])}
         response = self._request("POST", "/chat", CHAT_TIMEOUT, request)
         body = _body(response)
-        if response.status_code == 200 and isinstance(body, dict) and all(
-            key in body for key in ("reply", "tools_used", "history", "summary")
-        ):
+        if response.status_code == 200 and _is_chat(body):
             return body
         raise _error(response, body)
 

@@ -25,7 +25,7 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
 - Back-end (Step 7, in corso) nel pacchetto `backend/`, servizio distinto dall'agente: `db.py`
   (schema SQLAlchemy `chats`/`chat_messages`, `create_db_engine`, `init_db`), `store.py`
   (`ChatStore`: chat, messaggi visibili e stato dell'agente), `api.py` (app FastAPI: `/chats`,
-  `/chats/{chat_id}`), `config.py` (`DATABASE_URL`, `AGENT_URL`, `BACKEND_HOST`/`BACKEND_PORT`),
+  `/chats/{chat_id}`, `/chats/{chat_id}/messages` che inoltra la domanda all'agente), `config.py` (`DATABASE_URL`, `AGENT_URL`, `BACKEND_HOST`/`BACKEND_PORT`),
   `__main__.py` (avvio con `python -m backend`). Da `assistant` importa solo il client dell'agente
   e la configurazione (logging, `AGENT_URL`, `LOG_LEVEL`); `assistant` non importa nulla da
   `backend`.

@@ -214,6 +214,11 @@ def test_chat_with_lm_studio_switched_off():
 
 @pytest.mark.parametrize("response", [
     httpx.Response(200, json={"reply": "manca il resto"}),
+    httpx.Response(200, json=[]),
+    httpx.Response(200, json={**chat_body(), "reply": None}),
+    httpx.Response(200, json={**chat_body(), "tools_used": {"name": "calculate"}}),
+    httpx.Response(200, json={**chat_body(), "history": "testo"}),
+    httpx.Response(200, json={**chat_body(), "summary": []}),
     httpx.Response(200, text="non json"),
     httpx.Response(502, text="Bad Gateway"),
 ])

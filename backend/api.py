@@ -18,8 +18,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import OperationalError
 
+from assistant.api_client import AgentError
 from backend.store import (
     MAX_TITLE_LENGTH,
+    AgentState,
     ChatNotFoundError,
     ChatRecord,
     ChatStore,
@@ -31,8 +33,8 @@ log = logging.getLogger(__name__)
 
 TITLE = "Assistente del laboratorio — back-end"
 DESCRIPTION = (
-    "Chat salvate nel database: creazione, elenco, lettura ed eliminazione. È l'unico servizio "
-    "che il front-end usa; l'agente si raggiunge solo da qui."
+    "Chat salvate nel database: creazione, elenco, lettura, invio di un messaggio all'agente ed "
+    "eliminazione. È l'unico servizio che il front-end usa; l'agente si raggiunge solo da qui."
 )
 UNTITLED = "Nuova chat"  # title shown until the first question gives one
 INTERNAL_DETAIL = "errore interno del back-end; dettagli nel log"
@@ -76,6 +78,21 @@ class ChatDetail(ChatInfo):
     messages: list[ChatMessageInfo] = Field(description="Messaggi della chat in ordine cronologico.")
 
 
+class SendMessageRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid", json_schema_extra={"examples": [{"content": "Quanto fa 17 * 23?"}]}
+    )
+
+    content: str = Field(description=(
+        "Domanda dell'utente; gli spazi iniziali e finali si tolgono e non può restare vuota."
+    ))
+
+
+class SendMessageResponse(BaseModel):
+    question: ChatMessageInfo = Field(description="La domanda salvata.")
+    answer: ChatMessageInfo = Field(description="La risposta dell'agente salvata.")
+
+
 class ErrorBody(BaseModel):
     error: str = Field(description="Codice stabile dell'errore.")
     detail: str = Field(description="Messaggio in italiano.")
@@ -89,6 +106,12 @@ INVALID_REQUEST = _error("Richiesta non valida (invalid_request).")
 CHAT_NOT_FOUND = _error("Chat inesistente (chat_not_found).")
 DATABASE_UNAVAILABLE = _error("Database non disponibile (database_unavailable).")
 INTERNAL_ERROR = _error("Errore imprevisto (internal_error).")
+AGENT_ERROR = _error("L'agente ha risposto con un errore (agent_error).")
+SERVICE_UNAVAILABLE = _error(
+    "Agente non raggiungibile (agent_unavailable) o database non disponibile "
+    "(database_unavailable)."
+)
+AGENT_TIMEOUT = _error("L'agente non ha risposto entro il tempo massimo (agent_timeout).")
 
 
 # --- Errors and logs (specification of step 7, §6 and §7) ---
@@ -115,10 +138,23 @@ def _elapsed_ms(started: float) -> int:
     return round((time.monotonic() - started) * 1000)
 
 
+def _agent_error(error: AgentError) -> ApiError:
+    """Agent switched off → 503, too slow → 504, any other failure of the agent → 502."""
+    if error.code == "agent_unreachable":
+        return ApiError(503, "agent_unavailable", error.detail)
+    if error.code == "agent_timeout":
+        return ApiError(504, "agent_timeout", error.detail)
+    return ApiError(
+        502, "agent_error", f"l'agente ha risposto con un errore ({error.code}): {error.detail}"
+    )
+
+
 def _api_error(error: Exception) -> ApiError | None:
-    """The answer for an error of the archive; None if it is unexpected."""
+    """The answer for an error of the archive or of the agent; None if it is unexpected."""
     if isinstance(error, ApiError):
         return error
+    if isinstance(error, AgentError):
+        return _agent_error(error)
     if isinstance(error, ChatNotFoundError):
         return ApiError(404, "chat_not_found", str(error))
     if isinstance(error, InvalidInputError):
@@ -246,6 +282,47 @@ def create_app(*, store: ChatStore, agent) -> FastAPI:
             return {**_chat_info(chat), "messages": [_message_info(m) for m in messages]}
 
         return _answer(f"backend response=get_chat chat={chat_id}", work)
+
+    @app.post(
+        "/chats/{chat_id}/messages",
+        status_code=201,
+        response_model=SendMessageResponse,
+        responses={
+            400: INVALID_REQUEST, 404: CHAT_NOT_FOUND, 500: INTERNAL_ERROR, 502: AGENT_ERROR,
+            503: SERVICE_UNAVAILABLE, 504: AGENT_TIMEOUT,
+        },
+        summary="Invia un messaggio",
+        description=(
+            "Salva la domanda, la manda all'agente con la cronologia e il riassunto della chat, "
+            "poi salva e restituisce la risposta con gli strumenti usati. Se l'agente non risponde "
+            "la domanda resta nella chat senza risposta e la cronologia dell'agente non cambia."
+        ),
+    )
+    def send_message(chat_id: int, request: SendMessageRequest):
+        log.info(
+            "backend request=send_message chat=%d chars=%d", chat_id, len(request.content)
+        )
+
+        def work(started: float) -> dict:
+            question, state = store.add_question(chat_id, request.content)
+            log.info(
+                "backend agent_call chat=%d history=%d summary_chars=%d",
+                chat_id, len(state.history), len(state.summary),
+            )
+            result = agent.chat(state.history, state.summary, message=question.content)
+            answer = store.add_answer(
+                chat_id, result["reply"], result["tools_used"],
+                AgentState(history=result["history"], summary=result["summary"]),
+            )
+            log.info(
+                "backend response=send_message chat=%d status=201 tools=%s reply_chars=%d "
+                "duration_ms=%d",
+                chat_id, ",".join(str(tool.get("name")) for tool in answer.tools_used),
+                len(answer.content), _elapsed_ms(started),
+            )
+            return {"question": _message_info(question), "answer": _message_info(answer)}
+
+        return _answer(f"backend response=send_message chat={chat_id}", work)
 
     @app.delete(
         "/chats/{chat_id}",

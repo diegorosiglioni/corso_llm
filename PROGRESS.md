@@ -1140,6 +1140,66 @@ Decisioni:
   (`agent` di `create_app` ancora inutilizzato). Il `422` di FastAPI non scrive una riga di log del
   back-end (come nell'agente).
 
+### Punto 4 · Invio di un messaggio — piano
+
+1. `backend/api.py` (specifica §5–§7): `SendMessageRequest(content)` (`extra="forbid"`),
+   `SendMessageResponse(question, answer)`; `POST /chats/{chat_id}/messages` → `add_question`,
+   riga `backend agent_call`, `agent.chat(history, summary, message=…)`, `add_answer` → `201`;
+   `AgentError` in `_api_error`: `agent_unreachable` → `503 agent_unavailable`, `agent_timeout` →
+   `504 agent_timeout`, ogni altro codice → `502 agent_error` («l'agente ha risposto con un errore
+   (<codice>): <detail>»); risposte `502`/`503`/`504` documentate nell'OpenAPI.
+2. `assistant/api_client.py`: `AgentClient.chat` controlla anche i tipi del corpo `200` (`reply` e
+   `summary` testo, `tools_used` e `history` elenchi), altrimenti `bad_response`.
+3. Test in `tests/test_backend_api.py`: invio con l'`AgentClient` collegato all'agente dello Step 6
+   su grafo finto (`fake_service`): domanda e risposta salvate e restituite, strumento usato
+   salvato, titolo dalla prima domanda, al secondo invio l'agente riceve la cronologia salvata
+   (CA-73); agente finto per cronologia e riassunto passati e salvati; agente su porta chiusa →
+   `503`, tempo scaduto → `504`, errore del servizio (LM Studio spento nel grafo finto) → `502`,
+   risposta inattesa → `502`; dopo ogni errore domanda salvata e stato invariato (CA-74); `404`,
+   `400`, `422`, `503 database_unavailable`, `500`, chat eliminata durante il turno; OpenAPI; righe
+   di log esatte (CA-76). `tests/test_api_client.py`: tipi sbagliati → `bad_response`. Poi `pytest`.
+
+Decisioni:
+- `chars=` della riga di richiesta conta il testo ricevuto e la riga si scrive prima di ogni
+  controllo: così anche un `400` o un `404` dell'invio ha la sua riga di richiesta.
+- Controllo dei tipi nel client e non nel back-end: un solo client dell'agente (specifica §1), e la
+  CLI ne beneficia; senza, un corpo malformato diventerebbe un errore di validazione della risposta
+  fuori dalla mappatura degli errori (o finirebbe nel database).
+- `tools=` con i nomi separati da virgola, vuoto senza strumenti: stesso formato della riga
+  `api response=chat` dell'agente.
+
+### Punto 4 · Invio di un messaggio — fatto
+
+- Implementati in `backend/api.py` `SendMessageRequest`, `SendMessageResponse`,
+  `POST /chats/{chat_id}/messages` (domanda salvata, riga `agent_call`, `agent.chat`, risposta e
+  stato dell'agente salvati, `201`), la conversione di `AgentError` (`_agent_error`: `503
+  agent_unavailable`, `504 agent_timeout`, `502 agent_error`) e le risposte `502`/`503`/`504`
+  nell'OpenAPI; in `assistant/api_client.py` il controllo dei tipi del corpo di `POST /chat`
+  (`CHAT_FIELDS`, `_is_chat`). `CLAUDE.md` (struttura) aggiornato.
+- Decisioni prese durante l'esecuzione:
+  - La risposta `503` dell'invio nell'OpenAPI descrive entrambi i casi (agente non raggiungibile,
+    database non disponibile): un codice HTTP ha una sola voce per operazione.
+  - Il messaggio mandato all'agente è il testo salvato (spazi tolti dall'archivio), non quello
+    ricevuto: l'agente vede esattamente la domanda che compare nella chat.
+  - Chat eliminata mentre l'agente risponde → `404 chat_not_found` dopo la chiamata (la risposta
+    non si salva), come da specifica §4.
+- Test nuovi: `test_backend_api.py` (+25: invio con l'agente dello Step 6 su grafo finto, con
+  domanda, risposta, `get_current_time` negli strumenti, titolo dalla prima domanda e cronologia
+  salvati; secondo invio con la cronologia salvata, ricevuta anche dal modello; riassunto salvato e
+  rimandato; testo senza spazi salvato e mandato; titolo dato non sostituito; `422` per corpo fuori
+  schema e id non intero, `400` messaggio vuoto e `404` senza chiamare l'agente; porta chiusa → `503`,
+  tempo scaduto → `504`, LM Studio spento nel grafo finto → `502 (model_unavailable)`, risposta non
+  JSON → `502 (bad_response)`, con la domanda salvata, lo stato invariato e la riga a WARNING;
+  cronologia salvata rifiutata dall'agente → `502 (invalid_history)`; chat eliminata durante il
+  turno → `404`; archivio con `OperationalError` → `503 database_unavailable`, eccezione imprevista →
+  `500` a ERROR; righe di log esatte; testi assenti dal log; OpenAPI dell'invio),
+  `test_api_client.py` (+5: tipi sbagliati nel corpo `200` → `bad_response`).
+- `pytest` → 825 passed, 23 deselected; `test_backend_api.py` anche con
+  `-W error::DeprecationWarning`.
+- Problemi aperti: prova con PostgreSQL, agente e LM Studio veri (CA-77, CA-78), README (avvio del
+  back-end, PostgreSQL in un container, diagnosi) ed esiti in requisiti §15 al punto 5, come da piano
+  dello step. Invii contemporanei nella stessa chat non bloccati (rischio della specifica §13).
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13
