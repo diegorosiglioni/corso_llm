@@ -2082,6 +2082,13 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
   chiamata senza nome e un id ripetuto) 1 passed in 111 s al primo tentativo: LM Studio accetta la
   cronologia normalizzata, «391», secondo turno con «400». L'origine delle chiamate malformate resta
   provata solo con il modello simulato.
+- **Task 2 · R-A6 e R-A7 — fatto.** `kind=prompt name="…"` in JSON e troncato a 64 caratteri;
+  `_check_prompt_size` in `assistant/api.py` (nome 64, 10 argomenti, nome di argomento 64, valore
+  1000) prima di cronologia e `prompts/list`. Modello simulato: 11 test visti fallire (riga senza
+  virgolette, `
+` che spezza la riga, nome intero nel log, nessun limite); il test ai limiti esatti
+  passava già (comportamento da conservare); poi tutti verdi, `pytest` 1028 passed. README
+  allineato.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

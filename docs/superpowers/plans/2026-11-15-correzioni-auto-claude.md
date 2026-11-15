@@ -251,7 +251,7 @@ Detail esatti:
 - `f"un nome di argomento supera {MAX_ARGUMENT_NAME} caratteri"`
 - `f"il valore dell'argomento '{key}' supera {MAX_ARGUMENT_VALUE} caratteri"`
 
-- [ ] **Passo 1: test che falliscono**
+- [x] **Passo 1: test che falliscono**
   - `test_chat_with_a_prompt`: riga attesa
     `'api request=chat kind=prompt name="spiega" history=0 summary_chars=0'`.
   - `test_prompt_name_is_escaped_in_the_log(caplog)`: prompt `"a\nb"` → la prima riga di
@@ -268,13 +268,13 @@ Detail esatti:
   - `test_prompt_at_the_size_limits_passes`: nome di 64, 10 argomenti con nomi di 64 e valori di
     1000 → la richiesta arriva al controllo dell'host (`400 prompt_rejected` con il motivo di
     `check_request`, non quello dei limiti), cioè `prompts/list` viene chiamato.
-- [ ] **Passo 2:** eseguirli → falliscono.
-- [ ] **Passo 3:** `_kind` scrive `f"prompt name={_json(request.prompt.name[:MAX_PROMPT_NAME])}"`;
+- [x] **Passo 2:** eseguirli → falliscono.
+- [x] **Passo 3:** `_kind` scrive `f"prompt name={_json(request.prompt.name[:MAX_PROMPT_NAME])}"`;
   `_prepare` chiama `_check_prompt_size` dopo i controlli di `message` e prima di `_history`.
-- [ ] **Passo 4:** test verdi; `pytest` completo verde.
-- [ ] **Passo 5:** README: `kind=prompt name="…"` e una riga sui limiti (con il messaggio della CLI
+- [x] **Passo 4:** test verdi; `pytest` completo verde.
+- [x] **Passo 5:** README: `kind=prompt name="…"` e una riga sui limiti (con il messaggio della CLI
   «Errore nel comando: …»).
-- [ ] **Passo 6: commit** `fix(servizio): nome del prompt in JSON nel log e limiti degli argomenti`.
+- [x] **Passo 6: commit** `fix(servizio): nome del prompt in JSON nel log e limiti degli argomenti`.
 
 ---
 

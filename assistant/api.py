@@ -207,6 +207,13 @@ STATUS_RESPONSES = {
 
 INTERNAL_DETAIL = "errore interno dell'agente; dettagli nel log"
 
+# Limits of a prompt request, checked before history and prompts/list (R-A7): no log line gets
+# longer arguments, and the detail names the argument and the limit, never the value.
+MAX_PROMPT_NAME = 64
+MAX_PROMPT_ARGUMENTS = 10
+MAX_ARGUMENT_NAME = 64
+MAX_ARGUMENT_VALUE = 1000
+
 STREAM_DESCRIPTION = """\
 Lo stesso turno di POST /chat, con lo stesso corpo, restituito come Server-Sent Events mentre il \
 grafo lavora. Ogni evento ha un nome e un oggetto JSON:
@@ -245,7 +252,7 @@ def _kind(request: ChatRequest) -> str:
     if request.message is not None and request.prompt is not None:
         return "both"
     if request.prompt is not None:
-        return f"prompt name={request.prompt.name}"
+        return f"prompt name={_json(request.prompt.name[:MAX_PROMPT_NAME])}"
     return "message" if request.message is not None else "none"
 
 
@@ -272,12 +279,30 @@ def _opening(client, request: ChatRequest) -> list[BaseMessage]:
         raise ApiError(502, "prompt_unavailable", str(error)) from None
 
 
+def _check_prompt_size(prompt: PromptRequest) -> None:
+    """Rejects a prompt over the limits with 400 prompt_rejected."""
+    if len(prompt.name) > MAX_PROMPT_NAME:
+        detail = f"il nome del prompt supera {MAX_PROMPT_NAME} caratteri"
+    elif len(prompt.arguments) > MAX_PROMPT_ARGUMENTS:
+        detail = f"il prompt ha più di {MAX_PROMPT_ARGUMENTS} argomenti"
+    elif any(len(key) > MAX_ARGUMENT_NAME for key in prompt.arguments):
+        detail = f"un nome di argomento supera {MAX_ARGUMENT_NAME} caratteri"
+    else:
+        key = next((k for k, v in prompt.arguments.items() if len(v) > MAX_ARGUMENT_VALUE), None)
+        if key is None:
+            return
+        detail = f"il valore dell'argomento '{key}' supera {MAX_ARGUMENT_VALUE} caratteri"
+    raise ApiError(400, "prompt_rejected", detail)
+
+
 def _prepare(client, request: ChatRequest) -> tuple[list[BaseMessage], list[BaseMessage]]:
     """History and opening messages of the turn, after the checks of the request."""
     if (request.message is None) == (request.prompt is None):
         raise ApiError(400, "invalid_request", "indicare esattamente uno tra 'message' e 'prompt'")
     if request.message is not None and not request.message.strip():
         raise ApiError(400, "invalid_request", "il campo 'message' è vuoto")
+    if request.prompt is not None:
+        _check_prompt_size(request.prompt)
     history = _history(request)  # before the prompt: a bad history calls nothing
     return history, _opening(client, request)
 

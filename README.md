@@ -982,10 +982,14 @@ la descrizione dello stile sintetico «breve ed essenziale, in poche frasi» fac
 una modifica di `preferences.py` o del prompt si ripete `pytest -m real`.
 
 **Un `/prompt` non funziona.** Le righe del logger `assistant.commands` (nel log della CLI per la
-sintassi, in quello del servizio per il resto, dopo `api request=chat kind=prompt name=…`) dicono
-dove si è fermato: `prompt_command status=rejected reason="…"` se il comando è stato bloccato
-(sintassi, nome o argomenti rispetto a `prompts/list`: il modello non è stato chiamato); `prompts/list
-status=unavailable` o `prompts/get … status=unavailable error="…"` se il server non ha risposto o ha
+sintassi, in quello del servizio per il resto, dopo `api request=chat kind=prompt name="…"`, con il
+nome in JSON e troncato a 64 caratteri) dicono dove si è fermato: `prompt_command status=rejected
+reason="…"` se il comando è stato bloccato (sintassi, nome o argomenti rispetto a `prompts/list`: il
+modello non è stato chiamato). Prima ancora il servizio rifiuta, senza chiamare il server MCP, un
+nome di prompt o di argomento oltre 64 caratteri, più di 10 argomenti o un valore oltre 1000
+caratteri: la CLI scrive per esempio «Errore nel comando: il valore dell'argomento 'argomento'
+supera 1000 caratteri. Scrivi /prompts per l'elenco dei prompt.»; il valore non entra nel log.
+`prompts/list status=unavailable` o `prompts/get … status=unavailable error="…"` se il server non ha risposto o ha
 rifiutato un valore; `prompts/get … status=ok` seguita da `message=1/1 … text="…"` con il testo
 mandato al grafo. Da lì in poi il turno ha le righe consuete di `summary`, `router`, agente e
 `reviewer`. Se la risposta non è quella attesa, conta il testo del prompt in `assistant/prompts.py`:

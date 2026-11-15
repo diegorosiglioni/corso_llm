@@ -183,7 +183,60 @@ def test_chat_with_a_prompt(caplog):
     assert client.prompt_gets == [("spiega", {"argomento": "MCP"})]
     messages = [r.getMessage() for r in caplog.records]
     assert 'prompts/get name=spiega arguments={"argomento": "MCP"} status=ok messages=1' in messages
-    assert api_lines(caplog)[0] == "api request=chat kind=prompt name=spiega history=0 summary_chars=0"
+    assert api_lines(caplog)[0] == (
+        'api request=chat kind=prompt name="spiega" history=0 summary_chars=0'
+    )
+
+
+def test_prompt_name_is_escaped_in_the_log(caplog):  # R-A6
+    caplog.set_level(logging.INFO)
+    api().post("/chat", json={"prompt": {"name": "a\nb"}})
+    assert api_lines(caplog)[0] == (
+        'api request=chat kind=prompt name="a\\nb" history=0 summary_chars=0'
+    )
+    assert not any(r.getMessage().startswith("b") for r in caplog.records)
+
+
+def test_long_prompt_name_is_cut_in_the_log(caplog):  # Review Focus 4
+    caplog.set_level(logging.INFO)
+    api().post("/chat", json={"prompt": {"name": "p" * 5000}})
+    line = api_lines(caplog)[0]
+    assert 'name="' + "p" * 64 + '"' in line, line
+    assert "p" * 65 not in line, line
+
+
+PROMPT_LIMITS = [
+    pytest.param({"name": "p" * 65}, "il nome del prompt supera 64 caratteri", id="name"),
+    pytest.param({"name": "spiega", "arguments": {f"a{i}": "x" for i in range(11)}},
+                 "il prompt ha più di 10 argomenti", id="arguments"),
+    pytest.param({"name": "spiega", "arguments": {"a" * 65: "x"}},
+                 "un nome di argomento supera 64 caratteri", id="argument-name"),
+    pytest.param({"name": "spiega", "arguments": {"argomento": "x" * 1001}},
+                 "il valore dell'argomento 'argomento' supera 1000 caratteri", id="value"),
+]
+
+
+@pytest.mark.parametrize("endpoint", ["/chat", "/chat/stream"])
+@pytest.mark.parametrize(("prompt", "detail"), PROMPT_LIMITS)
+def test_prompt_size_limits(endpoint, prompt, detail, caplog):  # R-A7
+    caplog.set_level(logging.DEBUG)
+    client = mcp_client()
+    response = api(client=client).post(endpoint, json={"prompt": prompt})
+    assert response.status_code == 400, response.text
+    assert response.json() == {"error": "prompt_rejected", "detail": detail}
+    assert client.prompt_gets == []
+    assert client.prompt_lists == 0
+    assert "x" * 1001 not in caplog.text
+
+
+def test_prompt_at_the_size_limits_passes():  # R-A7
+    client = mcp_client()
+    arguments = {f"{i}" + "a" * 63: "x" * 1000 for i in range(10)}
+    response = api(client=client).post("/chat", json={"prompt": {"name": "p" * 64, "arguments": arguments}})
+    assert response.status_code == 400, response.text
+    assert response.json()["error"] == "prompt_rejected"
+    assert "supera" not in response.json()["detail"] and "più di" not in response.json()["detail"]
+    assert client.prompt_lists == 1
 
 
 def test_prompt_arguments_are_optional():
