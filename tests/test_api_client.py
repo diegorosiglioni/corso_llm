@@ -9,7 +9,7 @@ from assistant import api_client
 from assistant.api_client import (
     CHAT_TIMEOUT,
     STATUS_TIMEOUT,
-    STREAM_CONNECT_TIMEOUT,
+    CONNECT_TIMEOUT,
     STREAM_IDLE_TIMEOUT,
     AgentClient,
     AgentError,
@@ -136,6 +136,10 @@ def test_timeouts():
     client.chat([], "", message="ciao")
     assert [r.extensions["timeout"]["read"] for r in requests] == [STATUS_TIMEOUT, CHAT_TIMEOUT]
     assert (STATUS_TIMEOUT, CHAT_TIMEOUT) == (10, 600)
+    assert requests[0].extensions["timeout"]["connect"] == 10.0
+    assert requests[1].extensions["timeout"] == {  # R-C6: 10 s to connect, as chat_stream
+        "connect": 10.0, "read": 600.0, "write": 600.0, "pool": 600.0,
+    }
 
 
 def test_turn_without_answer_in_time():
@@ -302,7 +306,7 @@ def test_chat_stream_request_body():
         "name": "spiega", "arguments": {"argomento": "MCP"}
     }
     assert requests[0].extensions["timeout"] == {
-        "connect": STREAM_CONNECT_TIMEOUT, "read": STREAM_IDLE_TIMEOUT,
+        "connect": CONNECT_TIMEOUT, "read": STREAM_IDLE_TIMEOUT,
         "write": STREAM_IDLE_TIMEOUT, "pool": STREAM_IDLE_TIMEOUT,
     }
 

@@ -2114,6 +2114,10 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
   parentesi con un detail vuoto. Modello simulato: 6 test del back-end e i test Node visti fallire,
   poi verdi; `pytest` 1047 passed; browser vero con modello simulato: `pytest -m browser` con Edge
   25 passed. README allineato.
+- **Task 7 · R-C6 — fatto.** `CONNECT_TIMEOUT` (10 s) al posto di `STREAM_CONNECT_TIMEOUT`, usato
+  da `_request` e da `chat_stream`. Modello simulato: `test_timeouts` visto fallire (`ImportError`;
+  controllo diretto del comportamento: `chat` aveva `connect=600.0`), poi verde (`connect=10.0`,
+  il resto 600); `pytest` 1047 passed.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

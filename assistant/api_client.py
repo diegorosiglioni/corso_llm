@@ -17,7 +17,7 @@ from assistant.mcp_client import PromptArgument, PromptSpec
 
 STATUS_TIMEOUT = 10.0  # GET /status and GET /prompts (the model check lasts at most 5 s)
 CHAT_TIMEOUT = 600.0  # POST /chat: a turn may contain several calls to the local model
-STREAM_CONNECT_TIMEOUT = 10.0  # POST /chat/stream: connection
+CONNECT_TIMEOUT = 10.0  # connection to the agent, for every request
 STREAM_IDLE_TIMEOUT = 60.0  # POST /chat/stream: most time without data (": ping" every 15 s)
 STREAM_EVENTS = {"text", "reset", "tool_start", "tool_end", "done", "error"}
 
@@ -200,7 +200,7 @@ class AgentClient:
         started = time.monotonic()
         request = self._http.build_request(
             "POST", "/chat/stream", json=_chat_request(history, summary, message, prompt),
-            timeout=httpx.Timeout(STREAM_IDLE_TIMEOUT, connect=STREAM_CONNECT_TIMEOUT),
+            timeout=httpx.Timeout(STREAM_IDLE_TIMEOUT, connect=CONNECT_TIMEOUT),
         )
         response = self._send(lambda: self._http.send(request, stream=True), STREAM_IDLE_TIMEOUT)
         if response.status_code != 200:
@@ -251,7 +251,10 @@ class AgentClient:
 
     def _request(self, method: str, path: str, timeout: float, json=None):
         return self._send(
-            lambda: self._http.request(method, path, json=json, timeout=timeout), timeout
+            lambda: self._http.request(
+                method, path, json=json, timeout=httpx.Timeout(timeout, connect=CONNECT_TIMEOUT)
+            ),
+            timeout,
         )
 
     def _send(self, call, timeout: float, *, broken: bool = False):

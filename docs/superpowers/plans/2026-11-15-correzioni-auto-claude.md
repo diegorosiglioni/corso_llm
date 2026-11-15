@@ -410,15 +410,15 @@ Detail esatti: `"il messaggio contiene un carattere non ammesso (NUL)"`,
 - Modifica: `assistant/api_client.py` (`STREAM_CONNECT_TIMEOUT` → `CONNECT_TIMEOUT`, `_request`)
 - Test: `tests/test_api_client.py`
 
-- [ ] **Passo 1: test che fallisce** — in `test_timeouts`:
+- [x] **Passo 1: test che fallisce** — in `test_timeouts`:
   `requests[1].extensions["timeout"] == {"connect": 10.0, "read": 600.0, "write": 600.0, "pool": 600.0}`
   e `requests[0].extensions["timeout"]["connect"] == 10.0`; import di `CONNECT_TIMEOUT` al posto di
   `STREAM_CONNECT_TIMEOUT` (riga 305).
-- [ ] **Passo 2:** eseguirlo → fallisce.
-- [ ] **Passo 3:** `_request` passa `httpx.Timeout(timeout, connect=CONNECT_TIMEOUT)`;
+- [x] **Passo 2:** eseguirlo → fallisce.
+- [x] **Passo 3:** `_request` passa `httpx.Timeout(timeout, connect=CONNECT_TIMEOUT)`;
   `chat_stream` usa `CONNECT_TIMEOUT`.
-- [ ] **Passo 4:** test verdi; `pytest` completo verde.
-- [ ] **Passo 5: commit** `fix(client): connessione all'agente entro 10 s anche per chat`.
+- [x] **Passo 4:** test verdi; `pytest` completo verde.
+- [x] **Passo 5: commit** `fix(client): connessione all'agente entro 10 s anche per chat`.
 
 ---
 
