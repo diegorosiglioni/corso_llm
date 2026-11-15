@@ -2055,6 +2055,10 @@ Approvati dall'utente il 2026-11-15 (la specifica si scrive in una sessione nuov
 - **Minori come debito noto** (in `TODO.md` in F5): R-A9, R-B2, R-B3, R-B4, R-B9, R-C5, R-C8, R-D2,
   R-D4, R-D5.
 
+Specifica delle correzioni (con F5 e F6)
+[`docs/superpowers/specs/2026-11-15-correzioni-auto-claude-design.md`](docs/superpowers/specs/2026-11-15-correzioni-auto-claude-design.md)
+approvata dall'utente il 2026-11-15, con le scelte del progettista del §11; piano da scrivere.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13
