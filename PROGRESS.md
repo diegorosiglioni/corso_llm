@@ -9,9 +9,11 @@
   «Revisione e integrazione» più sotto). Fatte le fasi F1 (revisione), F2 (prove reali) e F3
   (rilettura con l'utente): rapporto in `docs/superpowers/reviews/2026-11-15-auto-claude.md`, 3
   problemi gravi, 4 importanti, 29 minori; decisioni dell'utente nella sezione F3.
-- Prossimo: specifica e piano delle correzioni (F4, Task 8 del piano), che comprendono anche
-  sistemazione (F5) e integrazione (F6); approcci e divisione dei minori già approvati (sezione
-  «F4 · Correzioni»). Push solo su richiesta dell'utente.
+- Specifica e piano delle correzioni (F4, con F5 e F6) approvati dall'utente il 2026-11-15:
+  `docs/superpowers/specs/2026-11-15-correzioni-auto-claude-design.md`,
+  `docs/superpowers/plans/2026-11-15-correzioni-auto-claude.md` (Task 0–16).
+- Prossimo: eseguire il piano dal Task 0 in una sessione nuova (prompt in
+  `docs/superpowers/prossimo-prompt.txt`). Push solo su richiesta dell'utente.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
@@ -2057,7 +2059,10 @@ Approvati dall'utente il 2026-11-15 (la specifica si scrive in una sessione nuov
 
 Specifica delle correzioni (con F5 e F6)
 [`docs/superpowers/specs/2026-11-15-correzioni-auto-claude-design.md`](docs/superpowers/specs/2026-11-15-correzioni-auto-claude-design.md)
-approvata dall'utente il 2026-11-15, con le scelte del progettista del §11; piano da scrivere.
+approvata dall'utente il 2026-11-15, con le scelte del progettista del §11. Piano
+[`docs/superpowers/plans/2026-11-15-correzioni-auto-claude.md`](docs/superpowers/plans/2026-11-15-correzioni-auto-claude.md)
+(Task 0–16) approvato dall'utente il 2026-11-15; esecuzione in una sessione nuova, consigliata in
+sessione (superpowers:executing-plans) con il revisore indipendente del Task 13.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
