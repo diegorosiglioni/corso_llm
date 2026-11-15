@@ -5,7 +5,15 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 
-from assistant.graph import SYSTEM_PROMPT, route, route_after_reviewer, route_after_router
+from assistant.agent import messages_from_json, messages_to_json
+from assistant.graph import (
+    SYSTEM_PROMPT,
+    UNNAMED_TOOL,
+    normalize_tool_calls,
+    route,
+    route_after_reviewer,
+    route_after_router,
+)
 from assistant.mcp_client import ALLOWED_MCP_TOOLS
 from assistant.reviewer import (
     ReviewDecision,
@@ -673,3 +681,55 @@ def test_preferences_on_every_agent_call_of_the_turn():
     model = FakeModel([tool_call(), AIMessage("Sono le 10.")])
     start_turn(model, preferences=PREFERENCES)
     assert [call[0].text.startswith(PREFERENCES) for call in model.calls] == [True, True]
+
+
+def malformed_reply() -> AIMessage:
+    tokyo = {"timezone": "Asia/Tokyo"}
+    return AIMessage("", tool_calls=[
+        {"name": "get_current_time", "args": tokyo, "id": ""},
+        {"name": "get_current_time", "args": tokyo, "id": None},
+        {"name": "", "args": {}, "id": "c1"},
+        {"name": "get_current_time", "args": tokyo, "id": "c1"},
+    ], invalid_tool_calls=[
+        {"name": None, "args": "{", "id": "c1", "error": None, "type": "invalid_tool_call"},
+    ])
+
+
+def test_malformed_tool_calls_are_normalized(caplog):  # R-B1
+    caplog.set_level(logging.WARNING)
+    model = FakeModel([malformed_reply(), AIMessage("fatto")])
+    result = start_turn(model)
+    asked = result["messages"][1]
+    calls = list(asked.tool_calls) + list(asked.invalid_tool_calls)
+    ids = [c["id"] for c in calls]
+    assert all(ids) and len(set(ids)) == 5
+    assert ids[2] == "c1"  # the first valid id is kept
+    assert [c["name"] for c in calls] == [
+        "get_current_time", "get_current_time", UNNAMED_TOOL, "get_current_time", UNNAMED_TOOL,
+    ]
+    answers = {m.tool_call_id: m for m in result["messages"] if isinstance(m, ToolMessage)}
+    assert set(answers) == set(ids)
+    assert "Strumento sconosciuto: 'unnamed_tool'." in answers[ids[2]].content
+    assert model.calls[1][2] == asked  # the second call of the model gets the normalized ids
+    lines = [r.getMessage() for r in caplog.records if "tool_call_normalized" in r.getMessage()]
+    assert len(lines) == 5
+    assert lines[2] == (f'step=1/5 tool_call_normalized call_id=c1 original_id="c1" '
+                        f'original_name=""')
+
+
+def test_valid_tool_calls_are_left_unchanged(caplog):
+    caplog.set_level(logging.WARNING)
+    reply = tool_call()
+    assert normalize_tool_calls(reply) == (reply, [])
+    result = start_turn(FakeModel([reply, AIMessage("fatto")]))
+    assert result["messages"][1].tool_calls[0]["id"] == "c1"
+    assert "tool_call_normalized" not in caplog.text
+
+
+def test_limit_answers_the_normalized_ids():  # Review Focus 1
+    result = start_turn(FakeModel([malformed_reply()]), max_steps=1)
+    asked = result["messages"][1]
+    ids = {c["id"] for c in list(asked.tool_calls) + list(asked.invalid_tool_calls)}
+    answered = {m.tool_call_id for m in result["messages"] if isinstance(m, ToolMessage)}
+    assert answered == ids
+    messages_from_json(messages_to_json(result["messages"]))  # no ValueError

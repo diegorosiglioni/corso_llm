@@ -20,6 +20,7 @@ import httpx
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
+from assistant.agent import messages_from_json, messages_to_json
 from assistant.catalog import DEFAULT_CATALOG_PATH
 from assistant.commands import PromptCommands, resolve_prompt
 from assistant.config import DEFAULT_PREFERENCES_FILE, ConfigError, load_config
@@ -238,17 +239,18 @@ PARTIAL = "A Tokyo sono le 10:00."  # answers only the first part; the time is n
 
 
 class PartialFirstAnswer:
-    """The agent's first call returns a fixed partial answer; later calls use the real model."""
+    """The agent's first call returns a fixed answer (a text or an AIMessage); later calls use
+    the real model."""
 
-    def __init__(self, model, text: str):
+    def __init__(self, model, first: str | AIMessage):
         self._model = model
-        self._text = text
+        self._first = first if isinstance(first, AIMessage) else AIMessage(first)
         self.calls = 0
 
     def invoke(self, messages):
         self.calls += 1
         if self.calls == 1:
-            return AIMessage(self._text)
+            return self._first
         return self._model.invoke(messages)
 
 
@@ -294,6 +296,25 @@ def test_two_part_question_fully_real(config, real_session, caplog):
     assert any(t in reply for t in tokyo_times(messages)), (reply, messages)
     assert 1 <= len(reviewer_lines(caplog)) <= config.max_reviews, caplog.text
 
+
+
+MALFORMED_FIRST = AIMessage("", tool_calls=[
+    {"name": "", "args": {}, "id": "c1"},
+    {"name": "calculate", "args": {"expression": "17 * 23"}, "id": "c1"},
+])
+
+
+def test_lm_studio_accepts_a_normalized_history(config, tmp_path, caplog):  # R-B1
+    # The agent's FIRST answer is imposed with malformed calls; the rest of the turn is real.
+    caplog.set_level(logging.WARNING, logger="assistant.graph")
+    wrap = lambda model: PartialFirstAnswer(model, MALFORMED_FIRST)  # noqa: E731
+    with open_session(config, tmp_path / "notes.sqlite3", wrap_agent=wrap) as (session, _):
+        reply = session.send(QUESTION)
+        history = messages_from_json(messages_to_json(session.messages))  # no ValueError
+        second = session.send("E quanto fa 391 + 9?")
+    assert "tool_call_normalized" in caplog.text, caplog.text
+    assert "391" in reply, reply
+    assert "400" in second, (second, history)
 
 # --- lesson 6, step 3: summary (CA-43) ---
 

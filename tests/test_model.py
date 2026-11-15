@@ -160,3 +160,19 @@ def test_check_model_unreachable(error):
 def test_check_model_without_a_client_on_a_closed_port():
     config = load_config({**VALID, "LMSTUDIO_BASE_URL": "http://127.0.0.1:1/v1"})
     assert check_model(config) == (False, "LM Studio non raggiungibile su http://127.0.0.1:1/v1")
+
+
+def test_request_payload_uses_the_normalized_ids():  # R-B1
+    from langchain_core.messages import HumanMessage
+
+    from assistant.graph import UNNAMED_TOOL, normalize_tool_calls
+    from test_graph import malformed_reply
+
+    normalized, changes = normalize_tool_calls(malformed_reply())
+    assert changes
+    chat = ChatOpenAI(model="m", base_url="http://localhost:9/v1", api_key="x")
+    payload = chat._get_request_payload([HumanMessage("ore?"), normalized])
+    sent = payload["messages"][1]["tool_calls"]
+    expected = list(normalized.tool_calls) + list(normalized.invalid_tool_calls)
+    assert [c["id"] for c in sent] == [c["id"] for c in expected]
+    assert UNNAMED_TOOL in [c["function"]["name"] for c in sent]

@@ -800,3 +800,41 @@ def test_openapi_documents_the_stream_endpoint():
         assert schema == {"$ref": "#/components/schemas/ErrorBody"}
     for event in ("text", "reset", "tool_start", "tool_end", "done", "error"):
         assert f"`{event}`" in operation["description"]
+
+
+MALFORMED = [
+    pytest.param([{"name": "get_current_time", "args": {"timezone": "Asia/Tokyo"}, "id": ""}], [],
+                 id="empty-id"),
+    pytest.param([{"name": "get_current_time", "args": {"timezone": "Asia/Tokyo"}, "id": None}], [],
+                 id="null-id"),
+    pytest.param([{"name": "get_current_time", "args": {"timezone": "Asia/Tokyo"}, "id": "c1"},
+                  {"name": "get_current_time", "args": {"timezone": "Europe/Rome"}, "id": "c1"}], [],
+                 id="repeated-id"),
+    pytest.param([{"name": "", "args": {}, "id": "c1"}], [], id="empty-name"),
+    pytest.param([], [{"name": None, "args": "{", "id": "c1", "error": None,
+                       "type": "invalid_tool_call"}], id="null-name"),
+]
+
+
+@pytest.mark.parametrize(("tool_calls", "invalid"), MALFORMED)
+def test_history_with_malformed_calls_is_accepted_again(tool_calls, invalid):  # R-B1
+    reply = AIMessage("", tool_calls=tool_calls, invalid_tool_calls=invalid)
+    service = api(FakeModel([reply, AIMessage("ok"), AIMessage("ancora")]))
+    first = service.post("/chat", json={"message": "ore?"})
+    assert first.status_code == 200, first.text
+    second = service.post("/chat", json={"message": "di nuovo", "history": first.json()["history"]})
+    assert second.status_code == 200, second.text
+
+
+@pytest.mark.parametrize(("tool_calls", "invalid"), MALFORMED)
+def test_stream_history_with_malformed_calls_is_accepted_again(tool_calls, invalid):
+    reply = AIMessage("", tool_calls=tool_calls, invalid_tool_calls=invalid)
+    service = api(StreamingFakeModel(replies=[reply, AIMessage("ok"), AIMessage("ancora")]))
+    events = stream(service, {"message": "ore?"})
+    done = events[-1][1]
+    assistant = next(m for m in done["history"] if m.get("tool_calls") or m.get("invalid_tool_calls"))
+    sent = [c["id"] for c in assistant.get("tool_calls", []) + assistant.get("invalid_tool_calls", [])]
+    assert [d["id"] for name, d in events if name == "tool_start"] == sent
+    assert [d["id"] for name, d in events if name == "tool_end"] == sent
+    again = service.post("/chat", json={"message": "di nuovo", "history": done["history"]})
+    assert again.status_code == 200, again.text

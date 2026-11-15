@@ -2064,6 +2064,25 @@ approvata dall'utente il 2026-11-15, con le scelte del progettista del §11. Pia
 (Task 0–16) approvato dall'utente il 2026-11-15; esecuzione in una sessione nuova, consigliata in
 sessione (superpowers:executing-plans) con il revisore indipendente del Task 13.
 
+### F4 · Correzioni — esecuzione del piano (2026-11-15)
+
+In sessione con superpowers:executing-plans, un task alla volta. «Modello simulato» = test senza
+LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
+
+- **Task 0 · Ambiente — fatto.** `auto-claude`, albero pulito, ultimo commit `b60e6cc` (piano);
+  Compose spento, porte 8000/8001/8080 libere; LM Studio avviato e `google/gemma-4-e2b` caricato
+  (contesto 8192, elencato da `/v1/models`); `docker start assistente-postgres`; modello simulato:
+  `pytest` 1003 passed, 90 deselected (68 s).
+- **Task 1 · R-B1 — fatto.** `normalize_tool_calls` e `UNNAMED_TOOL` in `assistant/graph.py`,
+  chiamata in `llm_node` con una riga WARNING `tool_call_normalized` per ogni chiamata cambiata.
+  Modello simulato: i 15 test nuovi (grafo, servizio `/chat` e `/chat/stream` sui cinque casi,
+  richiesta di `langchain-openai` con `_get_request_payload`) visti fallire (`ImportError`, poi
+  `400 invalid_history` e un `500` nello streaming con nome null), poi verdi; `pytest` 1017 passed.
+  Modello vero: `test_lm_studio_accepts_a_normalized_history` (prima risposta imposta con una
+  chiamata senza nome e un id ripetuto) 1 passed in 111 s al primo tentativo: LM Studio accetta la
+  cronologia normalizzata, «391», secondo turno con «400». L'origine delle chiamate malformate resta
+  provata solo con il modello simulato.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13

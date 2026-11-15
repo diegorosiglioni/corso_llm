@@ -59,16 +59,16 @@ riga ha il suo test nel task indicato:
 
 ### Task 0: Ambiente e punto di partenza
 
-- [ ] **Passo 1:** `git branch --show-current` → `auto-claude`; `git status --short` vuoto; ultimo
+- [x] **Passo 1:** `git branch --show-current` → `auto-claude`; `git status --short` vuoto; ultimo
   commit quello del piano.
-- [ ] **Passo 2:** `docker compose ps` → nessun servizio attivo (altrimenti `docker compose down`);
+- [x] **Passo 2:** `docker compose ps` → nessun servizio attivo (altrimenti `docker compose down`);
   porte 8000, 8001, 8080 libere (`Get-NetTCPConnection -LocalPort 8000,8001,8080 -State Listen`
   senza risultati).
-- [ ] **Passo 3:** LM Studio: `& "$HOME\.lmstudio\bin\lms.exe" server start`, poi
+- [x] **Passo 3:** LM Studio: `& "$HOME\.lmstudio\bin\lms.exe" server start`, poi
   `& "$HOME\.lmstudio\bin\lms.exe" load google/gemma-4-e2b --context-length 8192 -y`;
   `Invoke-RestMethod http://localhost:1234/v1/models` elenca `google/gemma-4-e2b`.
-- [ ] **Passo 4:** `docker start assistente-postgres` (lo ricrea il Task 11).
-- [ ] **Passo 5:** `.\.venv\Scripts\python.exe -m pytest` → `1003 passed, 90 deselected`.
+- [x] **Passo 4:** `docker start assistente-postgres` (lo ricrea il Task 11).
+- [x] **Passo 5:** `.\.venv\Scripts\python.exe -m pytest` → `1003 passed, 90 deselected`.
 
 ---
 
@@ -89,7 +89,7 @@ Regola (scorre `tool_calls` e poi `invalid_tool_calls`, in ordine): id valido se
 non già visto nel messaggio, altrimenti `f"call_{uuid4().hex}"`; nome valido se testo non vuoto,
 altrimenti `UNNAMED_TOOL`.
 
-- [ ] **Passo 1: test del grafo che falliscono** (in `tests/test_graph.py`)
+- [x] **Passo 1: test del grafo che falliscono** (in `tests/test_graph.py`)
 
 ```python
 def malformed_reply() -> AIMessage:
@@ -144,7 +144,7 @@ def test_limit_answers_the_normalized_ids():  # Review Focus 1
     messages_from_json(messages_to_json(result["messages"]))  # no ValueError
 ```
 
-- [ ] **Passo 2: test del servizio che falliscono** (in `tests/test_api.py`)
+- [x] **Passo 2: test del servizio che falliscono** (in `tests/test_api.py`)
 
 ```python
 MALFORMED = [
@@ -185,20 +185,20 @@ def test_stream_history_with_malformed_calls_is_accepted_again(tool_calls, inval
     assert again.status_code == 200, again.text
 ```
 
-- [ ] **Passo 3: test della richiesta a LM Studio** (in `tests/test_model.py`):
+- [x] **Passo 3: test della richiesta a LM Studio** (in `tests/test_model.py`):
   `test_request_payload_uses_the_normalized_ids` normalizza `malformed_reply()` (importato da
   `test_graph` o ricopiato), costruisce `ChatOpenAI(model="m", base_url="http://localhost:9/v1",
   api_key="x")` e chiama `_get_request_payload([HumanMessage("ore?"), normalized])` (metodo privato,
   nessuna rete): gli id di `payload["messages"][1]["tool_calls"]` sono quelli del messaggio
   normalizzato e i nomi comprendono `unnamed_tool`.
-- [ ] **Passo 4:** `.\.venv\Scripts\python.exe -m pytest tests/test_graph.py tests/test_api.py tests/test_model.py -k "malformed or normalized or unchanged or limit_answers"`
+- [x] **Passo 4:** `.\.venv\Scripts\python.exe -m pytest tests/test_graph.py tests/test_api.py tests/test_model.py -k "malformed or normalized or unchanged or limit_answers"`
   → falliscono (`ImportError` di `normalize_tool_calls`, poi `400 invalid_history`).
-- [ ] **Passo 5:** implementare `normalize_tool_calls` e chiamarla in `llm_node` subito dopo
+- [x] **Passo 5:** implementare `normalize_tool_calls` e chiamarla in `llm_node` subito dopo
   `model.invoke`, con una riga WARNING per ogni cambio:
   `"step=%d/%d tool_call_normalized call_id=%s original_id=%s original_name=%s"` (originali con
   `json.dumps(…, ensure_ascii=False)`); docstring del modulo e di `llm_node` aggiornate.
-- [ ] **Passo 6:** i test del Passo 4 passano; poi `pytest` completo verde.
-- [ ] **Passo 7: prova reale** (in `tests/test_real.py`): `PartialFirstAnswer` accetta come seconda
+- [x] **Passo 6:** i test del Passo 4 passano; poi `pytest` completo verde.
+- [x] **Passo 7: prova reale** (in `tests/test_real.py`): `PartialFirstAnswer` accetta come seconda
   argomento anche un `AIMessage` (un testo resta `AIMessage(text)`). Nuovo test:
 
 ```python
@@ -223,7 +223,7 @@ def test_lm_studio_accepts_a_normalized_history(config, tmp_path, caplog):  # R-
   `.\.venv\Scripts\python.exe -m pytest tests/test_real.py -m real -v -k normalized_history` →
   `1 passed`. Se LM Studio rifiuta la cronologia (`BadRequestError`): fermarsi e chiedere
   all'utente (specifica §13).
-- [ ] **Passo 8: commit**
+- [x] **Passo 8: commit**
 
 ```bash
 git add assistant/graph.py tests/test_graph.py tests/test_api.py tests/test_model.py tests/test_real.py
