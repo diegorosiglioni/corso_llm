@@ -1,21 +1,14 @@
-Prima di incollare il prompt: avvia LM Studio (modello google/gemma-4-e2b) e Docker Desktop.
+Prima di incollare il prompt non serve avviare LM Studio né Docker: questa sessione scrive specifica e piano. Servono più avanti, per le correzioni con prove reali e per la verifica finale.
 Il prompt da incollare in Claude Code, dalla radice della repository, è tutto ciò che segue la riga di trattini.
 ------------------------------------------------------------------------------------------
 
-Leggi il CLAUDE.md e poi PROGRESS.md (prima la sezione «Stato attuale», poi le sezioni degli step 4–9 e dello streaming quando servono), TODO.md e docs/superpowers/lezione6.md. Controlla lo stato della repository: branch corrente, `git status`, `git log --oneline dev..auto-claude` e se `dev`/`main` locali e remoti sono ancora fermi a 428cc8a.
+Leggi il CLAUDE.md, poi PROGRESS.md: prima «Stato attuale», poi tutta la sezione «Revisione e integrazione di `auto-claude` (2026-11-15)» (F1–F4). Leggi anche il rapporto docs/superpowers/reviews/2026-11-15-auto-claude.md (§2 problemi gravi e importanti, §3 minori, §8 decisioni e debiti), la specifica docs/superpowers/specs/2026-11-15-revisione-integrazione-design.md (§ F4, F5, F6 e criteri di uscita §7) e il piano docs/superpowers/plans/2026-11-15-revisione-integrazione.md (Task 8). Controlla lo stato: branch corrente (atteso auto-claude), `git status` pulito, ultimo commit con le decisioni della F4 in PROGRESS.md.
 
-Situazione: il 2026-11-14 un loop autonomo (loop.sh + PROMPT.md, branch auto-claude) ha completato tutti i punti di TODO.md: step 4–9 della lezione 6 (preferenze, prompt MCP, servizio HTTP dell'agente, back-end con PostgreSQL, front-end, Compose a quattro container) e lo streaming facoltativo. Nessun umano ha ancora letto il codice: le specifiche e le scelte sono state decise in autonomia e sono annotate in PROGRESS.md e in docs/superpowers/specs/2026-11-14-*.md. Niente è stato pubblicato: dev e main sono fermi allo Step 3.
+Situazione: il codice degli step 4–9 e dello streaming fatto dal loop autonomo è stato revisionato (F1), provato con LM Studio (F2) e riletto con me (F3). Ho già approvato che cosa correggere e come (sezione «F4 · Correzioni» di PROGRESS.md): gravi R-C1, R-B1 (approccio A, normalizzare all'uscita nel nodo llm), R-A1 (approccio A a tre gradini); importanti R-C2, R-A2, R-A3; R-A8 (ambito ristretto ai temi del laboratorio); minori R-B5, R-B10, R-A4, R-B7, R-C3, R-C6, R-A5, R-D6, R-A6, R-A7, R-A10, R-C9; R-D1 accettato come debito ma con specifica e README corretti; gli altri come debito noto in TODO.md. Non riaprire queste decisioni.
 
-Oggi voglio decidere come continuare. Non modificare codice né fare commit, merge o push finché non ho scelto. Fai così:
-
-1. Verifica che tutto funzioni ancora: esegui i test senza modello (`.\.venv\Scripts\python.exe -m pytest`, atteso 1003 passed) e, se LM Studio e Docker sono attivi, `docker compose up -d --build` e `docker compose ps`. Dimmi gli esiti; se qualcosa fallisce, fermati e dimmelo prima di proporre altro.
-2. Presentami in un solo messaggio le opzioni per proseguire, ciascuna con costo stimato (tempo, token, durata delle prove reali), rischi e la tua raccomandazione. Almeno queste:
-   a. revisione indipendente del codice di auto-claude rispetto a dev (per step, da revisori con contesto pulito), con l'elenco dei problemi trovati e nessuna correzione automatica;
-   b. rilettura guidata con me delle scelte prese in autonomia che toccano il comportamento: ambito del router allargato in scope.txt, testi dei prompt cambiati per le prove reali, nuove dipendenze (fastapi, SQLAlchemy, psycopg, playwright), POSTGRES_PASSWORD obbligatoria per ogni comando docker compose, bozza mostrata durante lo streaming;
-   c. prove reali mancanti o ripetute: suite reale completa (circa 40 minuti), front-end con Chrome, streaming con Docker Compose, avviso del revisore con il modello vero;
-   d. integrazione: avanzamento rapido di dev su auto-claude e poi push di dev e main come da CLAUDE.md (solo quando lo chiedo io), con le conseguenze sui messaggi di commit del loop, che non seguono i Conventional Commits;
-   e. sistemazione dopo l'integrazione: sezione «Modalità autonoma» di CLAUDE.md, destino di loop.sh, PROMPT.md e TODO.md (tenerli, archiviarli in _archivio/), container assistente-postgres dello Step 7 (separato da Compose);
-   f. eventuale ripresa del loop autonomo per correzioni, con nuovi punti in TODO.md.
-3. Indica l'ordine che consigli (per esempio prima a e c, poi b, poi d ed e) e aspetta la mia scelta.
+Obiettivo: pubblicare su main in sicurezza, senza scadenze. Oggi, con le skill di Superpowers (Task 8 del piano):
+1. Scrivi la specifica delle correzioni docs/superpowers/specs/2026-11-15-correzioni-auto-claude-design.md (o con la data di oggi): per ogni correzione il problema, il comportamento atteso, il test che lo dimostra (TDD: prima il test che fallisce) e se serve una prova reale; più la revisione delle correzioni (un revisore con contesto pulito, al massimo due giri), la sistemazione F5 e la verifica finale con integrazione F6 della specifica del 2026-11-15. Fammela approvare.
+2. Poi scrivi il piano con writing-plans e fammelo approvare.
+3. Non scrivere codice prima delle due approvazioni. Niente merge né push: il push lo chiedo io alla fine, come da CLAUDE.md.
 
 Distingui sempre i test con il modello simulato dalle prove reali con LM Studio; nel resoconto indica che cosa hai eseguito, con quale esito e che cosa resta da provare.

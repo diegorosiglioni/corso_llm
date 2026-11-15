@@ -10,7 +10,8 @@
   (rilettura con l'utente): rapporto in `docs/superpowers/reviews/2026-11-15-auto-claude.md`, 3
   problemi gravi, 4 importanti, 29 minori; decisioni dell'utente nella sezione F3.
 - Prossimo: specifica e piano delle correzioni (F4, Task 8 del piano), che comprendono anche
-  sistemazione (F5) e integrazione (F6). Push solo su richiesta dell'utente.
+  sistemazione (F5) e integrazione (F6); approcci e divisione dei minori già approvati (sezione
+  «F4 · Correzioni»). Push solo su richiesta dell'utente.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
@@ -2031,6 +2032,28 @@ Problemi del rapporto:
   **R-C10**, **R-D3**, **R-P1**.
 - Gli altri 19 minori confermati: divisi nella specifica delle correzioni tra «correggere» e
   «debito noto», da approvare con la specifica.
+
+### F4 · Correzioni — approcci approvati, specifica da scrivere
+
+Approvati dall'utente il 2026-11-15 (la specifica si scrive in una sessione nuova):
+- **R-B1, approccio A**: normalizzare all'uscita, nel nodo `llm`, le chiamate a strumento del
+  modello (id non vuoto e unico per ogni chiamata, nome segnaposto per quelle senza nome, a cui lo
+  strumento risponde «Strumento sconosciuto»); il controllo d'ingresso di `agent.py` resta severo.
+  Test: ogni `history` di una risposta `200` rimandata al servizio è accettata, compresi nome
+  vuoto o null, id vuoto o null e id ripetuti. Scartato l'approccio B (allargare il controllo
+  d'ingresso): lascerebbe nella cronologia chiamate che LM Studio potrebbe rifiutare.
+- **R-A1, approccio A, a tre gradini**: (1) controllo di merito in CA-58 (la risposta parla di
+  server, client, strumenti o simili); (2) se il modello sbaglia, una sola modifica generale al
+  testo di `spiega` (per esempio «se non conosci bene l'argomento dillo, invece di inventare»),
+  niente suggerimenti su MCP; (3) se sbaglia ancora, evidenza registrata come **non soddisfatta per
+  limite del modello**, test come fallimento atteso documentato. Scartato l'approccio B (solo
+  registro, senza tentativi).
+- **Minori da correggere**: R-B7 (`charset=utf-8` nelle risposte JSON di agente e back-end), R-C3
+  (NUL rifiutato con errore chiaro, `hide_parameters=True`), R-C6 (connessione di `chat` con 10 s),
+  R-A5 e R-D6 (messaggi d'errore), R-A6 (nome del prompt con escape nel log), R-A7 (limite di
+  lunghezza agli argomenti dei prompt), R-A10 e R-C9 (documentazione).
+- **Minori come debito noto** (in `TODO.md` in F5): R-A9, R-B2, R-B3, R-B4, R-B9, R-C5, R-C8, R-D2,
+  R-D4, R-D5.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
