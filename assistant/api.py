@@ -461,6 +461,35 @@ def _answer(endpoint: str, work: Callable[[float], Any]):
         return error.response()
 
 
+class Utf8JsonMiddleware:
+    """Pure ASGI middleware: JSON answers declare `charset=utf-8` (R-B7).
+
+    Without it, Invoke-RestMethod of Windows PowerShell 5.1 reads them as Latin-1 and shows «Ã¨»
+    for «è». Only the header `content-type: application/json` changes, in http.response.start:
+    the streams (text/event-stream) and the body pass untouched, and the OpenAPI does not change.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_utf8(message):
+            if message["type"] == "http.response.start":
+                message["headers"] = [
+                    (name, b"application/json; charset=utf-8")
+                    if name.lower() == b"content-type" and value == b"application/json"
+                    else (name, value)
+                    for name, value in message.get("headers", [])
+                ]
+            await send(message)
+
+        await self.app(scope, receive, send_utf8)
+
+
 def create_app(
     *, graph, client, model_id: str, model_status: Callable[[], tuple[bool, str]]
 ) -> FastAPI:
@@ -470,6 +499,7 @@ def create_app(
     example `lambda: check_model(config)`.
     """
     app = FastAPI(title=TITLE, description=DESCRIPTION)
+    app.add_middleware(Utf8JsonMiddleware)
 
     @app.exception_handler(ApiError)
     def api_error(_request, error: ApiError) -> JSONResponse:  # errors before a stream

@@ -322,7 +322,7 @@ Detail esatti:
   `application/json; charset=utf-8`; registrato con `app.add_middleware(Utf8JsonMiddleware)`.
   L'OpenAPI non cambia (il contratto `frontend/backend-openapi.json` resta uguale).
 
-- [ ] **Passo 1: test che falliscono**
+- [x] **Passo 1: test che falliscono**
   - `test_json_answers_declare_utf8(method, path, body)` in `tests/test_api.py`, parametrizzato:
     `GET /prompts` (200), `GET /status` (200), `POST /chat` con `{}` (400), `POST /chat` con un
     campo in più (422), `POST /chat/stream` con `{}` (400 prima del flusso): intestazione esatta
@@ -335,11 +335,11 @@ Detail esatti:
   - `test_streams_keep_their_media_type_and_cors` (Review Focus 2): `/chat/stream` riuscito →
     `text/event-stream`; nel back-end, con `cors_http`, `/messages/stream` riuscito →
     `text/event-stream` e `access-control-allow-origin` presente.
-- [ ] **Passo 2:** eseguirli → falliscono (manca il charset).
-- [ ] **Passo 3:** middleware nei due moduli.
-- [ ] **Passo 4:** test verdi; `.\.venv\Scripts\python.exe -m pytest tests/test_frontend_contract.py`
+- [x] **Passo 2:** eseguirli → falliscono (manca il charset).
+- [x] **Passo 3:** middleware nei due moduli.
+- [x] **Passo 4:** test verdi; `.\.venv\Scripts\python.exe -m pytest tests/test_frontend_contract.py`
   verde senza rigenerare il contratto; `pytest` completo verde.
-- [ ] **Passo 5: commit** `fix(api): charset utf-8 nelle risposte JSON di agente e back-end`.
+- [x] **Passo 5: commit** `fix(api): charset utf-8 nelle risposte JSON di agente e back-end`.
 
 ---
 

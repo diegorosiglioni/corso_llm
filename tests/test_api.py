@@ -735,7 +735,7 @@ def test_errors_before_the_stream_are_the_json_answers_of_chat(body, client, cap
     caplog.clear()
     response = service.post("/chat/stream", json=body)
     assert response.status_code == expected.status_code and response.status_code >= 400
-    assert response.headers["content-type"] == "application/json"
+    assert response.headers["content-type"] == "application/json; charset=utf-8"
     assert response.json() == expected.json()
     assert [without_duration(line) for line in api_lines(caplog)[1:]] == [
         without_duration(line).replace("=chat ", "=chat_stream ") for line in chat_lines[1:]
@@ -892,3 +892,27 @@ def test_stream_history_with_malformed_calls_is_accepted_again(tool_calls, inval
     assert [d["id"] for name, d in events if name == "tool_end"] == sent
     again = service.post("/chat", json={"message": "di nuovo", "history": done["history"]})
     assert again.status_code == 200, again.text
+
+
+JSON_UTF8 = "application/json; charset=utf-8"
+
+
+@pytest.mark.parametrize(("method", "path", "body", "status"), [
+    ("GET", "/prompts", None, 200),
+    ("GET", "/status", None, 200),
+    ("POST", "/chat", {}, 400),
+    ("POST", "/chat", {"message": "ciao", "altro": 1}, 422),
+    ("POST", "/chat/stream", {}, 400),
+], ids=["prompts", "status", "chat-400", "chat-422", "stream-400"])
+def test_json_answers_declare_utf8(method, path, body, status):  # R-B7
+    response = api().request(method, path, json=body)
+    assert response.status_code == status, response.text
+    assert response.headers["content-type"] == JSON_UTF8
+
+
+def test_stream_keeps_its_media_type():  # Review Focus 2
+    service = api(StreamingFakeModel(replies=[AIMessage("ok")]))
+    with service.stream("POST", "/chat/stream", json={"message": "ciao"}) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        response.read()

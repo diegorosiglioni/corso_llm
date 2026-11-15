@@ -2095,6 +2095,12 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
   Modello simulato: 7 test visti fallire, compreso `test_unusable_reason_loses_its_final_period`
   (aggiunto per il caso «non è utilizzabile», che con i motivi esistenti non aveva un punto finale;
   rosso rivisto con la correzione tolta), poi verdi; `pytest` 1030 passed. README allineato.
+- **Task 4 · R-B7 — fatto.** `Utf8JsonMiddleware` (ASGI puro) in `assistant/api.py` e
+  `backend/api.py`: `application/json` diventa `application/json; charset=utf-8`. Modello
+  simulato: 20 test visti fallire (successi, errori `ApiError`, `422`, errori prima del flusso), poi
+  verdi; i due test dei flussi (`text/event-stream`, CORS) passavano già e restano come guardia;
+  `test_frontend_contract.py` verde senza rigenerare il contratto; `pytest` 1041 passed. La prova
+  con `Invoke-RestMethod` di PowerShell 5.1 è nel Task 15.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

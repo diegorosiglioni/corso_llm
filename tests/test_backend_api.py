@@ -877,7 +877,7 @@ def test_stream_empty_message_is_400_in_json(http, store, content):  # CA-98
     chat_id = http.post("/chats").json()["id"]
     response = http.post(f"/chats/{chat_id}/messages/stream", json={"content": content})
     assert response.status_code == 400
-    assert response.headers["content-type"] == "application/json"
+    assert response.headers["content-type"] == "application/json; charset=utf-8"
     assert response.json() == {"error": "invalid_request", "detail": "il messaggio è vuoto"}
     assert contents(store, chat_id) == []
 
@@ -923,7 +923,7 @@ def test_stream_agent_failure_before_the_stream_is_json(
         f"/chats/{chat_id}/messages/stream", json={"content": "Quanto fa 2 + 2?"}
     )
     assert response.status_code == status
-    assert response.headers["content-type"] == "application/json"
+    assert response.headers["content-type"] == "application/json; charset=utf-8"
     assert response.json() == {"error": code, "detail": detail}
     assert contents(store, chat_id)[-1] == ("user", "Quanto fa 2 + 2?")
     assert agent_state(engine, chat_id) == (SAVED_HISTORY, "rias")
@@ -1083,3 +1083,36 @@ def test_preflight_of_the_stream(cors_http):  # CA-98, CA-81
     })
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == PAGE
+
+
+JSON_UTF8 = "application/json; charset=utf-8"
+
+
+@pytest.mark.parametrize(("method", "path", "body", "status"), [
+    ("GET", "/chats", None, 200),
+    ("GET", "/chats/42", None, 404),
+    ("POST", "/chats", {"title": "t", "altro": 1}, 422),
+], ids=["list", "not-found", "422"])
+def test_json_answers_declare_utf8(http, method, path, body, status):  # R-B7
+    response = http.request(method, path, json=body)
+    assert response.status_code == status, response.text
+    assert response.headers["content-type"] == JSON_UTF8
+
+
+def test_stream_error_before_the_stream_declares_utf8(http):  # R-B7
+    chat_id = http.post("/chats").json()["id"]
+    response = http.post(f"/chats/{chat_id}/messages/stream", json={"content": ""})
+    assert response.status_code == 400
+    assert response.headers["content-type"] == JSON_UTF8
+
+
+def test_streams_keep_their_media_type_and_cors(store):  # Review Focus 2
+    agent = ScriptedStreamAgent([("text", {"delta": "Ok"}), done()])
+    http = TestClient(create_app(store=store, agent=agent, cors_origins=(PAGE,)))
+    chat_id = http.post("/chats").json()["id"]
+    with http.stream("POST", f"/chats/{chat_id}/messages/stream", json={"content": "Ciao"},
+                     headers={"Origin": PAGE}) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        assert response.headers["access-control-allow-origin"] == PAGE
+        response.read()
