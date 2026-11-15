@@ -967,14 +967,18 @@ uri=utente://preferenze`: `status=ok` con i valori letti; `status=partial` prece
 `status=unavailable … fallback=defaults` se il file manca o non è JSON valido (il motivo è in
 `error="…"`, con il percorso). Il file si legge solo all'avvio del servizio dell'agente: dopo una
 modifica va riavviato il servizio (con Docker `docker compose down`, e anche `docker compose build`
-se si cambia il file dell'immagine). La resource
-si legge da sola così (deve stampare il JSON del file):
+se si cambia il file dell'immagine). La resource si legge da sola così, con lo stesso file del
+servizio (`PREFERENCES_FILE` se è impostata nella finestra, altrimenti quello del pacchetto); deve
+stampare il JSON di quel file:
 
 ```powershell
 @'
+import os
 from pathlib import Path
+from assistant.config import DEFAULT_PREFERENCES_FILE
 from assistant.mcp_client import McpClient, server_command
-command, args, cwd = server_command(Path("data/notes.sqlite3").resolve(), "WARNING")
+preferences = Path(os.environ.get("PREFERENCES_FILE", "").strip() or DEFAULT_PREFERENCES_FILE).resolve()
+command, args, cwd = server_command(Path("data/notes.sqlite3").resolve(), "WARNING", preferences)
 with McpClient(command, args, cwd=cwd) as client:
     print(client.read_resource("utente://preferenze"))
 '@ | .\.venv\Scripts\python.exe -

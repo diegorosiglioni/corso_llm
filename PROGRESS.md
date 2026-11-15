@@ -2118,6 +2118,13 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
   da `_request` e da `chat_stream`. Modello simulato: `test_timeouts` visto fallire (`ImportError`;
   controllo diretto del comportamento: `chat` aveva `connect=600.0`), poi verde (`connect=10.0`,
   il resto 600); `pytest` 1047 passed.
+- **Task 8 · R-A3 — fatto.** `server_command` senza valore predefinito per il file delle
+  preferenze (import non più usato tolto); le chiamate a due argomenti dei test passano
+  `DEFAULT_PREFERENCES_FILE`. Modello simulato: `test_server_command_needs_the_preferences_file`
+  visto fallire (`DID NOT RAISE TypeError`), poi verde; `pytest` 1047 passed. Prova senza modello
+  dello snippet nuovo del README da PowerShell: con `PREFERENCES_FILE` su un file della scratchpad
+  stampa `{"language": "italiano", "timezone": "America/New_York", "style": "sintetico"}`, senza la
+  variabile il file del pacchetto (`Europe/Rome`).
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

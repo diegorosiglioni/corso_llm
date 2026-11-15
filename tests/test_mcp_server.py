@@ -141,9 +141,9 @@ def test_preferences_over_stdio_use_the_command_line_file(tmp_path, preferences_
     assert json.loads(content.text) == PREFERENCES
 
 
-def test_server_command_defaults_to_the_package_file(tmp_path):
-    _, args, _ = server_command(tmp_path / "n.sqlite3", "WARNING")
-    assert args[args.index("--preferences-file") + 1] == str(DEFAULT_PREFERENCES_FILE)
+def test_server_command_needs_the_preferences_file(tmp_path):  # R-A3
+    with pytest.raises(TypeError):
+        server_command(tmp_path / "n.sqlite3", "WARNING")
 
 
 def test_missing_preferences_file_adds_no_server_error_lines(tmp_path, capfd):
@@ -253,7 +253,9 @@ def test_missing_argument_or_unknown_prompt_is_an_mcp_error(server, name, argume
 
 
 def test_prompts_over_stdio(tmp_path, capfd):
-    command, args, cwd = server_command(tmp_path / "n.sqlite3", "INFO")
+    command, args, cwd = server_command(
+        tmp_path / "n.sqlite3", "INFO", DEFAULT_PREFERENCES_FILE
+    )
 
     async def check(c):
         prompts = await c.list_prompts()

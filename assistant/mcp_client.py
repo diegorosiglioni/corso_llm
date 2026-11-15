@@ -16,7 +16,6 @@ from fastmcp.client.transports import StdioTransport
 from langchain_core.tools import BaseTool, StructuredTool
 from mcp.types import TextContent, TextResourceContents
 
-from assistant.config import DEFAULT_PREFERENCES_FILE
 from assistant.tools import ToolUnavailableError
 
 log = logging.getLogger(__name__)
@@ -79,11 +78,12 @@ class PromptUnavailableError(Exception):
 
 
 def server_command(
-    notes_db: Path, log_level: str, preferences_file: str | Path = DEFAULT_PREFERENCES_FILE
+    notes_db: Path, log_level: str, preferences_file: str | Path
 ) -> tuple[str, list[str], str]:
     """Command, arguments and working directory that start the local MCP server.
 
-    The server runs in another working directory: relative paths must be resolved first.
+    The server runs in another working directory: relative paths must be resolved first. The
+    preferences file has no default: the caller passes the one it uses (R-A3).
     """
     package_parent = Path(__file__).resolve().parent.parent
     args = [

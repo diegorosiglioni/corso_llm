@@ -17,6 +17,7 @@ from mcp.types import (
 )
 
 from assistant.calculator import CALCULATOR_DESCRIPTION
+from assistant.config import DEFAULT_PREFERENCES_FILE
 from assistant.mcp_client import (
     McpClient,
     McpStartupError,
@@ -87,7 +88,9 @@ def test_adapter_warns_on_missing_allowed_tool(caplog):
 
 @pytest.fixture
 def client(tmp_path):
-    command, args, cwd = server_command(tmp_path / "n.sqlite3", "WARNING")
+    command, args, cwd = server_command(
+        tmp_path / "n.sqlite3", "WARNING", DEFAULT_PREFERENCES_FILE
+    )
     with McpClient(command, args, cwd=cwd) as c:
         yield c
 
@@ -149,7 +152,9 @@ def test_startup_failure_raises():
 
 
 def test_call_after_close_is_unavailable(tmp_path):
-    command, args, cwd = server_command(tmp_path / "n.sqlite3", "WARNING")
+    command, args, cwd = server_command(
+        tmp_path / "n.sqlite3", "WARNING", DEFAULT_PREFERENCES_FILE
+    )
     with McpClient(command, args, cwd=cwd) as c:
         pass
     with pytest.raises(ToolUnavailableError):
@@ -157,7 +162,9 @@ def test_call_after_close_is_unavailable(tmp_path):
 
 
 def test_server_logs_use_module_name_and_hide_library_info(tmp_path, capfd):
-    command, args, cwd = server_command(tmp_path / "n.sqlite3", "INFO")
+    command, args, cwd = server_command(
+        tmp_path / "n.sqlite3", "INFO", DEFAULT_PREFERENCES_FILE
+    )
     with McpClient(command, args, cwd=cwd) as c:
         c.call_tool("add_note", {"text": "a"})
     err = capfd.readouterr().err
@@ -166,7 +173,9 @@ def test_server_logs_use_module_name_and_hide_library_info(tmp_path, capfd):
 
 
 def test_expected_tool_errors_add_no_server_log_lines(tmp_path, capfd):
-    command, args, cwd = server_command(tmp_path / "n.sqlite3", "INFO")
+    command, args, cwd = server_command(
+        tmp_path / "n.sqlite3", "INFO", DEFAULT_PREFERENCES_FILE
+    )
     with McpClient(command, args, cwd=cwd) as c:
         c.call_tool("get_item", {"code": "XX-999"})
         c.call_tool("add_note", {})
@@ -213,7 +222,9 @@ def test_missing_preferences_file_is_unavailable(tmp_path):
 
 
 def test_read_resource_after_close_is_unavailable(tmp_path):
-    command, args, cwd = server_command(tmp_path / "n.sqlite3", "WARNING")
+    command, args, cwd = server_command(
+        tmp_path / "n.sqlite3", "WARNING", DEFAULT_PREFERENCES_FILE
+    )
     with McpClient(command, args, cwd=cwd) as c:
         pass
     with pytest.raises(ResourceUnavailableError, match="sessione MCP chiusa"):
@@ -312,7 +323,9 @@ def test_missing_required_argument_is_unavailable(client):
 
 
 def test_prompts_after_close_are_unavailable(tmp_path):
-    command, args, cwd = server_command(tmp_path / "n.sqlite3", "WARNING")
+    command, args, cwd = server_command(
+        tmp_path / "n.sqlite3", "WARNING", DEFAULT_PREFERENCES_FILE
+    )
     with McpClient(command, args, cwd=cwd) as c:
         pass
     with pytest.raises(PromptUnavailableError, match="sessione MCP chiusa"):
@@ -402,7 +415,9 @@ def test_fake_client_without_prompts_lists_none():
 
 def test_close_releases_the_database(tmp_path):
     db = tmp_path / "n.sqlite3"
-    command, args, cwd = server_command(db, "WARNING")
+    command, args, cwd = server_command(
+        db, "WARNING", DEFAULT_PREFERENCES_FILE
+    )
     with McpClient(command, args, cwd=cwd) as c:
         c.call_tool("add_note", {"text": "a"})
     db.unlink()  # on Windows this fails if the server process still holds the file

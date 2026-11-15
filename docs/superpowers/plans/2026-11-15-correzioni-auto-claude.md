@@ -429,14 +429,14 @@ Detail esatti: `"il messaggio contiene un carattere non ammesso (NUL)"`,
   usati tolti), `README.md` (snippet «Le preferenze non hanno effetto»)
 - Test: `tests/test_mcp_server.py`, `tests/test_mcp_client.py`
 
-- [ ] **Passo 1: test che fallisce** — `test_server_command_defaults_to_the_package_file` diventa
+- [x] **Passo 1: test che fallisce** — `test_server_command_defaults_to_the_package_file` diventa
   `test_server_command_needs_the_preferences_file`: `pytest.raises(TypeError)` chiamando
   `server_command(tmp_path / "n.sqlite3", "WARNING")`. Le chiamate a due argomenti in
   `tests/test_mcp_client.py` passano `DEFAULT_PREFERENCES_FILE`.
-- [ ] **Passo 2:** eseguirlo → fallisce.
-- [ ] **Passo 3:** togliere il predefinito.
-- [ ] **Passo 4:** test verdi; `pytest` completo verde.
-- [ ] **Passo 5:** README, snippet nuovo:
+- [x] **Passo 2:** eseguirlo → fallisce.
+- [x] **Passo 3:** togliere il predefinito.
+- [x] **Passo 4:** test verdi; `pytest` completo verde.
+- [x] **Passo 5:** README, snippet nuovo:
 
 ```powershell
 @'
@@ -451,10 +451,10 @@ with McpClient(command, args, cwd=cwd) as client:
 '@ | .\.venv\Scripts\python.exe -
 ```
 
-- [ ] **Passo 6: prova reale (senza modello):** con
+- [x] **Passo 6: prova reale (senza modello):** con
   `$env:PREFERENCES_FILE` su un file temporaneo nella scratchpad con `"timezone": "America/New_York"`
   lo snippet stampa quel JSON; senza la variabile stampa quello del pacchetto. Annotare l'esito.
-- [ ] **Passo 7: commit** `fix(preferenze): file delle preferenze obbligatorio e diagnosi del README corretta`.
+- [x] **Passo 7: commit** `fix(preferenze): file delle preferenze obbligatorio e diagnosi del README corretta`.
 
 ---
 
