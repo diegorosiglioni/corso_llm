@@ -353,7 +353,7 @@ Detail esatti:
 Detail esatti: `"il messaggio contiene un carattere non ammesso (NUL)"`,
 `"il titolo contiene un carattere non ammesso (NUL)"`.
 
-- [ ] **Passo 1: test che falliscono**
+- [x] **Passo 1: test che falliscono**
   - `test_backend_store.py` (girano su SQLite e, con `-m real`, su PostgreSQL):
     `test_nul_in_the_question_is_rejected(store)` → `InvalidInputError` con il detail, chat senza
     messaggi; `test_nul_in_the_title_is_rejected(store)` → `InvalidInputError`, nessuna chat
@@ -362,11 +362,11 @@ Detail esatti: `"il messaggio contiene un carattere non ammesso (NUL)"`,
   - `test_backend_api.py` (Review Focus 3): `POST /chats` con titolo `"a\x00b"` → `400
     invalid_request`; `POST /chats/{id}/messages` e `/messages/stream` con `"ciao\x00"` → `400`
     JSON, agente mai chiamato (`raising(AssertionError)` come agente finto), testo assente dal log.
-- [ ] **Passo 2:** eseguirli → falliscono.
-- [ ] **Passo 3:** controllo di `"\x00"` dopo `strip()` e dopo il controllo del vuoto;
+- [x] **Passo 2:** eseguirli → falliscono.
+- [x] **Passo 3:** controllo di `"\x00"` dopo `strip()` e dopo il controllo del vuoto;
   `hide_parameters=True` nei due `create_engine`.
-- [ ] **Passo 4:** test verdi; `pytest` completo verde.
-- [ ] **Passo 5: commit** `fix(backend): carattere NUL rifiutato e parametri SQL fuori dal log`.
+- [x] **Passo 4:** test verdi; `pytest` completo verde.
+- [x] **Passo 5: commit** `fix(backend): carattere NUL rifiutato e parametri SQL fuori dal log`.
 
 ---
 

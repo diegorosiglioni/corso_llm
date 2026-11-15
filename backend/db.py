@@ -64,16 +64,20 @@ def create_db_engine(url: str, connect_timeout: int = CONNECT_TIMEOUT) -> Engine
     """Engine for `url`. SQLite (tests only) gets foreign keys on and, in memory, one shared
     connection; PostgreSQL checks pooled connections before use, so a database restart is
     not seen as an error by the first request after it, and gives up connecting after
-    `connect_timeout` seconds (psycopg turns values below 2 into 2)."""
+    `connect_timeout` seconds (psycopg turns values below 2 into 2). The SQL parameters (texts
+    of the user) never enter the errors and the log (hide_parameters)."""
     if url.startswith("sqlite"):
         options = {}
         if url in ("sqlite://", "sqlite:///:memory:"):
             options = {"poolclass": StaticPool, "connect_args": {"check_same_thread": False}}
-        engine = create_engine(url, **options)
+        engine = create_engine(url, hide_parameters=True, **options)
         event.listen(engine, "connect", _enable_sqlite_foreign_keys)
         return engine
     return create_engine(
-        url, pool_pre_ping=True, connect_args={"connect_timeout": connect_timeout}
+        url,
+        pool_pre_ping=True,
+        hide_parameters=True,
+        connect_args={"connect_timeout": connect_timeout},
     )
 
 

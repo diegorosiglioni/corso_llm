@@ -15,6 +15,7 @@ from backend.db import Chat, ChatMessage
 
 MAX_TITLE_LENGTH = 200
 TITLE_LENGTH = 60  # title taken from the first question
+NUL = "\x00"  # rejected in titles and messages: PostgreSQL text cannot hold it
 
 
 class ChatNotFoundError(Exception):
@@ -105,6 +106,8 @@ class ChatStore:
         title = (title or "").strip() or None
         if title is not None and len(title) > MAX_TITLE_LENGTH:
             raise InvalidInputError(f"il titolo supera {MAX_TITLE_LENGTH} caratteri")
+        if title is not None and NUL in title:
+            raise InvalidInputError("il titolo contiene un carattere non ammesso (NUL)")
         with self._sessions.begin() as session:
             chat = Chat(title=title, created_at=self._timestamp(), summary="", history=[])
             session.add(chat)
@@ -143,6 +146,8 @@ class ChatStore:
         text = text.strip()
         if not text:
             raise InvalidInputError("il messaggio è vuoto")
+        if NUL in text:
+            raise InvalidInputError("il messaggio contiene un carattere non ammesso (NUL)")
         with self._sessions.begin() as session:
             chat = self._find(session, chat_id)
             if chat.title is None:

@@ -121,7 +121,9 @@ def test_postgresql_engine_has_a_connect_timeout(monkeypatch):
         "backend.db.create_engine", lambda url, **options: received.update(options) or "engine"
     )
     assert create_db_engine("postgresql+psycopg://lab:segreta@db/assistente") == "engine"
-    assert received == {"pool_pre_ping": True, "connect_args": {"connect_timeout": 10}}
+    assert received == {
+        "pool_pre_ping": True, "hide_parameters": True, "connect_args": {"connect_timeout": 10}
+    }
 
 
 def test_agent_is_not_contacted_at_startup(engines, server, monkeypatch):

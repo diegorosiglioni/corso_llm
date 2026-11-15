@@ -428,3 +428,24 @@ def test_database_errors_reach_the_caller():
     with pytest.raises(OperationalError):
         store.create_chat()
     engine.dispose()
+
+
+def test_nul_in_the_question_is_rejected(store):  # R-C3
+    chat = store.create_chat()
+    with pytest.raises(InvalidInputError,
+                       match=r"^il messaggio contiene un carattere non ammesso \(NUL\)$"):
+        store.add_question(chat.id, "ciao\x00")
+    assert store.get_chat(chat.id)[1] == []
+
+
+def test_nul_in_the_title_is_rejected(store):  # R-C3
+    with pytest.raises(InvalidInputError,
+                       match=r"^il titolo contiene un carattere non ammesso \(NUL\)$"):
+        store.create_chat("a\x00b")
+    assert store.list_chats() == []
+
+
+def test_engine_hides_sql_parameters():  # R-C3
+    assert create_db_engine("sqlite://").hide_parameters is True
+    url = "postgresql+psycopg://lab:x@127.0.0.1:1/assistente"
+    assert create_db_engine(url).hide_parameters is True  # no connection is opened

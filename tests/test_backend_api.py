@@ -1116,3 +1116,27 @@ def test_streams_keep_their_media_type_and_cors(store):  # Review Focus 2
         assert response.headers["content-type"].startswith("text/event-stream")
         assert response.headers["access-control-allow-origin"] == PAGE
         response.read()
+
+
+def test_nul_in_the_title_is_400(http):  # R-C3, Review Focus 3
+    response = http.post("/chats", json={"title": "a\x00b"})
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": "invalid_request", "detail": "il titolo contiene un carattere non ammesso (NUL)",
+    }
+    assert http.get("/chats").json() == []
+
+
+@pytest.mark.parametrize("path", ["messages", "messages/stream"])
+def test_nul_in_the_question_is_400_without_calling_the_agent(store, path, caplog):  # R-C3
+    caplog.set_level(logging.DEBUG)
+    http = app(store, ScriptedStreamAgent())  # any call of the agent fails
+    chat_id = http.post("/chats").json()["id"]
+    response = http.post(f"/chats/{chat_id}/{path}", json={"content": "segreto\x00"})
+    assert response.status_code == 400
+    assert response.headers["content-type"] == JSON_UTF8
+    assert response.json() == {
+        "error": "invalid_request", "detail": "il messaggio contiene un carattere non ammesso (NUL)",
+    }
+    assert contents(store, chat_id) == []
+    assert "segreto" not in caplog.text

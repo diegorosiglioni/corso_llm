@@ -2101,6 +2101,13 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
   verdi; i due test dei flussi (`text/event-stream`, CORS) passavano già e restano come guardia;
   `test_frontend_contract.py` verde senza rigenerare il contratto; `pytest` 1041 passed. La prova
   con `Invoke-RestMethod` di PowerShell 5.1 è nel Task 15.
+- **Task 5 · R-C3 — fatto.** `ChatStore` rifiuta il carattere NUL nel titolo e nel messaggio
+  (`InvalidInputError` → `400 invalid_request`, anche prima del flusso); `create_db_engine` con
+  `hide_parameters=True` per SQLite e PostgreSQL. Modello simulato: 6 test visti fallire (SQLite
+  accettava il NUL, `201` per il titolo, `500` per la domanda, motore senza `hide_parameters`), poi
+  verdi; `test_postgresql_engine_has_a_connect_timeout`, che confronta le opzioni esatte del
+  motore, aggiornato con `hide_parameters`; `pytest` 1047 passed. I test dell'archivio su
+  PostgreSQL girano nel Task 11.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
