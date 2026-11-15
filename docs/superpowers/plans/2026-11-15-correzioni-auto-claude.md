@@ -383,7 +383,7 @@ Detail esatti: `"il messaggio contiene un carattere non ammesso (NUL)"`,
   `ApiError(502, "agent_error", error.detail, cause=error.code)`: il codice dell'agente va nella
   riga di log come `cause="model_unavailable"`.
 
-- [ ] **Passo 1: test che falliscono**
+- [x] **Passo 1: test che falliscono**
   - `AGENT_FAILURES`: detail `"LM Studio non raggiungibile: Connection error."` e
     `"risposta inattesa dell'agente (HTTP 200)"`; riga di log attesa con
     ` cause="model_unavailable"` (e `cause="bad_response"`) dopo `duration_ms=N`.
@@ -395,12 +395,12 @@ Detail esatti: `"il messaggio contiene un carattere non ammesso (NUL)"`,
     `"L'assistente non è riuscito a rispondere. La domanda è salvata nella chat: riprova."`
     (Review Focus 5).
   - `test_frontend_browser.py`: testo atteso nuovo nelle due prove.
-- [ ] **Passo 2:** `pytest tests/test_backend_api.py tests/test_frontend_js.py` → falliscono.
-- [ ] **Passo 3:** correzione in `_agent_error` e nella chiave `"502 agent_error"` di `TEXTS`/`known`.
-- [ ] **Passo 4:** test verdi; `pytest` completo verde; `pytest -m browser` con Edge verde (modello
+- [x] **Passo 2:** `pytest tests/test_backend_api.py tests/test_frontend_js.py` → falliscono.
+- [x] **Passo 3:** correzione in `_agent_error` e nella chiave `"502 agent_error"` di `TEXTS`/`known`.
+- [x] **Passo 4:** test verdi; `pytest` completo verde; `pytest -m browser` con Edge verde (modello
   simulato, browser vero).
-- [ ] **Passo 5:** README allineato.
-- [ ] **Passo 6: commit** `fix(frontend): messaggio d'errore dell'agente senza ripetizioni`.
+- [x] **Passo 5:** README allineato.
+- [x] **Passo 6: commit** `fix(frontend): messaggio d'errore dell'agente senza ripetizioni`.
 
 ---
 

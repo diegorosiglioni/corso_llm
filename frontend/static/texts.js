@@ -46,7 +46,7 @@ export function errorMessage(error, backendUrl) {
     "504 agent_timeout":
       "L'assistente non ha risposto in tempo. La domanda è salvata nella chat: riprova.",
     "502 agent_error":
-      `L'assistente ha risposto con un errore: ${detail}. ` +
+      `L'assistente non è riuscito a rispondere${detail ? ` (${detail})` : ""}. ` +
       "La domanda è salvata nella chat: riprova.",
     "503 database_unavailable": "L'archivio delle chat non è disponibile. Riprova tra poco.",
     "404 chat_not_found": "Questa chat non esiste più.",

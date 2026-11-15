@@ -2108,6 +2108,12 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
   verdi; `test_postgresql_engine_has_a_connect_timeout`, che confronta le opzioni esatte del
   motore, aggiornato con `hide_parameters`; `pytest` 1047 passed. I test dell'archivio su
   PostgreSQL girano nel Task 11.
+- **Task 6 · R-D6 — fatto.** `_agent_error` mette nel `502 agent_error` solo il detail
+  dell'agente e il suo codice nella riga di log (`cause="model_unavailable"`); la pagina scrive
+  «L'assistente non è riuscito a rispondere (…). La domanda è salvata nella chat: riprova.», senza
+  parentesi con un detail vuoto. Modello simulato: 6 test del back-end e i test Node visti fallire,
+  poi verdi; `pytest` 1047 passed; browser vero con modello simulato: `pytest -m browser` con Edge
+  25 passed. README allineato.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

@@ -567,8 +567,8 @@ def test_agent_error_with_the_detail(page, services, store, agent):  # CA-85, RF
     open_page(page, f"{frontend_url}/#/chats/{chat.id}")
     send(page, "Che ore sono?")
     expect(page.locator("#error-text")).to_have_text(
-        "L'assistente ha risposto con un errore: l'agente ha risposto con un errore "
-        "(model_unavailable): LM Studio non risponde. La domanda è salvata nella chat: riprova."
+        "L'assistente non è riuscito a rispondere (LM Studio non risponde). "
+        "La domanda è salvata nella chat: riprova."
     )
     expect(messages(page).locator(".message-text")).to_have_text(["Che ore sono?"])
     expect(field(page)).to_be_enabled()
@@ -731,8 +731,8 @@ def test_error_during_the_stream(page, services, store, agent):  # CA-100, RF-84
     open_page(page, f"{frontend_url}/#/chats/{chat.id}")
     send(page, "Quanto fa 17 * 23?")
     expect(page.locator("#error-text")).to_have_text(
-        "L'assistente ha risposto con un errore: l'agente ha risposto con un errore "
-        "(model_unavailable): LM Studio non risponde. La domanda è salvata nella chat: riprova."
+        "L'assistente non è riuscito a rispondere (LM Studio non risponde). "
+        "La domanda è salvata nella chat: riprova."
     )
     expect(draft(page)).to_have_count(0)
     expect(page.locator("#waiting")).to_have_count(0)

@@ -896,7 +896,8 @@ findstr :5432` mostra chi ascolta.
 
 **Un messaggio del back-end dà `503 agent_unavailable` (o `502 agent_error`).** Il servizio
 dell'agente non è avviato o non è su `AGENT_URL` (`503`), oppure ha risposto con un errore, per
-esempio LM Studio spento (`502`, il codice dell'agente è nel `detail`). La domanda resta nella chat:
+esempio LM Studio spento (`502`: il `detail` è quello dell'agente, il suo codice è nella riga di log
+`backend response=…` come `cause="model_unavailable"`). La domanda resta nella chat:
 dopo aver avviato l'agente si rimanda il messaggio. Nel log del back-end le righe `backend
 request=send_message …`, `backend agent_call chat=… history=… summary_chars=…` (cronologia mandata
 all'agente) e `backend response=send_message … status=…` seguono ogni invio; il testo dei messaggi
@@ -910,9 +911,11 @@ all'indirizzo di `BACKEND_URL` (quello che vede il browser). Se il back-end risp
 Nella console del browser (F12) compare l'errore CORS; aggiungere l'origine a `CORS_ORIGINS` e
 riavviare il back-end.
 
-**La pagina dice «L'assistente non è raggiungibile in questo momento…» o «L'assistente ha risposto
-con un errore: …».** Il back-end funziona ma l'agente è spento (`503`) o ha risposto con un errore,
-per esempio LM Studio spento (`502`, il motivo è nel messaggio). La domanda è salvata e compare nella
+**La pagina dice «L'assistente non è raggiungibile in questo momento…» o «L'assistente non è
+riuscito a rispondere (…)…».** Il back-end funziona ma l'agente è spento (`503`) o ha risposto con un
+errore, per esempio LM Studio spento (`502`, il motivo è tra parentesi: «L'assistente non è riuscito a
+rispondere (LM Studio non raggiungibile: Connection error). La domanda è salvata nella chat:
+riprova.»; lo stesso testo per un errore durante lo streaming). La domanda è salvata e compare nella
 chat senza risposta: avviare l'agente (o LM Studio) e scrivere di nuovo la domanda. «L'assistente
 non ha risposto in tempo» è il `504` del back-end dopo 600 s.
 

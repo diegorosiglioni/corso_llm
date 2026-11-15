@@ -387,30 +387,29 @@ def test_send_to_a_missing_chat_is_404_without_calling_the_agent(http):  # CA-74
 AGENT_FAILURES = [
     pytest.param(
         lambda: AgentClient("http://127.0.0.1:1"), 503, "agent_unavailable",
-        "agente non raggiungibile su http://127.0.0.1:1", id="closed-port",
+        "agente non raggiungibile su http://127.0.0.1:1", "", id="closed-port",
     ),
     pytest.param(
         lambda: mock_agent(raising(httpx.ReadTimeout("lento"))), 504, "agent_timeout",
-        "l'agente non ha risposto entro 600 s", id="timeout",
+        "l'agente non ha risposto entro 600 s", "", id="timeout",
     ),
     pytest.param(
         lambda: service_agent(FakeModel([lm_studio_error()])), 502, "agent_error",
-        "l'agente ha risposto con un errore (model_unavailable): LM Studio non raggiungibile: "
-        "Connection error.", id="lm-studio-off",
+        "LM Studio non raggiungibile: Connection error.", ' cause="model_unavailable"',
+        id="lm-studio-off",
     ),
     pytest.param(
         lambda: mock_agent(lambda request: httpx.Response(200, text="non json")), 502,
-        "agent_error",
-        "l'agente ha risposto con un errore (bad_response): risposta inattesa dell'agente "
-        "(HTTP 200)", id="bad-response",
+        "agent_error", "risposta inattesa dell'agente (HTTP 200)", ' cause="bad_response"',
+        id="bad-response",
     ),
 ]
 
 
-@pytest.mark.parametrize(("make_agent", "status", "code", "detail"), AGENT_FAILURES)
+@pytest.mark.parametrize(("make_agent", "status", "code", "detail", "cause"), AGENT_FAILURES)
 def test_agent_failure_keeps_the_question_and_the_agent_state(
-    store, engine, caplog, make_agent, status, code, detail,
-):  # CA-74, CA-76
+    store, engine, caplog, make_agent, status, code, detail, cause,
+):  # CA-74, CA-76, R-D6
     caplog.set_level(logging.INFO)
     chat_id = store.create_chat().id
     store.add_question(chat_id, "Mi chiamo Paolo")
@@ -428,7 +427,7 @@ def test_agent_failure_keeps_the_question_and_the_agent_state(
     escaped = detail.replace('"', '\\"')
     assert backend_lines(caplog)[-1] == (logging.WARNING, (
         f'backend response=send_message chat={chat_id} status={status} error={code} '
-        f'detail="{escaped}" duration_ms=N'
+        f'detail="{escaped}" duration_ms=N{cause}'
     ))
 
 
@@ -442,9 +441,7 @@ def test_history_rejected_by_the_agent_is_502(store, engine):  # CA-74
     )
     assert response.status_code == 502
     assert response.json()["error"] == "agent_error"
-    assert response.json()["detail"].startswith(
-        "l'agente ha risposto con un errore (invalid_history): messaggio 1:"
-    )
+    assert response.json()["detail"].startswith("messaggio 1:")
     assert agent_state(engine, chat_id) == (broken, "")
 
 
@@ -894,26 +891,25 @@ def test_stream_errors_of_the_request_are_json(http):  # CA-98
 STREAM_OPEN_FAILURES = [
     pytest.param(
         lambda: AgentClient("http://127.0.0.1:1"), 503, "agent_unavailable",
-        "agente non raggiungibile su http://127.0.0.1:1", id="closed-port",
+        "agente non raggiungibile su http://127.0.0.1:1", "", id="closed-port",
     ),
     pytest.param(
         lambda: mock_agent(raising(httpx.ReadTimeout("lento"))), 504, "agent_timeout",
-        "l'agente non ha risposto entro 60 s", id="timeout",
+        "l'agente non ha risposto entro 60 s", "", id="timeout",
     ),
     pytest.param(
         lambda: mock_agent(lambda request: httpx.Response(
             400, json={"error": "invalid_history", "detail": "messaggio 1: ruolo sconosciuto"}
-        )), 502, "agent_error",
-        "l'agente ha risposto con un errore (invalid_history): messaggio 1: ruolo sconosciuto",
+        )), 502, "agent_error", "messaggio 1: ruolo sconosciuto", ' cause="invalid_history"',
         id="error-answer",
     ),
 ]
 
 
-@pytest.mark.parametrize(("make_agent", "status", "code", "detail"), STREAM_OPEN_FAILURES)
+@pytest.mark.parametrize(("make_agent", "status", "code", "detail", "cause"), STREAM_OPEN_FAILURES)
 def test_stream_agent_failure_before_the_stream_is_json(
-    store, engine, caplog, make_agent, status, code, detail,
-):  # CA-98
+    store, engine, caplog, make_agent, status, code, detail, cause,
+):  # CA-98, R-D6
     caplog.set_level(logging.INFO)
     chat_id = store.create_chat().id
     store.add_question(chat_id, "Mi chiamo Paolo")
@@ -930,7 +926,7 @@ def test_stream_agent_failure_before_the_stream_is_json(
     escaped = detail.replace('"', '\\"')
     assert backend_lines(caplog)[-1] == (logging.WARNING, (
         f'backend response=send_message_stream chat={chat_id} status={status} error={code} '
-        f'detail="{escaped}" duration_ms=N'
+        f'detail="{escaped}" duration_ms=N{cause}'
     ))
 
 
@@ -956,8 +952,8 @@ STREAM_FAILURES = [
     pytest.param(
         lambda: service_agent(StreamingFakeModel(replies=[STREAM_REPLIES[0], lm_studio_error()])),
         ["question", "text", "reset", "tool_start", "tool_end", "error"], "agent_error",
-        "l'agente ha risposto con un errore (model_unavailable): LM Studio non raggiungibile: "
-        "Connection error.", logging.WARNING, id="lm-studio-off",
+        "LM Studio non raggiungibile: Connection error.", logging.WARNING,
+        ' cause="model_unavailable"', id="lm-studio-off",
     ),
     pytest.param(
         lambda: mock_agent(lambda request: httpx.Response(
@@ -965,21 +961,23 @@ STREAM_FAILURES = [
             content=b'event: text\ndata: {"delta": "a"}\n\n',
         )),
         ["question", "text", "error"], "agent_error",
-        "l'agente ha risposto con un errore (bad_response): flusso dell'agente non valido: "
-        "flusso interrotto prima della fine del turno", logging.WARNING, id="cut",
+        "flusso dell'agente non valido: flusso interrotto prima della fine del turno",
+        logging.WARNING, ' cause="bad_response"', id="cut",
     ),
     pytest.param(
         lambda: ScriptedStreamAgent([("text", {"delta": "a"}), RuntimeError("guasto")]),
         ["question", "text", "error"], "internal_error",
-        "errore interno del back-end; dettagli nel log", logging.ERROR, id="unexpected",
+        "errore interno del back-end; dettagli nel log", logging.ERROR, "", id="unexpected",
     ),
 ]
 
 
-@pytest.mark.parametrize(("make_agent", "names", "code", "detail", "level"), STREAM_FAILURES)
+@pytest.mark.parametrize(
+    ("make_agent", "names", "code", "detail", "level", "cause"), STREAM_FAILURES
+)
 def test_stream_error_during_the_turn_keeps_the_question_and_the_state(
-    store, engine, caplog, make_agent, names, code, detail, level,
-):  # CA-98
+    store, engine, caplog, make_agent, names, code, detail, level, cause,
+):  # CA-98, R-D6
     caplog.set_level(logging.INFO)
     chat_id = store.create_chat().id
     store.add_question(chat_id, "Mi chiamo Paolo")
@@ -995,7 +993,7 @@ def test_stream_error_during_the_turn_keeps_the_question_and_the_state(
     escaped = detail.replace('"', '\\"')
     assert backend_lines(caplog)[-1] == (level, (
         f'backend response=send_message_stream chat={chat_id} status=200 outcome=error '
-        f'error={code} detail="{escaped}" duration_ms=N'
+        f'error={code} detail="{escaped}" duration_ms=N{cause}'
     ))
     if level == logging.ERROR:
         assert "guasto" in caplog.text and "guasto" not in json.dumps(events)

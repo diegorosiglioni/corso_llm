@@ -41,9 +41,15 @@ test("agent too slow, 504", () => {
 
 test("agent error, 502, with the detail", () => {
   assert.equal(
-    message(502, "agent_error", "l'agente ha risposto con un errore (model_unavailable): spento."),
-    "L'assistente ha risposto con un errore: l'agente ha risposto con un errore " +
-      "(model_unavailable): spento. La domanda è salvata nella chat: riprova.",
+    message(502, "agent_error", "spento."),
+    "L'assistente non è riuscito a rispondere (spento). La domanda è salvata nella chat: riprova.",
+  );
+});
+
+test("agent error, 502, without a detail: no empty parentheses", () => {
+  assert.equal(
+    message(502, "agent_error", ""),
+    "L'assistente non è riuscito a rispondere. La domanda è salvata nella chat: riprova.",
   );
 });
 
@@ -184,9 +190,8 @@ test("errors inside a stream: the messages of the codes without streaming", () =
     "L'assistente non ha risposto in tempo. La domanda è salvata nella chat: riprova.",
   );
   assert.equal(
-    message(200, "agent_error", "l'agente ha risposto con un errore (model_unavailable): spento."),
-    "L'assistente ha risposto con un errore: l'agente ha risposto con un errore " +
-      "(model_unavailable): spento. La domanda è salvata nella chat: riprova.",
+    message(200, "agent_error", "spento."),
+    "L'assistente non è riuscito a rispondere (spento). La domanda è salvata nella chat: riprova.",
   );
   assert.equal(
     message(200, "database_unavailable", "x"),

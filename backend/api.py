@@ -171,14 +171,16 @@ def _elapsed_ms(started: float) -> int:
 
 
 def _agent_error(error: AgentError) -> ApiError:
-    """Agent switched off → 503, too slow → 504, any other failure of the agent → 502."""
+    """Agent switched off → 503, too slow → 504, any other failure of the agent → 502.
+
+    For 502 the detail is the agent's own (the page says that the agent failed), and the
+    agent's code goes to the log line as the cause (R-D6).
+    """
     if error.code == "agent_unreachable":
         return ApiError(503, "agent_unavailable", error.detail)
     if error.code == "agent_timeout":
         return ApiError(504, "agent_timeout", error.detail)
-    return ApiError(
-        502, "agent_error", f"l'agente ha risposto con un errore ({error.code}): {error.detail}"
-    )
+    return ApiError(502, "agent_error", error.detail, cause=error.code)
 
 
 def _api_error(error: Exception) -> ApiError | None:
