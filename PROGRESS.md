@@ -2,21 +2,17 @@
 
 ## Stato attuale (2026-11-15)
 
-- **Tutti i punti di `TODO.md` sono `[x]`**, nessuno `[!]`: Step 4–9 della lezione 6 e streaming
-  facoltativo, fatti dal loop autonomo il 2026-11-14 (commit `320c881`…`c53cc0a` su `auto-claude`,
-  nessun push; `dev` e `main` fermi a `428cc8a`).
-- Test senza modello: `1003 passed, 90 deselected` (rieseguito a fine loop).
-- Applicazione completa avviata con `docker compose up -d --build` il 2026-11-15 (quattro servizi
-  attivi, pagina su `http://127.0.0.1:8080`), poi fermata a fine giornata con `docker compose down`
-  (volumi conservati) e `docker stop assistente-postgres`.
-- **Per riprendere:** prompt in `docs/superpowers/prossimo-prompt.txt` (verifica dello stato e
-  scelta di come continuare, senza modifiche prima della decisione dell'utente).
-- Prossimo: revisione indipendente del codice di `auto-claude` rispetto a `dev`, poi integrazione su
-  `dev` (avanzamento rapido) e push solo su richiesta dell'utente.
-- Da ricontrollare in revisione: ambito del router allargato in `scope.txt` (Step 5), testi dei
-  prompt cambiati per le prove reali (Step 4 e 5), nuove dipendenze (`fastapi`, SQLAlchemy,
-  psycopg, `playwright`), `POSTGRES_PASSWORD` obbligatoria per ogni `docker compose`, prove reali
-  eseguite una sola volta e solo con Edge, streaming non provato con Compose.
+- Step 4–9 e streaming fatti dal loop autonomo il 2026-11-14 su `auto-claude` (commit
+  `320c881`…`c53cc0a`); nessun push. `dev` locale a `428cc8a` (un commit avanti a `origin/dev`),
+  `main`, `origin/dev` e `origin/main` a `d3b511e`.
+- In corso: **revisione e integrazione di `auto-claude`** (specifica e piano del 2026-11-15, sezione
+  «Revisione e integrazione» più sotto). Fatte le fasi F1 (revisione) e F2 (prove reali): rapporto in
+  `docs/superpowers/reviews/2026-11-15-auto-claude.md`, 3 problemi gravi, 4 importanti, 29 minori.
+- Prossimo: F3, rilettura con l'utente delle scelte del loop e dei problemi «da decidere» (Task 7
+  del piano); poi specifica e piano delle correzioni (F4), che comprendono anche sistemazione (F5)
+  e integrazione (F6). Push solo su richiesta dell'utente.
+- I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
+  (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
 ## Stato iniziale (2026-11-14)
 
@@ -1959,6 +1955,47 @@ Decisioni:
   interruzione del flusso (`stream_interrupted`) provata solo in Node, non con un back-end vero
   fermato a metà turno; streaming non provato con Compose (Docker invariato, specifica §10); pagina
   provata con Edge nelle prove reali e con Edge e Chrome nei test con l'agente finto.
+
+## Revisione e integrazione di `auto-claude` (2026-11-15)
+
+Specifica [`docs/superpowers/specs/2026-11-15-revisione-integrazione-design.md`](docs/superpowers/specs/2026-11-15-revisione-integrazione-design.md),
+piano [`docs/superpowers/plans/2026-11-15-revisione-integrazione.md`](docs/superpowers/plans/2026-11-15-revisione-integrazione.md)
+(approvati dall'utente il 2026-11-15; commit `3dc9feb`). Obiettivo dell'utente: pubblicare su
+`main` in sicurezza, senza scadenze.
+
+Decisioni dell'utente: approccio «revisione per step con controlli trasversali»; correzioni fatte da
+Claude in sessione con il via libera dell'utente, niente loop; messaggi dei commit del loop lasciati
+come sono; un problema grave si corregge sempre, uno importante si corregge o si accetta come
+debito noto; revisione indipendente anche delle correzioni e problemi del codice già pubblicato
+fuori dal criterio di uscita (scelte delegate a Claude).
+
+### F1 · Revisione — fatto
+
+- Quattro revisori con contesto pulito, in sola lettura: A (Step 4 e 5), B (Step 6), C (Step 7 e 9),
+  D (Step 8 e streaming). Ognuno ha eseguito test senza modello sulla propria parte (317, 446, 217
+  e 1003 passed).
+- Verifica di Claude: gravi e importanti uno per uno (R-B1 riprodotto con
+  `messages_to_json`/`messages_from_json` su tre casi; R-C1 con `docker port`), minori a campione.
+  Gravità di R-B1 alzata da importante a grave (chat salvata inutilizzabile per sempre).
+- Esito: **3 gravi** (R-C1 PostgreSQL di prova esposto sulla rete con password versionata, R-B1
+  cronologie restituite e poi rifiutate, R-A1 evidenza «risposta adeguata» dello Step 5 non
+  dimostrata), **4 importanti** (R-C2 avvio di Compose, R-A2 prove reali degli Step 4–5 non
+  attraverso il servizio, R-A3 diagnosi delle preferenze nel README, R-D1 pagina chiusa durante lo
+  streaming, da decidere), **29 minori** (10 da decidere). Nessun falso positivo. Dettagli nel
+  rapporto.
+
+### F2 · Prove reali — fatto
+
+- Modello simulato: `pytest` 1003 passed; `BROWSER_CHANNEL=chrome`, `pytest -m browser` 25 passed.
+- Modello vero (LM Studio, `google/gemma-4-e2b`; PostgreSQL in `assistente-postgres`):
+  `pytest -m real -v` con Edge 64 passed, 1 skipped (atteso), 0 failed in 45:56; con Chrome
+  `-k frontend` 2 passed in 2:36; streaming dalla pagina servita da Compose riuscito («391» con
+  `calculate`, bozza in 3 stati, chat dopo il ricaricamento, log di `agent`).
+- Avviso del revisore con il modello vero: tre tentativi, revisore sempre `coherent=true`;
+  **non dimostrato con il modello vero** (coperto da CA-99 e CA-100 con il modello simulato).
+- Nessuna prova instabile. Trovati nelle prove: R-B7 confermato (PowerShell 5.1 storpia «è»), R-P1
+  (la pagina mostra markdown e LaTeX così come sono).
+- Container `assistente-postgres` fermato a fine prove (`docker stop`); Compose spento.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
