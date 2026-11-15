@@ -1,5 +1,20 @@
 # Diario di lavoro
 
+## Stato attuale (2026-11-15)
+
+- **Tutti i punti di `TODO.md` sono `[x]`**, nessuno `[!]`: Step 4–9 della lezione 6 e streaming
+  facoltativo, fatti dal loop autonomo il 2026-11-14 (commit `320c881`…`c53cc0a` su `auto-claude`,
+  nessun push; `dev` e `main` fermi a `428cc8a`).
+- Test senza modello: `1003 passed, 90 deselected` (rieseguito a fine loop).
+- Applicazione completa avviata con `docker compose up -d --build` il 2026-11-15: quattro servizi
+  attivi, pagina su `http://127.0.0.1:8080`.
+- Prossimo: revisione indipendente del codice di `auto-claude` rispetto a `dev`, poi integrazione su
+  `dev` (avanzamento rapido) e push solo su richiesta dell'utente.
+- Da ricontrollare in revisione: ambito del router allargato in `scope.txt` (Step 5), testi dei
+  prompt cambiati per le prove reali (Step 4 e 5), nuove dipendenze (`fastapi`, SQLAlchemy,
+  psycopg, `playwright`), `POSTGRES_PASSWORD` obbligatoria per ogni `docker compose`, prove reali
+  eseguite una sola volta e solo con Edge, streaming non provato con Compose.
+
 ## Stato iniziale (2026-11-14)
 
 - Branch `auto-claude`, creato da `dev` a `428cc8a`; `origin/dev` e `origin/main` allineati allo
@@ -1283,6 +1298,35 @@ autonoma); i punti successivi dello step seguono la specifica.
    back-end e front-end come sottoprocessi, Edge con Playwright); README e `CLAUDE.md`; esiti in
    requisiti §16 e qui. Servizio non raggiungibile → `[!]`.
 
+### Decisioni (scelte del progettista, dettagli nella specifica §1)
+
+- HTML, CSS e JavaScript standard (moduli ES) senza framework né build: cinque operazioni e una vista
+  di messaggi non giustificano React/Vue né `npm`; `CLAUDE.md` vieta framework non concordati.
+- Pacchetto `frontend/` con un piccolo servizio FastAPI + uvicorn (già fissati): componente a sé per
+  lo Step 9, nessuna dipendenza nuova in esercizio.
+- `BACKEND_URL` consegnato al browser da `GET /config.js`: modo standard di configurare una pagina
+  statica senza ricostruirla.
+- Il browser chiama direttamente il back-end con CORS (`CORS_ORIGINS`, elenco esplicito, niente `*`):
+  niente proxy da scrivere; la traccia ammette entrambe le strade.
+- Contratto: OpenAPI del back-end salvato in `frontend/backend-openapi.json`, controllato dai test.
+- Testi come testo (`textContent`), niente Markdown: nessuna libreria e nessuna iniezione di HTML.
+- Test del JavaScript con `node --test` lanciato da `pytest` (Node 24.15.0, nessun pacchetto npm);
+  pagina nel browser con Playwright e Edge già installato, marcatore `browser` a parte.
+
+### Punto 1 · Specifica e requisiti — fatto
+
+- Scritti la specifica e i requisiti §16 (intestazione di `requisiti.md` aggiornata).
+- Dipendenza: `playwright==1.65.2` in `requirements-dev.txt` (solo test, non nell'immagine); in
+  `constraints.txt` le righe nuove `greenlet==3.5.6` e `playwright==1.65.2` (confronto tra
+  `pip freeze` e `constraints.txt`: sono le sole differenze). `pip check` senza problemi;
+  `pip install --dry-run -r requirements-dev.txt` risolve.
+- Prova usa e getta in `%TEMP%\step8probe` (fuori dal progetto): `node --test` importa un modulo ES
+  `.js` senza `package.json` (Node 24.15.0); Playwright pilota Edge 157.0.4341.46 e Chrome
+  157.0.8103.78 senza finestra (`channel`), senza scaricare browser; porta 8080 libera.
+- Test: `pytest` → 825 passed, 62 deselected (nessun codice cambiato).
+- Problemi aperti: README e `CLAUDE.md` cambiano dal punto 2, quando c'è codice da descrivere;
+  immagine del front-end e porta pubblicata del back-end restano allo Step 9 (specifica §11).
+
 ### Punto 2 · Front-end: elenco, creazione ed eliminazione — piano
 
 1. Back-end: `CORS_ORIGINS` in `backend/config.py` (`BackendConfig.cors_origins`, specifica §4),
@@ -1471,35 +1515,6 @@ Decisioni:
   quattro terminali non sono stati rieseguiti a mano (la prova avvia gli stessi `python -m …` con le
   stesse variabili). La finestra stretta del punto 3 (lettura della chat partita prima della risposta)
   non si è vista.
-
-### Decisioni (scelte del progettista, dettagli nella specifica §1)
-
-- HTML, CSS e JavaScript standard (moduli ES) senza framework né build: cinque operazioni e una vista
-  di messaggi non giustificano React/Vue né `npm`; `CLAUDE.md` vieta framework non concordati.
-- Pacchetto `frontend/` con un piccolo servizio FastAPI + uvicorn (già fissati): componente a sé per
-  lo Step 9, nessuna dipendenza nuova in esercizio.
-- `BACKEND_URL` consegnato al browser da `GET /config.js`: modo standard di configurare una pagina
-  statica senza ricostruirla.
-- Il browser chiama direttamente il back-end con CORS (`CORS_ORIGINS`, elenco esplicito, niente `*`):
-  niente proxy da scrivere; la traccia ammette entrambe le strade.
-- Contratto: OpenAPI del back-end salvato in `frontend/backend-openapi.json`, controllato dai test.
-- Testi come testo (`textContent`), niente Markdown: nessuna libreria e nessuna iniezione di HTML.
-- Test del JavaScript con `node --test` lanciato da `pytest` (Node 24.15.0, nessun pacchetto npm);
-  pagina nel browser con Playwright e Edge già installato, marcatore `browser` a parte.
-
-### Punto 1 · Specifica e requisiti — fatto
-
-- Scritti la specifica e i requisiti §16 (intestazione di `requisiti.md` aggiornata).
-- Dipendenza: `playwright==1.65.2` in `requirements-dev.txt` (solo test, non nell'immagine); in
-  `constraints.txt` le righe nuove `greenlet==3.5.6` e `playwright==1.65.2` (confronto tra
-  `pip freeze` e `constraints.txt`: sono le sole differenze). `pip check` senza problemi;
-  `pip install --dry-run -r requirements-dev.txt` risolve.
-- Prova usa e getta in `%TEMP%\step8probe` (fuori dal progetto): `node --test` importa un modulo ES
-  `.js` senza `package.json` (Node 24.15.0); Playwright pilota Edge 157.0.4341.46 e Chrome
-  157.0.8103.78 senza finestra (`channel`), senza scaricare browser; porta 8080 libera.
-- Test: `pytest` → 825 passed, 62 deselected (nessun codice cambiato).
-- Problemi aperti: README e `CLAUDE.md` cambiano dal punto 2, quando c'è codice da descrivere;
-  immagine del front-end e porta pubblicata del back-end restano allo Step 9 (specifica §11).
 
 ## Step 9 · Docker Compose: un container per componente (2026-11-14)
 

@@ -85,7 +85,7 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
     `docker compose down`)
 
 ## Obiettivo
-Un'applicazione da terminale in Python che conversa con un modello locale e:
+Un'applicazione in Python (terminale e pagina web) che conversa con un modello locale e:
 - organizza il flusso in un grafo LangGraph esplicito (stato, nodi, instradamento riconoscibili);
 - (lezione 6, Step 1) un router LLM prima dell'agente, con ambito in configurazione, manda le
   domande fuori ambito a un nodo di rifiuto senza eseguire l'agente;
@@ -98,8 +98,19 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
   (lingua, fuso predefinito, stile) e la mette in cima al prompt di sistema dell'agente;
 - (lezione 6, Step 5) i comandi `/prompts` e `/prompt nome chiave=valore` elencano e richiamano i
   prompt MCP `spiega` e `riassumi_conversazione`; i messaggi ottenuti passano dal grafo;
+- (lezione 6, Step 6) espone il grafo come servizio HTTP dell'agente (FastAPI, senza stato:
+  cronologia e riassunto arrivano dal chiamante e tornano aggiornati); la CLI è un suo client;
+- (lezione 6, Step 7) un back-end separato salva chat e messaggi in PostgreSQL e inoltra le
+  domande all'agente con la cronologia salvata;
+- (lezione 6, Step 8) un front-end web (HTML, CSS e JavaScript senza framework) parla solo con il
+  back-end: elenco, creazione ed eliminazione delle chat, messaggi con gli strumenti usati;
+- (lezione 6, Step 9) Docker Compose con quattro container: front-end, back-end, agente (non
+  esposto, con il server MCP stdio dentro) e PostgreSQL;
+- (facoltativo) risposta in streaming con Server-Sent Events, bozza mostrata mentre arriva e
+  salvata solo alla fine;
 - usa un modello servito da LM Studio, che resta sul computer host;
-- conserva la cronologia della conversazione per la durata della sessione (la cronologia non è persistente);
+- conserva la cronologia della conversazione per la durata della sessione nella CLI; nel
+  back-end le chat sono persistenti;
 - offre uno strumento orologio con fuso orario esplicito, richiesto dal modello tramite tool calling
   ed eseguito davvero dal programma;
 - (lezione 5) collega un server MCP locale (FastMCP, stdio) che espone convertitore di unità,
@@ -108,13 +119,13 @@ Un'applicazione da terminale in Python che conversa con un modello locale e:
 
 ## Confini
 - Implementare solo i requisiti concordati. MCP e i quattro strumenti della lezione 5 e gli
-  Step 1 (router), 2 (revisore), 3 (riassunto), 4 (resource delle preferenze) e 5 (prompt MCP)
-  della lezione 6 sono concordati e implementati;
-  gli step successivi della lezione 6 (servizio HTTP, back-end,
-  front-end, Compose a più container),
+  Step 1–9 della lezione 6 (router, revisore, riassunto, resource delle preferenze, prompt MCP,
+  servizio HTTP, back-end, front-end, Compose a quattro container) e lo streaming facoltativo sono
+  implementati (Step 4–9 e streaming in modalità autonoma sul branch `auto-claude`);
   altri strumenti, altri server MCP, workflow e RAG non vanno anticipati: ognuno avrà il proprio
   ciclo di specifica e piano.
-- Niente interfacce grafiche, servizi cloud o framework non concordati.
+- Niente interfacce grafiche oltre al front-end web dello Step 8, niente servizi cloud o
+  framework non concordati.
 - La cartella `lezione3/` è una lezione passata: resta solo in locale, esclusa da Git con
   `.gitignore`. Non leggerla per copiarne il codice e non modificarla.
 - Lavorare nel branch `dev`; nessun altro branch o worktree se non richiesto.
