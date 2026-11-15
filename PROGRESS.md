@@ -2089,6 +2089,12 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
 ` che spezza la riga, nome intero nel log, nessun limite); il test ai limiti esatti
   passava già (comportamento da conservare); poi tutti verdi, `pytest` 1028 passed. README
   allineato.
+- **Task 3 · R-B5 e R-A5 — fatto.** `APITimeoutError` → `503 model_unavailable` con «LM Studio non
+  ha risposto in tempo: …»; motivo tra parentesi di `PromptGetError` senza punto finale; la CLI
+  scrive «Errore nel prompt: … Scrivi /prompts per l'elenco dei prompt.» per `prompt_unavailable`.
+  Modello simulato: 7 test visti fallire, compreso `test_unusable_reason_loses_its_final_period`
+  (aggiunto per il caso «non è utilizzabile», che con i motivi esistenti non aveva un punto finale;
+  rosso rivisto con la correzione tolta), poi verdi; `pytest` 1030 passed. README allineato.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

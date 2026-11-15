@@ -216,6 +216,19 @@ def test_prompt_rejected_by_the_service():
     ]
 
 
+def test_prompt_unavailable_points_to_the_list():  # R-A5
+    reason = ("il prompt 'spiega' non è disponibile (Livello non valido: 'esperto'. "
+              "Valori ammessi: base, intermedio, avanzato)")
+    session = FakeSession(AgentError("prompt_unavailable", reason))
+    commands = FakeCommands(CommandResult(prompt=("spiega", {"livello": "esperto"})))
+    outputs, _ = execute(session, "/prompt spiega livello=esperto", commands=commands)
+    assert outputs == [
+        "Errore nel prompt: il prompt 'spiega' non è disponibile (Livello non valido: 'esperto'. "
+        "Valori ammessi: base, intermedio, avanzato). Scrivi /prompts per l'elenco dei prompt.",
+        "Arrivederci!",
+    ]
+
+
 def test_blocked_prompt_never_reaches_the_model():  # CA-57, CA-66
     model = FakeModel([])  # any call would fail: no scripted replies
     spec = PromptSpec("spiega", "", (PromptArgument("argomento", "", True),))
@@ -229,7 +242,8 @@ def test_blocked_prompt_never_reaches_the_model():  # CA-57, CA-66
     assert outputs == [
         "Errore nel comando: argomenti sconosciuti per 'spiega': 'livello' (attesi: argomento). "
         "Scrivi /prompts per l'elenco dei prompt.",
-        "Errore: il prompt 'spiega' non è utilizzabile (nessun messaggio). Riprova.",
+        "Errore nel prompt: il prompt 'spiega' non è utilizzabile (nessun messaggio). "
+        "Scrivi /prompts per l'elenco dei prompt.",
         "Errore nel comando: argomento senza valore: 'argomento'. "
         "Uso: /prompt nome chiave=valore (valori con spazi tra virgolette doppie).",
         "Arrivederci!",

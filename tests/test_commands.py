@@ -366,6 +366,17 @@ def test_unusable_messages_do_not_reach_the_model(received, reason, caplog):
     )
 
 
+def test_unusable_reason_loses_its_final_period(monkeypatch):  # R-A5
+    def unusable(received):
+        raise ValueError("motivo con il punto.")
+
+    monkeypatch.setattr("assistant.commands.to_messages", unusable)
+    with pytest.raises(PromptGetError) as raised:
+        resolve(client_answering(lambda a: [PromptMessage("user", "domanda")]),
+                "/prompt spiega argomento=MCP")
+    assert str(raised.value) == "il prompt 'spiega' non è utilizzabile (motivo con il punto)"
+
+
 def test_value_rejected_by_the_server(caplog):  # CA-57
     caplog.set_level(logging.INFO)
     error = "Livello non valido: 'esperto'. Valori ammessi: base, intermedio, avanzato."
@@ -375,7 +386,10 @@ def test_value_rejected_by_the_server(caplog):  # CA-57
 
     with pytest.raises(PromptGetError) as raised:
         resolve(client_answering(refuse), "/prompt spiega argomento=MCP livello=esperto")
-    assert str(raised.value) == f"il prompt 'spiega' non è disponibile ({error})"
+    assert str(raised.value) == (
+        "il prompt 'spiega' non è disponibile "
+        "(Livello non valido: 'esperto'. Valori ammessi: base, intermedio, avanzato)"
+    )
     assert [(r.levelno, r.getMessage()) for r in caplog.records][-1] == (
         logging.WARNING,
         'prompts/get name=spiega arguments={"argomento": "MCP", "livello": "esperto"} '

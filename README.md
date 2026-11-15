@@ -606,8 +606,9 @@ Dal terminale:
   richiesta rispetto a `prompts/list`: nome sconosciuto, argomento sconosciuto o obbligatorio
   mancante bloccano il comando con «Errore nel comando: … Scrivi /prompts per l'elenco dei prompt.»
   senza chiamare `prompts/get` né il modello. Un valore non ammesso (per esempio
-  `livello=esperto`) lo rifiuta il server MCP: «Errore: il prompt 'spiega' non è disponibile (…).
-  Riprova.».
+  `livello=esperto`) lo rifiuta il server MCP: «Errore nel prompt: il prompt 'spiega' non è
+  disponibile (Livello non valido: 'esperto'. Valori ammessi: base, intermedio, avanzato). Scrivi
+  /prompts per l'elenco dei prompt.».
 - I messaggi ottenuti entrano nella cronologia e fanno un turno normale: riassunto, router (l'ambito
   in `scope.txt` comprende spiegazioni di concetti e riassunti della conversazione), agente con gli
   strumenti, revisore.
@@ -930,7 +931,10 @@ con il back-end si è chiusa senza l'evento finale (back-end fermato durante il 
 Studio non raggiungibile su …)»; ogni domanda risponde `Errore: LM Studio non raggiungibile:
 Connection error. Riprova.` e la sessione resta attiva: la domanda fallita non entra nella
 cronologia, quindi si può riprovare dopo aver avviato il server. Controllare che il server di LM
-Studio sia avviato e che `LMSTUDIO_BASE_URL` del servizio termini con `/v1`.
+Studio sia avviato e che `LMSTUDIO_BASE_URL` del servizio termini con `/v1`. Se invece il server
+risponde ma non entro il tempo limite (modello che si carica o richiesta molto lunga), il messaggio
+è `Errore: LM Studio non ha risposto in tempo: Request timed out. Riprova.`: stesso codice
+`503 model_unavailable` nell'API, con un detail diverso.
 
 **Contesto del modello superato.** Se la richiesta supera il contesto caricato in LM Studio
 (8192 token per `google/gemma-4-e2b` nella configurazione provata), l'assistente mostra

@@ -309,7 +309,9 @@ def _prepare(client, request: ChatRequest) -> tuple[list[BaseMessage], list[Base
 
 def _model_error(error: Exception) -> ApiError | None:
     """The answer for an error of LM Studio; None for any other exception."""
-    if isinstance(error, openai.APIConnectionError):  # APITimeoutError included
+    if isinstance(error, openai.APITimeoutError):  # a subclass of APIConnectionError
+        return ApiError(503, "model_unavailable", f"LM Studio non ha risposto in tempo: {error}")
+    if isinstance(error, openai.APIConnectionError):
         return ApiError(503, "model_unavailable", f"LM Studio non raggiungibile: {error}")
     if isinstance(error, openai.APIError):
         return ApiError(502, "model_error", f"LM Studio non ha risposto correttamente: {error}")

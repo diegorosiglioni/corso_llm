@@ -290,7 +290,7 @@ def test_prompt_value_rejected_by_the_server():
     })
     assert (response.status_code, response.json()) == (502, {
         "error": "prompt_unavailable",
-        "detail": "il prompt 'spiega' non è disponibile (Livello non valido: 'esperto'.)",
+        "detail": "il prompt 'spiega' non è disponibile (Livello non valido: 'esperto')",
     })
 
 
@@ -472,7 +472,7 @@ def lm_studio_generic_error() -> openai.APIError:
 @pytest.mark.parametrize(("error", "status", "code", "detail"), [
     (lm_studio_error(), 503, "model_unavailable", "LM Studio non raggiungibile: Connection error."),
     (lm_studio_timeout(), 503, "model_unavailable",
-     "LM Studio non raggiungibile: Request timed out."),
+     "LM Studio non ha risposto in tempo: Request timed out."),
     (lm_studio_status_error(), 502, "model_error",
      "LM Studio non ha risposto correttamente: Model unloaded"),
     (lm_studio_generic_error(), 502, "model_error",
@@ -752,7 +752,8 @@ def test_body_not_matching_the_schema_is_422_before_the_stream(caplog):
 
 @pytest.mark.parametrize(("error", "code", "detail"), [
     (lm_studio_error(), "model_unavailable", "LM Studio non raggiungibile: Connection error."),
-    (lm_studio_timeout(), "model_unavailable", "LM Studio non raggiungibile: Request timed out."),
+    (lm_studio_timeout(), "model_unavailable",
+     "LM Studio non ha risposto in tempo: Request timed out."),
     (lm_studio_status_error(), "model_error",
      "LM Studio non ha risposto correttamente: Model unloaded"),
     (lm_studio_generic_error(), "model_error",

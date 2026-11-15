@@ -8,6 +8,7 @@ from assistant.commands import LIST_HINT
 log = logging.getLogger(__name__)
 
 PROMPT_REJECTED = "prompt_rejected"  # error code of the host check, done by the service
+PROMPT_UNAVAILABLE = "prompt_unavailable"  # the MCP server refused the prompt or its messages
 
 
 def run(session, read=input, write=print, commands=None) -> None:
@@ -41,6 +42,8 @@ def run(session, read=input, write=print, commands=None) -> None:
             log.debug("Errore dall'agente: code=%s", error.code, exc_info=error)
             if error.code == PROMPT_REJECTED:
                 write(f"Errore nel comando: {error.phrase}. {LIST_HINT}")
+            elif error.code == PROMPT_UNAVAILABLE:
+                write(f"Errore nel prompt: {error.phrase}. {LIST_HINT}")
             else:
                 write(f"Errore: {error.phrase}. Riprova.")
     write("Arrivederci!")

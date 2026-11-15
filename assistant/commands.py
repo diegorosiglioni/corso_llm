@@ -183,7 +183,8 @@ def resolve_prompt(client, name: str, arguments: dict[str, str]) -> list[BaseMes
         received = client.get_prompt(name, arguments)
     except PromptUnavailableError as error:
         log.warning("%s status=unavailable error=%s", request, _json(str(error)))
-        raise PromptGetError(f"il prompt '{name}' non è disponibile ({error})") from error
+        reason = str(error).rstrip(".")  # in parentheses, inside a sentence
+        raise PromptGetError(f"il prompt '{name}' non è disponibile ({reason})") from error
     log.info("%s status=ok messages=%d", request, len(received))
     for number, message in enumerate(received, start=1):
         log.info(
@@ -194,7 +195,8 @@ def resolve_prompt(client, name: str, arguments: dict[str, str]) -> list[BaseMes
         return to_messages(received)
     except ValueError as error:
         log.warning("prompt_command status=unusable name=%s reason=%s", name, _json(str(error)))
-        raise PromptGetError(f"il prompt '{name}' non è utilizzabile ({error})") from error
+        reason = str(error).rstrip(".")
+        raise PromptGetError(f"il prompt '{name}' non è utilizzabile ({reason})") from error
 
 
 class PromptCommands:

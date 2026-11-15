@@ -285,7 +285,7 @@ Detail esatti:
   `PromptGetError`), `assistant/terminal.py`, `README.md` (diagnosi e «Prompt MCP»)
 - Test: `tests/test_api.py`, `tests/test_commands.py`, `tests/test_terminal.py`
 
-- [ ] **Passo 1: test che falliscono**
+- [x] **Passo 1: test che falliscono**
   - `test_lm_studio_errors` e `test_lm_studio_errors_during_the_stream`, caso `timeout`: detail
     `"LM Studio non ha risposto in tempo: Request timed out."`, stesso `503 model_unavailable`.
   - `test_value_rejected_by_the_server` (`test_commands.py`): `str(raised.value) ==
@@ -295,16 +295,16 @@ Detail esatti:
   - `test_prompt_unavailable_points_to_the_list` (`test_terminal.py`): con
     `AgentError("prompt_unavailable", "il prompt 'spiega' non è disponibile (Livello non valido: 'esperto'. Valori ammessi: base, intermedio, avanzato)")`
     l'uscita è `["Errore nel prompt: il prompt 'spiega' non è disponibile (Livello non valido: 'esperto'. Valori ammessi: base, intermedio, avanzato). Scrivi /prompts per l'elenco dei prompt.", "Arrivederci!"]`.
-- [ ] **Passo 2:** eseguirli → falliscono.
-- [ ] **Passo 3:** `_model_error` controlla `openai.APITimeoutError` prima di
+- [x] **Passo 2:** eseguirli → falliscono.
+- [x] **Passo 3:** `_model_error` controlla `openai.APITimeoutError` prima di
   `APIConnectionError` (detail `f"LM Studio non ha risposto in tempo: {error}"`); in
   `commands.py` il motivo tra parentesi è `str(error).rstrip(".")` nei due `PromptGetError`; in
   `terminal.py` la costante `PROMPT_UNAVAILABLE = "prompt_unavailable"` e il ramo
   `f"Errore nel prompt: {error.phrase}. {LIST_HINT}"`.
-- [ ] **Passo 4:** test verdi; `pytest` completo verde.
-- [ ] **Passo 5:** README allineato (riga del tempo scaduto nella diagnosi di LM Studio; esempio
+- [x] **Passo 4:** test verdi; `pytest` completo verde.
+- [x] **Passo 5:** README allineato (riga del tempo scaduto nella diagnosi di LM Studio; esempio
   d'errore del prompt).
-- [ ] **Passo 6: commit** `fix(servizio): messaggi chiari per il tempo scaduto di LM Studio e i prompt non disponibili`.
+- [x] **Passo 6: commit** `fix(servizio): messaggi chiari per il tempo scaduto di LM Studio e i prompt non disponibili`.
 
 ---
 
