@@ -467,12 +467,12 @@ with McpClient(command, args, cwd=cwd) as client:
 Riga nuova esatta:
 `- spiegazioni dei concetti trattati nel laboratorio: modelli linguistici, agenti, strumenti, Model Context Protocol;`
 
-- [ ] **Passo 1: test che fallisce** — `test_default_scope_covers_the_mcp_prompts`: la riga nuova è
+- [x] **Passo 1: test che fallisce** — `test_default_scope_covers_the_mcp_prompts`: la riga nuova è
   in `scope.splitlines()` e nessuna riga contiene `"informatica, programmazione"`.
-- [ ] **Passo 2:** eseguirlo → fallisce.
-- [ ] **Passo 3:** cambiare la riga.
-- [ ] **Passo 4:** test verde; `pytest` completo verde.
-- [ ] **Passo 5: prova reale**
+- [x] **Passo 2:** eseguirlo → fallisce.
+- [x] **Passo 3:** cambiare la riga.
+- [x] **Passo 4:** test verde; `pytest` completo verde.
+- [x] **Passo 5: prova reale**
 
 ```python
 def test_router_scope_is_limited_to_lab_topics(real_session, caplog):  # R-A8
@@ -488,7 +488,9 @@ def test_router_scope_is_limited_to_lab_topics(real_session, caplog):  # R-A8
   `pytest tests/test_real.py -m real -v -k "lab_topics or router"` → passano anche le prove del
   router esistenti. Se il rifiuto manca anche alla ripetizione: fermarsi e chiedere (nessun ritocco
   a `ROUTER_PROMPT`).
-- [ ] **Passo 6: commit** `fix(router): ambito delle spiegazioni ristretto ai temi del laboratorio`.
+- [x] **Passo 6:** nessun commit della correzione. **Esito (2026-11-16):** prova reale fallita due
+  volte (domanda su RAM e disco accettata dal router); per decisione dell'utente riga vecchia
+  ripristinata e R-A8 registrato come debito noto (vedi `PROGRESS.md`, Task 9).
 
 ---
 

@@ -2125,6 +2125,21 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
   dello snippet nuovo del README da PowerShell: con `PREFERENCES_FILE` su un file della scratchpad
   stampa `{"language": "italiano", "timezone": "America/New_York", "style": "sintetico"}`, senza la
   variabile il file del pacchetto (`Europe/Rome`).
+- **Task 9 · R-A8 — non corretto: debito noto (decisione dell'utente del 2026-11-16).** Provata la
+  riga nuova di `scope.txt` («spiegazioni dei concetti trattati nel laboratorio: modelli
+  linguistici, agenti, strumenti, Model Context Protocol»). Modello simulato: il test della riga
+  visto fallire e poi verde, `pytest` 1047 passed. Modello vero: `pytest tests/test_real.py -m real
+  -v -k "lab_topics or router"` → 3 passed (prove del router esistenti) e 1 failed in 364 s;
+  ripetizione `-k lab_topics` → failed in 192 s. In entrambe la spiegazione del MCP è
+  `category=conversation` (giusto), ma anche «Spiegami la differenza tra memoria RAM e disco rigido»
+  è `category=conversation` («spiegazione di un concetto tecnico che rientra nella capacità
+  esplicativa dell'assistente»). Causa probabile: `ROUTER_PROMPT` chiede di giudicare la richiesta
+  e non l'argomento, e di scegliere `conversation` nel dubbio. Come da specifica §5.3, fermato e
+  chiesto all'utente, che ha scelto di **tornare alla riga vecchia** (ambito largo
+  «informatica, programmazione e intelligenza artificiale») e di registrare R-A8 come debito noto
+  in `TODO.md` (F5). Annullati `scope.txt`, il test della riga, la prova reale nuova, RF-51 e README:
+  nessun cambio al codice. Il Task 10 usa l'ambito di prima, che comprende già le spiegazioni del
+  MCP.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
