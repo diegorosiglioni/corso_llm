@@ -1,0 +1,21 @@
+Prima di incollare il prompt: avvia LM Studio (modello google/gemma-4-e2b) e Docker Desktop.
+Il prompt da incollare in Claude Code, dalla radice della repository, è tutto ciò che segue la riga di trattini.
+------------------------------------------------------------------------------------------
+
+Leggi il CLAUDE.md e poi PROGRESS.md (prima la sezione «Stato attuale», poi le sezioni degli step 4–9 e dello streaming quando servono), TODO.md e docs/superpowers/lezione6.md. Controlla lo stato della repository: branch corrente, `git status`, `git log --oneline dev..auto-claude` e se `dev`/`main` locali e remoti sono ancora fermi a 428cc8a.
+
+Situazione: il 2026-11-14 un loop autonomo (loop.sh + PROMPT.md, branch auto-claude) ha completato tutti i punti di TODO.md: step 4–9 della lezione 6 (preferenze, prompt MCP, servizio HTTP dell'agente, back-end con PostgreSQL, front-end, Compose a quattro container) e lo streaming facoltativo. Nessun umano ha ancora letto il codice: le specifiche e le scelte sono state decise in autonomia e sono annotate in PROGRESS.md e in docs/superpowers/specs/2026-11-14-*.md. Niente è stato pubblicato: dev e main sono fermi allo Step 3.
+
+Oggi voglio decidere come continuare. Non modificare codice né fare commit, merge o push finché non ho scelto. Fai così:
+
+1. Verifica che tutto funzioni ancora: esegui i test senza modello (`.\.venv\Scripts\python.exe -m pytest`, atteso 1003 passed) e, se LM Studio e Docker sono attivi, `docker compose up -d --build` e `docker compose ps`. Dimmi gli esiti; se qualcosa fallisce, fermati e dimmelo prima di proporre altro.
+2. Presentami in un solo messaggio le opzioni per proseguire, ciascuna con costo stimato (tempo, token, durata delle prove reali), rischi e la tua raccomandazione. Almeno queste:
+   a. revisione indipendente del codice di auto-claude rispetto a dev (per step, da revisori con contesto pulito), con l'elenco dei problemi trovati e nessuna correzione automatica;
+   b. rilettura guidata con me delle scelte prese in autonomia che toccano il comportamento: ambito del router allargato in scope.txt, testi dei prompt cambiati per le prove reali, nuove dipendenze (fastapi, SQLAlchemy, psycopg, playwright), POSTGRES_PASSWORD obbligatoria per ogni comando docker compose, bozza mostrata durante lo streaming;
+   c. prove reali mancanti o ripetute: suite reale completa (circa 40 minuti), front-end con Chrome, streaming con Docker Compose, avviso del revisore con il modello vero;
+   d. integrazione: avanzamento rapido di dev su auto-claude e poi push di dev e main come da CLAUDE.md (solo quando lo chiedo io), con le conseguenze sui messaggi di commit del loop, che non seguono i Conventional Commits;
+   e. sistemazione dopo l'integrazione: sezione «Modalità autonoma» di CLAUDE.md, destino di loop.sh, PROMPT.md e TODO.md (tenerli, archiviarli in _archivio/), container assistente-postgres dello Step 7 (separato da Compose);
+   f. eventuale ripresa del loop autonomo per correzioni, con nuovi punti in TODO.md.
+3. Indica l'ordine che consigli (per esempio prima a e c, poi b, poi d ed e) e aspetta la mia scelta.
+
+Distingui sempre i test con il modello simulato dalle prove reali con LM Studio; nel resoconto indica che cosa hai eseguito, con quale esito e che cosa resta da provare.

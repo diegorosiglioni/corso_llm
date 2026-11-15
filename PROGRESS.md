@@ -6,8 +6,11 @@
   facoltativo, fatti dal loop autonomo il 2026-11-14 (commit `320c881`…`c53cc0a` su `auto-claude`,
   nessun push; `dev` e `main` fermi a `428cc8a`).
 - Test senza modello: `1003 passed, 90 deselected` (rieseguito a fine loop).
-- Applicazione completa avviata con `docker compose up -d --build` il 2026-11-15: quattro servizi
-  attivi, pagina su `http://127.0.0.1:8080`.
+- Applicazione completa avviata con `docker compose up -d --build` il 2026-11-15 (quattro servizi
+  attivi, pagina su `http://127.0.0.1:8080`), poi fermata a fine giornata con `docker compose down`
+  (volumi conservati) e `docker stop assistente-postgres`.
+- **Per riprendere:** prompt in `docs/superpowers/prossimo-prompt.txt` (verifica dello stato e
+  scelta di come continuare, senza modifiche prima della decisione dell'utente).
 - Prossimo: revisione indipendente del codice di `auto-claude` rispetto a `dev`, poi integrazione su
   `dev` (avanzamento rapido) e push solo su richiesta dell'utente.
 - Da ricontrollare in revisione: ambito del router allargato in `scope.txt` (Step 5), testi dei
