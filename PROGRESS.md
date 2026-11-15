@@ -6,11 +6,11 @@
   `320c881`…`c53cc0a`); nessun push. `dev` locale a `428cc8a` (un commit avanti a `origin/dev`),
   `main`, `origin/dev` e `origin/main` a `d3b511e`.
 - In corso: **revisione e integrazione di `auto-claude`** (specifica e piano del 2026-11-15, sezione
-  «Revisione e integrazione» più sotto). Fatte le fasi F1 (revisione) e F2 (prove reali): rapporto in
-  `docs/superpowers/reviews/2026-11-15-auto-claude.md`, 3 problemi gravi, 4 importanti, 29 minori.
-- Prossimo: F3, rilettura con l'utente delle scelte del loop e dei problemi «da decidere» (Task 7
-  del piano); poi specifica e piano delle correzioni (F4), che comprendono anche sistemazione (F5)
-  e integrazione (F6). Push solo su richiesta dell'utente.
+  «Revisione e integrazione» più sotto). Fatte le fasi F1 (revisione), F2 (prove reali) e F3
+  (rilettura con l'utente): rapporto in `docs/superpowers/reviews/2026-11-15-auto-claude.md`, 3
+  problemi gravi, 4 importanti, 29 minori; decisioni dell'utente nella sezione F3.
+- Prossimo: specifica e piano delle correzioni (F4, Task 8 del piano), che comprendono anche
+  sistemazione (F5) e integrazione (F6). Push solo su richiesta dell'utente.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
@@ -1996,6 +1996,41 @@ fuori dal criterio di uscita (scelte delegate a Claude).
 - Nessuna prova instabile. Trovati nelle prove: R-B7 confermato (PowerShell 5.1 storpia «è»), R-P1
   (la pagina mostra markdown e LaTeX così come sono).
 - Container `assistente-postgres` fermato a fine prove (`docker stop`); Compose spento.
+
+### F3 · Rilettura guidata — fatto
+
+Decisioni dell'utente, una per scheda:
+1. **Ambito del router (`scope.txt`)**: tenere la riga dei riassunti della conversazione;
+   **restringere** quella delle spiegazioni ai temi del laboratorio («spiegazioni dei concetti
+   trattati nel laboratorio: modelli linguistici, agenti, strumenti, Model Context Protocol»), così
+   `/prompt spiega` passa dal router per i temi del corso e l'ambito non diventa «qualsiasi domanda
+   di informatica». Da fare in F4 con una prova reale del router (spiegazione di MCP accettata,
+   domanda generica di informatica rifiutata).
+2. **Testi dei prompt cambiati dal loop** (prompt di sistema dell'agente con le preferenze, stile
+   `sintetico` «breve ed essenziale», stile `sintetico` del riassunto «con le richieste e i
+   risultati ottenuti»): **tenuti** così (l'utente ha chiesto di proseguire senza obiezioni al
+   consiglio). Limite noto: messi a punto su 4–8 chiamate con `gemma-4-e2b`.
+
+Schede 3–5 presentate insieme e approvate dall'utente con «ok a tutto», tutte come consigliato:
+3. **Dipendenze nuove** (`fastapi`, `uvicorn`, `httpx`, `SQLAlchemy`, `psycopg[binary]`,
+   `playwright`, più le indirette `greenlet` e `annotated-doc`): **tenute**.
+4. **`POSTGRES_PASSWORD` obbligatoria** per ogni comando `docker compose`: **tenuta** (un valore
+   predefinito sarebbe una password nota nel file versionato).
+5. **Bozza mostrata durante lo streaming**: **tenuta**; avviso del revisore nella bozza dimostrato
+   solo con il modello simulato (limite noto).
+
+Problemi del rapporto:
+- Da correggere in F4: i gravi **R-C1, R-B1, R-A1**; gli importanti **R-C2** (healthcheck con
+  `-h 127.0.0.1` e `restart: unless-stopped` per `backend`), **R-A2** (prove reali degli Step 4 e 5
+  attraverso il servizio, insieme alla prova di R-A1), **R-A3** (diagnosi delle preferenze nel
+  README); la scheda 1 (**R-A8**, ambito ristretto); i minori «da decidere» **R-B5** (tempo scaduto
+  segnalato come «non raggiungibile»), **R-B10** (password ai container che non la usano),
+  **R-A4** (`CLAUDE.md`: preferenze lette all'avvio del servizio).
+- Accettati come debito noto (in `TODO.md` in F5, motivi nel rapporto §8): **R-D1** (specifica e
+  README corretti in F4 per descrivere il comportamento vero), **R-A11**, **R-B6**, **R-C4**,
+  **R-C10**, **R-D3**, **R-P1**.
+- Gli altri 19 minori confermati: divisi nella specifica delle correzioni tra «correggere» e
+  «debito noto», da approvare con la specifica.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

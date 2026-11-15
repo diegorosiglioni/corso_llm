@@ -211,3 +211,23 @@ Ambiente: LM Studio sull'host con `google/gemma-4-e2b`; PostgreSQL in `assistent
 
 Prove instabili: nessuna (nessuna prova ripetuta).
 Non dimostrato con il modello vero: l'avviso del revisore nella bozza (reset `review`); resta coperto con il modello simulato da CA-99 (Node) e CA-100 (browser), e il rifiuto del revisore con il modello vero da `test_reviewer_rejects_an_imposed_partial_answer` (risposta parziale imposta, senza la pagina). Non ripetuti oggi: CA-93 (chat dopo `down` e `up` con Compose) e `stream_interrupted` con un server vero.
+
+## 8. Decisioni della rilettura (F3) e debiti noti
+
+Decisioni dell'utente del 2026-11-15 (dettagli in `PROGRESS.md`, «F3 · Rilettura guidata»).
+
+Da correggere (F4): R-C1, R-B1, R-A1 (gravi); R-C2, R-A2, R-A3 (importanti); R-A8 (ambito ristretto
+ai temi del laboratorio); R-B5, R-B10, R-A4 (minori da decidere). I 19 minori confermati non «da
+decidere» vengono divisi nella specifica delle correzioni.
+
+Debiti noti accettati:
+
+| Id | Motivo |
+|---|---|
+| R-D1 | Salvare la risposta anche a pagina chiusa è utile; un endpoint asincrono che chiude il flusso è un lavoro grande. Specifica e README vanno corretti (F4) perché descrivano il comportamento vero |
+| R-A11 | La traccia chiede «lingua o stile»: la prova reale sulla lingua basta |
+| R-B6 | Le risposte del modello variano: un'uguaglianza esatta tra CLI e API sarebbe una prova instabile |
+| R-C4 | Invii contemporanei nella stessa chat: caso raro con un solo utente, già documentato; va con R-D1 |
+| R-C10 | Le evidenze di Compose sono nel diario e lo streaming da Compose è stato ripetuto il 2026-11-15 |
+| R-D3 | Testo che torna nel campo dopo un tempo scaduto: caso raro, la domanda non si perde |
+| R-P1 | Mostrare markdown e LaTeX richiederebbe una libreria o un'istruzione nel prompt, che rischia di far perdere l'uso degli strumenti (come per lo stile `sintetico`) |
