@@ -622,7 +622,8 @@ Dal terminale:
   contesto al modello («il set di regole o il "protocollo" che stabilisce come tu gli dai queste
   informazioni di sfondo (il contesto)»), non come il protocollo che collega applicazioni, server,
   strumenti e dati. Aggiungere al prompt «Se non conosci bene l'argomento, dillo
-  invece di inventare.» non cambia la risposta. È un limite del modello piccolo: l'evidenza «risposta
+  invece di inventare.» cambia le parole della risposta, ma la spiegazione resta sbagliata nel
+  merito. È un limite del modello piccolo: l'evidenza «risposta
   adeguata» dello Step 5 è **non soddisfatta** e la prova reale CA-58
   (`test_explain_prompt_from_the_cli`, dalla CLI attraverso il servizio, con un controllo di merito)
   è segnata come fallimento atteso (`xfailed`).
@@ -939,7 +940,8 @@ outcome=…`: `done`, `error` (con `error=` e `detail=`, come per i messaggi sen
 rimanda). Il back-end si accorge della pagina chiusa solo quando prova a scriverle l'evento
 successivo: se il prossimo evento dell'agente è già la fine del turno, la risposta viene salvata
 (`outcome=done`) e compare riaprendo la chat; rimandare la domanda mentre il turno è ancora in corso
-ne avvia un secondo (comportamento corretto il 2026-11-15, debito R-D1). «La risposta si è
+ne avvia un secondo (descrizione corretta il 2026-11-16; il comportamento resta un debito noto,
+R-D1). «La risposta si è
 interrotta prima della fine» nella pagina vuol dire che la connessione
 con il back-end si è chiusa senza l'evento finale (back-end fermato durante il turno).
 

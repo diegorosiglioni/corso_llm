@@ -2066,7 +2066,7 @@ approvata dall'utente il 2026-11-15, con le scelte del progettista del §11. Pia
 (Task 0–16) approvato dall'utente il 2026-11-15; esecuzione in una sessione nuova, consigliata in
 sessione (superpowers:executing-plans) con il revisore indipendente del Task 13.
 
-### F4 · Correzioni — esecuzione del piano (2026-11-15)
+### F4 · Correzioni — esecuzione del piano (2026-11-15 e 16)
 
 In sessione con superpowers:executing-plans, un task alla volta. «Modello simulato» = test senza
 LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
@@ -2142,7 +2142,7 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
   in `TODO.md` (F5). Annullati `scope.txt`, il test della riga, la prova reale nuova, RF-51 e README:
   nessun cambio al codice. Il Task 10 usa l'ambito di prima, che comprende già le spiegazioni del
   MCP.
-- **Task 10 · R-A2 e R-A1 — fatto, R-A1 al gradino 3.** In `tests/test_real.py` CA-50 e CA-58
+- **Task 10 · R-A2 e R-A1 — fatto, R-A1 al gradino 3 (2026-11-16).** In `tests/test_real.py` CA-50 e CA-58
   passano dal servizio: `test_default_timezone_from_preferences_in_the_service` (`PREFERENCES_FILE`
   con `America/New_York`, `POST /chat`) e `test_explain_prompt_from_the_cli` (CLI con `AGENT_URL`,
   controllo di merito `MERIT`: server, client, tool, strumenti esterni, fonti di dati, dati esterni);
@@ -2171,7 +2171,7 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
   `pg_isready` «accepting connections», `docker port assistente-postgres` → solo
   `5432/tcp -> 127.0.0.1:5433`. PostgreSQL vero: `pytest tests/test_backend_store.py -m real` →
   39 passed, 1 skipped (`PRAGMA`), compresi i test del NUL del Task 5.
-- **Task 12 · R-D1, R-A4, R-A10, R-C9 — fatto (solo documentazione).**
+- **Task 12 · R-D1, R-A4, R-A10, R-C9 — fatto (solo documentazione, 2026-11-16).**
   - R-D1, osservazione con uno script nella scratchpad (back-end vero `create_app` su SQLite in
     memoria servito da uvicorn in un thread, agente finto con pause, client httpx che chiude il
     flusso dopo `question` e `text`):
@@ -2203,7 +2203,12 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
   del percorso restano normali. Dimostrazione con un test temporaneo nella scratchpad (stesso
   controllo strutturale guasto: col decoratore `XFAIL`, con lo schema nuovo `FAILED`); modello vero:
   CA-58 → `1 xfailed` in 137 s, per il solo controllo di merito; modello simulato: `pytest` 1051
-  passed. Da fare: secondo giro del revisore solo su questa correzione; i minori all'utente.
+  passed. I quattro minori: l'utente ha deciso di correggerli subito (fatto, solo testi: «descrizione
+  corretta il 2026-11-16» per R-D1, «le parole cambiano ma la spiegazione resta sbagliata nel
+  merito» per CA-58, date del 15 e 16 novembre nel diario, comportamento dell'agente «dedotto per
+  analogia» nella specifica dello streaming). Secondo giro del revisore lanciato sulla sola
+  correzione di CA-58 (`10d775c`). Su richiesta dell'utente (contesto della sessione troppo pieno)
+  i Task 14 e 15 passano a un agente con contesto pulito, che riporta il resoconto.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

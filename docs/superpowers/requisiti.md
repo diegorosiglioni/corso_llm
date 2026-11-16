@@ -451,7 +451,7 @@ CA-60 CA-43 è fallita una volta su tre esecuzioni (rifiuto del router, vedi `PR
 | CA-55 | Analisi di `/prompt`: virgolette doppie, apostrofo, `=` nel valore, maiuscole del comando; ogni errore di sintassi dà il suo messaggio senza chiamare il client. | automatica |
 | CA-56 | `/prompts` con client finto: nome, descrizione e argomenti di ogni prompt; nessun prompt; `prompts/list` non disponibile → messaggio d'errore; modello mai chiamato. | automatica |
 | CA-57 | `/prompt` con client e modello finti: prompt sconosciuto, argomento sconosciuto, obbligatorio mancante → nessun `prompts/get`, nessuna chiamata al modello, riga `status=rejected`; richiesta valida → messaggio nella cronologia, righe `prompts/get` e righe del grafo (riassunto, router, agente, revisore). | automatica |
-| CA-58 | Con LM Studio, dalla CLI collegata al servizio: `/prompt spiega argomento="Model Context Protocol" livello=base` → `api request=chat kind=prompt name="spiega"`, `prompts/get … status=ok`, router `conversation`, revisore attivo, risposta non vuota, non un rifiuto, che nomina almeno uno tra server, client, tool o strumenti esterni, fonti di dati o dati esterni (controllo di merito, R-A1). **Esito del 2026-11-16: non soddisfatta per limite del modello.** `google/gemma-4-e2b` descrive il MCP come le regole con cui si dà il contesto al modello («il set di regole o il "protocollo" che stabilisce come tu gli dai queste informazioni di sfondo (il contesto)»), senza server, client né strumenti; uguale con la frase «Se non conosci bene l'argomento, dillo invece di inventare.» nel prompt, poi tolta. La prova è un fallimento atteso documentato (`xfail` non stretto). | reale |
+| CA-58 | Con LM Studio, dalla CLI collegata al servizio: `/prompt spiega argomento="Model Context Protocol" livello=base` → `api request=chat kind=prompt name="spiega"`, `prompts/get … status=ok`, router `conversation`, revisore attivo, risposta non vuota, non un rifiuto, che nomina almeno uno tra server, client, tool o strumenti esterni, fonti di dati o dati esterni (controllo di merito, R-A1). **Esito del 2026-11-16: non soddisfatta per limite del modello.** `google/gemma-4-e2b` descrive il MCP come le regole con cui si dà il contesto al modello («il set di regole o il "protocollo" che stabilisce come tu gli dai queste informazioni di sfondo (il contesto)»), senza server, client né strumenti; con la frase «Se non conosci bene l'argomento, dillo invece di inventare.» nel prompt le parole cambiano ma la spiegazione resta sbagliata nel merito, e la frase è stata tolta. La prova è un fallimento atteso documentato (`xfail` non stretto). | reale |
 | CA-59 | Con LM Studio: «Mi chiamo Paolo», «Quanto fa 17 * 23?», poi `/prompt riassumi_conversazione stile=sintetico` → risposta con «Paolo» e «391». | reale |
 | CA-60 | Le prove reali precedenti (CA-2…CA-4, CA-16…CA-21, CA-27, CA-36, CA-43, CA-50, CA-51) passano con l'ambito esteso. | reale |
 
@@ -682,8 +682,8 @@ la pagina ora usa l'endpoint con lo streaming.
   `error` con gli stessi codici e chiudono il flusso. Dopo un errore o un'interruzione la domanda
   resta salvata senza risposta e lo stato dell'agente della chat non cambia. Una pagina chiusa
   durante il turno è un'interruzione solo se il back-end se ne accorge scrivendo un evento prima
-  che arrivi `done`; altrimenti la risposta è salvata (comportamento corretto il 2026-11-15,
-  debito R-D1).
+  che arrivi `done`; altrimenti la risposta è salvata (descrizione corretta il 2026-11-16; il
+  comportamento resta un debito noto, R-D1).
 - **RF-85** *Pagina* — La pagina invia con lo streaming, mostra il testo mentre arriva (segnato come
   bozza), indica lo strumento in uso durante l'attesa e poi il suo risultato, segnala la riscrittura
   chiesta dal revisore, sostituisce la bozza con la risposta salvata alla fine e mostra gli errori come
