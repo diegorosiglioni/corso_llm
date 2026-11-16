@@ -2,29 +2,23 @@
 
 ## Stato attuale (2026-11-16)
 
-- Step 4–9 e streaming fatti dal loop autonomo il 2026-11-14 su `auto-claude` (commit
-  `320c881`…`c53cc0a`); poi revisione (F1–F3, 2026-11-15) e correzioni (F4, 2026-11-15 e 16) sullo
-  stesso branch, con la sistemazione dei file del loop (F5). Nessun push. `dev` locale a `428cc8a`
-  (un commit avanti a `origin/dev`), `main`, `origin/dev` e `origin/main` a `d3b511e`.
-- Piano delle correzioni (`docs/superpowers/plans/2026-11-15-correzioni-auto-claude.md`): Task 0–15
-  fatti (verifica finale F6 del 2026-11-16: nessun fallimento confermato, due prove instabili,
-  sezione F6 più sotto); Task 16 (avanzamento rapido di `dev` su `auto-claude`) solo dopo il via
-  libera dell'utente al resoconto del Task 15.
-- Resoconto del Task 15 dato all'utente il 2026-11-16 (criteri del §10 della specifica: 1
-  soddisfatto con l'eccezione di R-A8, 2 e 3 soddisfatti, 4 da fare); **via libera dell'utente** il
-  2026-11-16, nella sessione successiva.
-- I due minori del secondo giro di revisione (rapporto, §9) sono debiti noti in `TODO.md` per
-  decisione dell'utente del 2026-11-16: R-A1a (un CA-58 che passasse il merito risulterebbe `passed`
-  con i documenti che dicono «non soddisfatta») e R-A1b (con `xfail` la risposta del modello si vede
-  solo con `-rA` o `-s`).
+- Step 4–9 e streaming fatti dal loop autonomo il 2026-11-14 su `auto-claude`; poi revisione
+  (F1–F3), correzioni (F4), sistemazione dei file del loop (F5), verifica finale (F6) e integrazione
+  (F7), sezioni più sotto. **Piano delle correzioni chiuso** (Task 0–16 fatti,
+  `docs/superpowers/plans/2026-11-15-correzioni-auto-claude.md`); registro del piano cancellato
+  (la storia di Git è il registro).
+- `dev` locale portato su `auto-claude` con avanzamento rapido (F7); su `dev` `pytest` 1051 passed.
+  **Nessun push**: `dev` è avanti a `origin/dev`; `main`, `origin/dev` e `origin/main` a `d3b511e`.
+  Il branch `auto-claude` resta, da cancellare o tenere dopo il push su conferma dell'utente.
+- Esito delle correzioni: R-A8 non corretto e R-A1 al gradino 3 (CA-58 fallimento atteso per limite
+  del modello); R-A1a e R-A1b (minori del secondo giro di revisione) e gli altri debiti noti in
+  `TODO.md`.
 - Prove instabili (F6): `test_first_turn_information_survives_compression` (router) e l'uso di
   `calculate` dalla pagina di Compose (2 volte su 3).
-- Registro del piano, con le righe `Ruling:`, in `.superpowers/sdd/2026-11-15-correzioni-auto-claude/`
-  (ignorato da Git): da elencare all'utente e cancellare alla chiusura del piano.
-- Esito delle correzioni: R-A8 non corretto, **debito noto** per decisione dell'utente; R-A1 al
-  gradino 3 (CA-58 fallimento atteso per limite del modello); gli altri debiti noti in `TODO.md`.
-- Prossimo: via libera dell'utente, decisione sui due minori e Task 16; poi il push solo su
-  richiesta (prompt per la sessione nuova in `docs/superpowers/prossimo-prompt.txt`).
+- Prossimo: push solo su richiesta dell'utente (`git push origin dev`, `git push origin dev:main`,
+  `git fetch origin main:main`); poi la scelta del lavoro successivo, un debito di `TODO.md` o la
+  lezione successiva, con il proprio ciclo di specifica e piano. Prompt per la sessione nuova in
+  `docs/superpowers/prossimo-prompt.txt`.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
@@ -2330,6 +2324,8 @@ Task 16 del piano, in sessione.
 - Modello simulato, su `dev`: `.\.venv\Scripts\python.exe -m pytest` → 1051 passed, 93
   deselected (184 s). Nessuna prova reale ripetuta (fatte in F6, dopo l'ultima modifica al codice).
 - Nessun push.
+- Chiusura del piano: righe `Ruling:` del registro e minori rinviati elencati all'utente, cartella
+  `.superpowers/sdd/2026-11-15-correzioni-auto-claude/` cancellata.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
