@@ -302,8 +302,10 @@ class McpClient:
         except Exception as error:
             if _is_closed(error):
                 raise _ConnectionClosed(generation, _reason(error)) from error
-            if _is_timeout(error):
-                self._stale_reason = _reason(error)
+            if _is_timeout(error):  # the library's message is in English: same text as above
+                reason = f"nessuna risposta entro {self._timeout:g} s"
+                self._stale_reason = reason
+                raise ToolUnavailableError(reason) from error
             raise ToolUnavailableError(_reason(error)) from error
 
     def _restart(self, seen_generation: int, reason: str) -> None:

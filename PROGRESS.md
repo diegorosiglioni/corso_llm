@@ -2385,7 +2385,18 @@ approvati, esecuzione in linea (senza sottoagenti), un commit per task.
   `agent` ancora `healthy`. Ucciso di nuovo, poi una domanda con `calculate` dal back-end
   (`POST /chats/{id}/messages`, la stessa strada della pagina): riavvio, `tools_used` con
   `calculate` ok, risultato 7006652; chat di prova cancellata, `docker compose down`.
-- Suite: `.\.venv\Scripts\python.exe -m pytest` → 1073 passed, 93 deselected.
+- Revisione finale di tutto il lavoro (revisore indipendente, `b9a5769..51ec090`): pronto da
+  integrare, nessun problema grave o importante; concorrenza provata anche con 4 thread e 50
+  riavvii forzati. Corretti due minori: il tempo scaduto segnalato dalla libreria ora arriva come
+  «nessuna risposta entro 30 s» invece del testo inglese, e `AGENT_URL` con porta 0 è rifiutato
+  (il README parla di porta 1–65535). Restano minori non corretti: una scrittura in volo durante un
+  riavvio deciso dal client (per esempio `/status` scaduto mentre gira `add_note`) può essere
+  ripetuta; il segno «da riavviare» non è legato a una generazione (secondo riavvio inutile in una
+  finestra teorica); `RuntimeError` «Event loop is closed» possibile in una finestra di poche
+  istruzioni; i codici −32000 e −32001 potrebbero collidere con errori normali se in futuro il
+  server usasse i timeout degli strumenti di FastMCP o il suo `ErrorHandlingMiddleware`; nessun
+  test di `__exit__` mentre una richiesta fallisce (comportamento verificato a mano dal revisore).
+- Suite: `.\.venv\Scripts\python.exe -m pytest` → 1074 passed, 93 deselected.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

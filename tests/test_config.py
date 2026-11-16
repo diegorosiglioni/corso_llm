@@ -290,6 +290,7 @@ def test_agent_url(value, expected):
 
 @pytest.mark.parametrize("value", [
     "http://[::1", "http://agent:porta", "https://agent:99999", "http://", "http://:8000",
+    "http://agent:0",
 ])
 def test_malformed_agent_url(value):  # R-B9
     assert client_error({"AGENT_URL": value}) == (

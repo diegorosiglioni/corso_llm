@@ -167,13 +167,13 @@ class ClientConfig:
 
 
 def _is_valid_url(url: str) -> bool:
-    """A host name and, if present, a port in 0…65535 (R-B9: no InvalidURL at the first request)."""
+    """A host name and, if present, a port in 1…65535 (R-B9: no InvalidURL at the first request)."""
     try:
         parts = urlsplit(url)
-        parts.port  # raises ValueError for a port that is not a number or out of range
+        port = parts.port  # ValueError for a port that is not a number or not in 0…65535
     except ValueError:
         return False
-    return bool(parts.hostname)
+    return bool(parts.hostname) and port != 0
 
 
 def load_client_config(env: Mapping[str, str]) -> ClientConfig:

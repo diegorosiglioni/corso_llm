@@ -533,7 +533,7 @@ def test_library_timeout_counts_as_timeout(restartable, monkeypatch):
         calls.append(1)
         raise MCPError(code=REQUEST_TIMEOUT, message="Timed out")
     monkeypatch.setattr(Client, "call_tool", timed_out)
-    with pytest.raises(ToolUnavailableError):
+    with pytest.raises(ToolUnavailableError, match=r"^nessuna risposta entro 5 s$"):
         client.call_tool("pid", {})
     assert calls == [1]
     monkeypatch.undo()

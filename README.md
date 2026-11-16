@@ -73,7 +73,7 @@ PostgreSQL. Il JavaScript della pagina del front-end si prova con Node.js (`node
 da `pytest`; senza Node il test si salta col motivo). I Dockerfile si controllano come testo, senza
 costruire immagini, e `compose.yaml` con `docker compose config` su una copia con un `.env` di
 credenziali finte, senza il demone (`tests/test_docker.py`; senza la CLI di Docker questi test si
-saltano col motivo). Esito al 2026-11-16: `1073 passed, 93
+saltano col motivo). Esito al 2026-11-16: `1074 passed, 93
 deselected` (le 93 deselezionate sono le 68 prove reali, 28 con LM Studio e 40 test dell'archivio
 ripetuti su PostgreSQL, e i 25 test nel browser).
 
