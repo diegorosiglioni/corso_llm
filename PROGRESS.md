@@ -8,17 +8,17 @@
   `docs/superpowers/plans/2026-11-15-correzioni-auto-claude.md`); registro del piano cancellato
   (la storia di Git è il registro).
 - `dev` locale portato su `auto-claude` con avanzamento rapido (F7); su `dev` `pytest` 1051 passed.
-  **Nessun push**: `dev` è avanti a `origin/dev`; `main`, `origin/dev` e `origin/main` a `d3b511e`.
-  Il branch `auto-claude` resta, da cancellare o tenere dopo il push su conferma dell'utente.
+  **Push fatto** su richiesta dell'utente il 2026-11-16: `dev`, `main`, `origin/dev` e
+  `origin/main` a `1b77718` (avanzamento rapido di `main`). Branch `auto-claude` cancellato su
+  conferma dell'utente (`git branch -d`, i suoi commit sono in `dev`).
 - Esito delle correzioni: R-A8 non corretto e R-A1 al gradino 3 (CA-58 fallimento atteso per limite
   del modello); R-A1a e R-A1b (minori del secondo giro di revisione) e gli altri debiti noti in
   `TODO.md`.
 - Prove instabili (F6): `test_first_turn_information_survives_compression` (router) e l'uso di
   `calculate` dalla pagina di Compose (2 volte su 3).
-- Prossimo: push solo su richiesta dell'utente (`git push origin dev`, `git push origin dev:main`,
-  `git fetch origin main:main`); poi la scelta del lavoro successivo, un debito di `TODO.md` o la
-  lezione successiva, con il proprio ciclo di specifica e piano. Prompt per la sessione nuova in
-  `docs/superpowers/prossimo-prompt.txt`.
+- Prossimo: la scelta del lavoro successivo, un debito di `TODO.md` o la lezione successiva, con il
+  proprio ciclo di specifica e piano. `docs/superpowers/prossimo-prompt.txt` non è aggiornato dopo
+  il push (decisione dell'utente): i suoi punti 1 e 2 (push, `auto-claude`) sono già fatti.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
@@ -2326,6 +2326,9 @@ Task 16 del piano, in sessione.
 - Nessun push.
 - Chiusura del piano: righe `Ruling:` del registro e minori rinviati elencati all'utente, cartella
   `.superpowers/sdd/2026-11-15-correzioni-auto-claude/` cancellata.
+- Push su richiesta dell'utente: `git push origin dev` e `git push origin dev:main`
+  (`d3b511e..1b77718`, avanzamento rapido accettato), `git fetch origin main:main`; `dev`, `main`,
+  `origin/dev` e `origin/main` a `1b77718`. Poi `git branch -d auto-claude` su conferma.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
