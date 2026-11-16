@@ -732,10 +732,10 @@ Prove nell'ordine; ognuna annotata in `PROGRESS.md` con comando, esito e durata.
 
 ### Task 16: Integrazione (specifica §9, punti 5–6)
 
-- [ ] **Passo 1:** solo con i criteri del §10 soddisfatti e il via libera dell'utente al resoconto
+- [x] **Passo 1:** solo con i criteri del §10 soddisfatti e il via libera dell'utente al resoconto
   del Task 15: `git switch dev`, `git merge --ff-only auto-claude` (se rifiutato: fermarsi e
   chiedere).
-- [ ] **Passo 2:** `.\.venv\Scripts\python.exe -m pytest` su `dev` → verde.
-- [ ] **Passo 3:** fermarsi. Il push (`git push origin dev`, `git push origin dev:main`,
+- [x] **Passo 2:** `.\.venv\Scripts\python.exe -m pytest` su `dev` → verde.
+- [x] **Passo 3:** fermarsi. Il push (`git push origin dev`, `git push origin dev:main`,
   `git fetch origin main:main`) solo quando l'utente lo chiede; avanzamento rapido di `main`
   rifiutato → fermarsi e chiedere. Dopo il push, su conferma, cancellare o tenere `auto-claude`.

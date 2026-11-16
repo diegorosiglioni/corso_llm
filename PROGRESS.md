@@ -2316,6 +2316,21 @@ Task 15 del piano, eseguito da un agente con contesto pulito, dopo l'ultima modi
 Prove instabili: `test_first_turn_information_survives_compression` (router) e l'uso di
 `calculate` dalla pagina di Compose. Nessun fallimento confermato.
 
+### F7 · Integrazione in `dev` — fatto (2026-11-16)
+
+Task 16 del piano, in sessione.
+- Via libera dell'utente al resoconto del Task 15 (criteri del §10 della specifica: 1 soddisfatto
+  con l'eccezione di R-A8, 2 e 3 soddisfatti, 4 con questo task).
+- I due minori del secondo giro di revisione diventano i debiti noti R-A1a e R-A1b in `TODO.md`,
+  per decisione dell'utente (`301c1bf`, su `auto-claude`, solo documenti).
+- Controlli prima dell'integrazione: `auto-claude` pulito, `dev` antenato di `auto-claude`; dopo
+  `git fetch`, `origin/dev` e `origin/main` a `d3b511e` come `main`, `dev` a `428cc8a` (un commit
+  avanti).
+- `git switch dev`, `git merge --ff-only auto-claude` → avanzamento rapido `428cc8a..301c1bf`.
+- Modello simulato, su `dev`: `.\.venv\Scripts\python.exe -m pytest` → 1051 passed, 93
+  deselected (184 s). Nessuna prova reale ripetuta (fatte in F6, dopo l'ultima modifica al codice).
+- Nessun push.
+
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
 Data: 2026-11-13
