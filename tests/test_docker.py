@@ -6,6 +6,8 @@ import os
 import re
 import shutil
 import subprocess
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -219,6 +221,20 @@ def test_backend_and_frontend_are_published_only_on_localhost(compose, service, 
 ])
 def test_services_listen_on_all_interfaces_even_with_a_local_env(compose, service, variable):
     assert compose["services"][service]["environment"][variable] == "0.0.0.0"
+
+
+@pytest.mark.parametrize(("mcp", "model", "code"), [
+    ("ok", "ok", 0), ("ok", "unavailable", 0), ("unavailable", "ok", 1),
+])
+def test_agent_healthcheck_follows_mcp(compose, monkeypatch, mcp, model, code):  # R-B3
+    test = compose["services"]["agent"]["healthcheck"]["test"]
+    assert test[:3] == ["CMD", "python", "-c"]
+    body = {"mcp": {"status": mcp}, "model": {"status": model}}
+    fake = types.SimpleNamespace(get=lambda url, timeout: types.SimpleNamespace(json=lambda: body))
+    monkeypatch.setitem(sys.modules, "httpx", fake)
+    with pytest.raises(SystemExit) as stopped:
+        exec(test[3], {})
+    assert int(stopped.value.code) == code
 
 
 def test_postgres_uses_the_official_image_a_volume_and_a_healthcheck(compose):

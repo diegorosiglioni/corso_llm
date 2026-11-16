@@ -63,8 +63,10 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
-      # Pronto quando /status risponde, con qualsiasi codice: LM Studio spento dà 503 ma l'agente c'è.
-      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://127.0.0.1:8000/status', timeout=10)"]
+      # Sano quando /status risponde e il server MCP è raggiungibile, anche con LM Studio spento
+      # (503 con mcp ok: il modello sta fuori dal container). Ogni controllo chiama tools/list, quindi
+      # un server MCP morto viene riavviato dall'agente entro il controllo successivo.
+      test: ["CMD", "python", "-c", "import httpx, sys; sys.exit(httpx.get('http://127.0.0.1:8000/status', timeout=10).json()['mcp']['status'] != 'ok')"]
       # Ogni 2 s durante l'avvio, poi ogni 30 s (ogni controllo scrive una riga nel log dell'agente).
       start_period: 60s
       start_interval: 2s

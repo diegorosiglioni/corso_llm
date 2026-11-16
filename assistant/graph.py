@@ -303,7 +303,7 @@ def build_graph(
             result = tool.invoke(arguments)
         except ToolUnavailableError as error:
             return {
-                "error": f"Strumento non raggiungibile: {error}. Riprova o riavvia l'assistente."
+                "error": f"Strumento non raggiungibile: {error}. Riprova o riavvia il servizio dell'agente."
             }, "transport_error"
         except Exception as error:
             return {

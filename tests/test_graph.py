@@ -189,7 +189,7 @@ def test_unavailable_tool_is_transport_error(caplog):
     )
     r = start_turn(FakeModel([tool_call(name="add_note"), AIMessage("ok")]), tools=[remote])
     assert json.loads(tool_messages(r["messages"])[0].content) == {
-        "error": "Strumento non raggiungibile: server terminato. Riprova o riavvia l'assistente."
+        "error": "Strumento non raggiungibile: server terminato. Riprova o riavvia il servizio dell'agente."
     }
     assert "variant=mcp tool=add_note call_id=c1" in caplog.text
     assert "step=1/5 execution=transport_error call_id=c1" in caplog.text
