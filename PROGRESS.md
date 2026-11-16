@@ -10,11 +10,20 @@
   fatti (verifica finale F6 del 2026-11-16: nessun fallimento confermato, due prove instabili,
   sezione F6 più sotto); Task 16 (avanzamento rapido di `dev` su `auto-claude`) solo dopo il via
   libera dell'utente al resoconto del Task 15.
-- Da decidere con l'utente: i due minori del secondo giro di revisione (rapporto, §9).
+- Resoconto del Task 15 dato all'utente il 2026-11-16 (criteri del §10 del rapporto: 1 soddisfatto
+  con l'eccezione di R-A8, 2 e 3 soddisfatti, 4 da fare); in attesa del via libera, chiesto nella
+  sessione successiva.
+- Da decidere con l'utente: i due minori del secondo giro di revisione (rapporto, §9): un CA-58 che
+  passasse il merito risulterebbe `passed` con i documenti che dicono «non soddisfatta»; con `xfail`
+  la risposta del modello si vede solo con `-rA` o `-s`.
+- Prove instabili (F6): `test_first_turn_information_survives_compression` (router) e l'uso di
+  `calculate` dalla pagina di Compose (2 volte su 3).
+- Registro del piano, con le righe `Ruling:`, in `.superpowers/sdd/2026-11-15-correzioni-auto-claude/`
+  (ignorato da Git): da elencare all'utente e cancellare alla chiusura del piano.
 - Esito delle correzioni: R-A8 non corretto, **debito noto** per decisione dell'utente; R-A1 al
   gradino 3 (CA-58 fallimento atteso per limite del modello); gli altri debiti noti in `TODO.md`.
-- Prossimo: resoconto all'utente e Task 16; poi il push solo su richiesta (prompt per la sessione
-  dopo l'integrazione in `docs/superpowers/prossimo-prompt.txt`).
+- Prossimo: via libera dell'utente, decisione sui due minori e Task 16; poi il push solo su
+  richiesta (prompt per la sessione nuova in `docs/superpowers/prossimo-prompt.txt`).
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
