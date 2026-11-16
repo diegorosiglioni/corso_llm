@@ -49,7 +49,7 @@ from assistant.router import (
     router_messages,
 )
 from assistant.summary import cut_index, summary_input, with_summary
-from assistant.tools import ToolUnavailableError
+from assistant.tools import ToolOutcomeUnknownError, ToolUnavailableError
 
 log = logging.getLogger(__name__)
 
@@ -301,6 +301,12 @@ def build_graph(
             }, "tool_error"
         try:
             result = tool.invoke(arguments)
+        except ToolOutcomeUnknownError as error:  # not "Riprova": a write may have happened
+            return {
+                "error": f"Connessione con lo strumento caduta durante la chiamata ({error}): "
+                "l'esito è incerto. Se la chiamata modificava dati, controlla lo stato (per "
+                "esempio con list_notes) prima di ripeterla."
+            }, "transport_error"
         except ToolUnavailableError as error:
             return {
                 "error": f"Strumento non raggiungibile: {error}. Riprova o riavvia il servizio dell'agente."

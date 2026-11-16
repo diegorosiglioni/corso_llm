@@ -30,7 +30,7 @@ from assistant.router import (
     router_messages,
 )
 from assistant.summary import summary_input, with_summary
-from assistant.tools import ToolUnavailableError
+from assistant.tools import ToolOutcomeUnknownError, ToolUnavailableError
 from conftest import (
     TEST_SCOPE,
     ApprovingReviewer,
@@ -192,6 +192,26 @@ def test_unavailable_tool_is_transport_error(caplog):
         "error": "Strumento non raggiungibile: server terminato. Riprova o riavvia il servizio dell'agente."
     }
     assert "variant=mcp tool=add_note call_id=c1" in caplog.text
+    assert "step=1/5 execution=transport_error call_id=c1" in caplog.text
+
+
+def test_unknown_outcome_does_not_invite_a_blind_retry(caplog):
+    caplog.set_level(logging.INFO, logger="assistant.graph")
+
+    def lost(**_):
+        raise ToolOutcomeUnknownError("Connection closed")
+
+    remote = StructuredTool.from_function(
+        lost, name="add_note", description="d",
+        args_schema={"type": "object", "properties": {}},
+        metadata={"variant": "mcp"},
+    )
+    r = start_turn(FakeModel([tool_call(name="add_note"), AIMessage("ok")]), tools=[remote])
+    assert json.loads(tool_messages(r["messages"])[0].content) == {
+        "error": "Connessione con lo strumento caduta durante la chiamata (Connection closed): "
+        "l'esito è incerto. Se la chiamata modificava dati, controlla lo stato (per esempio con "
+        "list_notes) prima di ripeterla."
+    }
     assert "step=1/5 execution=transport_error call_id=c1" in caplog.text
 
 
