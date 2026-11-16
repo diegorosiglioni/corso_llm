@@ -48,6 +48,7 @@ def _must_not_call(*args, **kwargs):
 @pytest.mark.parametrize(("env", "message"), [
     ({"AGENT_URL": "127.0.0.1:8000"},
      "AGENT_URL deve iniziare con http:// o https://, ricevuto '127.0.0.1:8000'."),
+    ({"AGENT_URL": "http://[::1"}, "AGENT_URL non è un indirizzo valido, ricevuto 'http://[::1'."),
     ({"LOG_LEVEL": "tanto"}, "LOG_LEVEL deve essere uno tra DEBUG, INFO, WARNING, ERROR"),
 ])
 def test_invalid_config_exits_1(env, message, monkeypatch, capsys):

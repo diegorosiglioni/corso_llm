@@ -94,6 +94,7 @@ def test_tables_are_created_before_serving(engines, monkeypatch):  # RF-61
     ({}, "Manca DATABASE_URL."),
     ({"DATABASE_URL": "sqlite:///chat.sqlite3"}, "ricevuto lo schema 'sqlite'"),
     ({**VALID, "BACKEND_PORT": "0"}, "BACKEND_PORT deve essere un intero tra 1 e 65535"),
+    ({**VALID, "AGENT_URL": "http://[::1"}, "AGENT_URL non è un indirizzo valido"),
 ])
 def test_invalid_config_exits_1(env, message, engines, server, capsys):  # CA-75
     assert main(env) == 1

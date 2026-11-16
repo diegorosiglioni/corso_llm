@@ -8,6 +8,7 @@ import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 # Libraries whose INFO logs (HTTP requests, protocol details) are hidden unless LOG_LEVEL=DEBUG.
@@ -165,12 +166,24 @@ class ClientConfig:
     log_level: str = "INFO"  # LOG_LEVEL
 
 
+def _is_valid_url(url: str) -> bool:
+    """A host name and, if present, a port in 0…65535 (R-B9: no InvalidURL at the first request)."""
+    try:
+        parts = urlsplit(url)
+        parts.port  # raises ValueError for a port that is not a number or out of range
+    except ValueError:
+        return False
+    return bool(parts.hostname)
+
+
 def load_client_config(env: Mapping[str, str]) -> ClientConfig:
     """Reads and validates the configuration of the CLI; the URL loses its final "/"."""
     problems = []
     agent_url = env.get("AGENT_URL", "").strip() or DEFAULT_AGENT_URL
     if not agent_url.startswith(("http://", "https://")):
         problems.append(f"AGENT_URL deve iniziare con http:// o https://, ricevuto '{agent_url}'.")
+    elif not _is_valid_url(agent_url):
+        problems.append(f"AGENT_URL non è un indirizzo valido, ricevuto '{agent_url}'.")
     log_level = read_log_level(env, problems)
     if problems:
         raise ConfigError(" ".join(problems))

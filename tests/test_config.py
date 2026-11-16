@@ -279,11 +279,22 @@ def test_client_defaults_need_no_lm_studio_variables():
     ("http://agent:8000", "http://agent:8000"),
     (" https://agente.example/ ", "https://agente.example"),
     ("http://127.0.0.1:9000//", "http://127.0.0.1:9000"),
+    ("http://[::1]:8000", "http://[::1]:8000"),
+    ("http://agent:8000/api/", "http://agent:8000/api"),
     ("", "http://127.0.0.1:8000"),
     ("   ", "http://127.0.0.1:8000"),
 ])
 def test_agent_url(value, expected):
     assert load_client_config({"AGENT_URL": value}).agent_url == expected
+
+
+@pytest.mark.parametrize("value", [
+    "http://[::1", "http://agent:porta", "https://agent:99999", "http://", "http://:8000",
+])
+def test_malformed_agent_url(value):  # R-B9
+    assert client_error({"AGENT_URL": value}) == (
+        f"AGENT_URL non è un indirizzo valido, ricevuto '{value}'."
+    )
 
 
 def test_client_log_level():
