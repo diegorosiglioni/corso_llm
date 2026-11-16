@@ -6,9 +6,11 @@
   `320c881`…`c53cc0a`); poi revisione (F1–F3, 2026-11-15) e correzioni (F4, 2026-11-15 e 16) sullo
   stesso branch, con la sistemazione dei file del loop (F5). Nessun push. `dev` locale a `428cc8a`
   (un commit avanti a `origin/dev`), `main`, `origin/dev` e `origin/main` a `d3b511e`.
-- Piano delle correzioni (`docs/superpowers/plans/2026-11-15-correzioni-auto-claude.md`): Task 0–14
-  fatti; Task 15 (verifica finale, F6) in corso, sezione F6 più sotto; Task 16 (avanzamento rapido
-  di `dev` su `auto-claude`) solo dopo il via libera dell'utente al resoconto del Task 15.
+- Piano delle correzioni (`docs/superpowers/plans/2026-11-15-correzioni-auto-claude.md`): Task 0–15
+  fatti (verifica finale F6 del 2026-11-16: nessun fallimento confermato, due prove instabili,
+  sezione F6 più sotto); Task 16 (avanzamento rapido di `dev` su `auto-claude`) solo dopo il via
+  libera dell'utente al resoconto del Task 15.
+- Da decidere con l'utente: i due minori del secondo giro di revisione (rapporto, §9).
 - Esito delle correzioni: R-A8 non corretto, **debito noto** per decisione dell'utente; R-A1 al
   gradino 3 (CA-58 fallimento atteso per limite del modello); gli altri debiti noti in `TODO.md`.
 - Prossimo: resoconto all'utente e Task 16; poi il push solo su richiesta (prompt per la sessione
@@ -2233,6 +2235,74 @@ Task 14 del piano, eseguito da un agente con contesto pulito.
   R-A3 dava `TypeError`): eseguito da PowerShell, stampa le sette righe attese.
 - Nota sui messaggi dei commit del loop: già nello «Stato attuale», verificata.
 - Controllo: `rg "loop.sh|PROMPT.md" tests` → nessun riferimento nei test.
+
+### F6 · Verifica finale — fatto (2026-11-16)
+
+Task 15 del piano, eseguito da un agente con contesto pulito, dopo l'ultima modifica al codice
+(`10d775c`; dopo ci sono solo documenti). Ambiente: LM Studio con `google/gemma-4-e2b`,
+`assistente-postgres` attivo su `127.0.0.1:5433`, Compose spento fino al passo 3.
+
+**Passo 1 · modello simulato**
+| Comando | Esito | Durata |
+|---|---|---|
+| `.\.venv\Scripts\python.exe -m pytest` | 1051 passed, 93 deselected | 78 s |
+| `pytest -m browser -v` (Edge) | 25 passed | 11 s |
+| `$env:BROWSER_CHANNEL = "chrome"`, `pytest -m browser -v` | 25 passed | 10 s |
+
+**Passo 2 · modello vero (LM Studio, PostgreSQL, browser)**
+| Comando | Esito | Durata |
+|---|---|---|
+| `pytest -m real -v -rA` (Edge) | 65 passed, 1 skipped (`PRAGMA` su PostgreSQL, atteso), 1 xfailed (CA-58, «limite del modello», R-A1), **1 failed** | 53:06 |
+| ripetizione `pytest tests/test_real.py -m real -v -k test_first_turn_information_survives_compression` | 1 passed → **instabile** | 3:52 |
+| `BROWSER_CHANNEL=chrome`, `pytest tests/test_real.py -m real -v -k frontend` | 2 passed | 3:04 |
+
+- Fallimento della suite, poi passato alla ripetizione: `test_first_turn_information_survives_compression`
+  (Step 3, riassunto). Il riassunto conteneva il nome («L'utente si è presentato come Paolo.»), ma
+  il router ha mandato «Come mi chiamo?» al rifiuto: «Mi dispiace, questa domanda è fuori dal mio
+  ambito: La richiesta non rientra nelle funzioni dell'assistente del laboratorio…». Decisione del
+  router, non del riassunto; codice e prompt non toccati.
+- Passate al primo tentativo, tra le altre, le prove nuove delle correzioni: R-B1
+  (`test_lm_studio_accepts_a_normalized_history`), CA-50 dal servizio
+  (`test_default_timezone_from_preferences_in_the_service`), CA-58 dalla CLI attraverso il servizio
+  (`test_explain_prompt_from_the_cli`, `XFAIL` solo per il controllo di merito), i test del NUL su
+  PostgreSQL (`test_nul_in_the_question_is_rejected`, `test_nul_in_the_title_is_rejected`).
+  Non c'è una prova reale di R-A8 (debito noto, Task 9).
+
+**Passo 3 · Docker**
+1. R-C1: `docker port assistente-postgres` → solo `5432/tcp -> 127.0.0.1:5433`.
+2. R-C2: `$env:POSTGRES_PASSWORD` dal `.env` (non stampata), `docker compose -p assistente-prova up
+   -d --build` (5 s, immagini dalla cache, volumi `assistente-prova_*` creati vuoti);
+   `docker compose -p assistente-prova ps` → `postgres` e `agent` healthy, `backend` e `frontend`
+   Up; `RestartCount=0` per `backend`; `Invoke-WebRequest http://127.0.0.1:8001/chats` → `200`,
+   `[]`, `application/json; charset=utf-8`; log di `backend` senza uscite né «Database non
+   raggiungibile»; `docker compose -p assistente-prova down -v` → rimossi solo i due volumi di
+   `assistente-prova`. Restano le immagini `assistente-prova-*`.
+3. `docker compose up -d --build` del progetto normale (4 s, cache); dalla pagina
+   `http://127.0.0.1:8080` con Edge (script Playwright temporaneo nella scratchpad), tre esecuzioni:
+   - chat 6, «Quanto fa 17 * 23?»: bozza visibile, risposta, riepilogo degli strumenti e chat uguale
+     dopo il ricaricamento verificati dallo script; log di `agent` `tool=calculate` e
+     `api response=chat_stream status=200 outcome=done tools=calculate … text_events=12` (68 s).
+     I dettagli non sono stati stampati: lo script si è fermato sulla domanda successiva;
+   - chat 7, «Che cos'è 2 + 2?» (per R-B7): risposta «2 + 2 è uguale a 4.» senza strumenti; lo script
+     cercava il riepilogo degli strumenti, che senza strumenti non c'è (errore dello script, corretto);
+   - chat 8, «Quanto fa 17 * 23?»: «17 * 23 è uguale a 391.» **senza** `calculate` (`tools=` vuoto
+     nel log di `agent`): il modello ha fatto il conto da solo;
+   - chat 9, «Quanto fa 17 * 23?»: bozza vista in 12 stati, «Uso lo strumento calculate…» durante
+     l'attesa, risposta «17 * 23 fa 391.», «Strumenti usati: calculate», nessun errore JavaScript,
+     chat uguale dopo il ricaricamento (64 s); log di `agent` `tool=calculate` e `outcome=done
+     tools=calculate`, di `backend` `response=send_message_stream chat=9 status=200 outcome=done
+     tools=calculate`.
+   Esito: streaming dalla pagina di Compose riuscito; uso dello strumento **instabile** (2 volte
+   su 3 per la stessa domanda).
+4. R-B10: `docker compose exec -T agent printenv POSTGRES_PASSWORD` → una riga vuota, uscita 0.
+5. R-B7: Windows PowerShell 5.1.26100, `Invoke-RestMethod http://127.0.0.1:8001/chats/7` → titolo
+   «Che cos'è 2 + 2?» e risposta «2 + 2 è uguale a 4.» corretti; anche la chat 5, storpiata il
+   2026-11-15 («Ã¨»), ora dà «A Sydney è alle…»; `Content-Type: application/json; charset=utf-8`.
+6. `docker compose down` → container rimossi; restano i volumi `assistente-laboratorio_notes-data` e
+   `assistente-laboratorio_postgres-data`; `assistente-postgres` resta attivo.
+
+Prove instabili: `test_first_turn_information_survives_compression` (router) e l'uso di
+`calculate` dalla pagina di Compose. Nessun fallimento confermato.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

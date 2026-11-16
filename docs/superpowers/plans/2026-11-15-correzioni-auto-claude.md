@@ -698,15 +698,15 @@ def test_database_password_stays_out_of_agent_and_cli(tmp_path):  # R-B10
 
 Prove nell'ordine; ognuna annotata in `PROGRESS.md` con comando, esito e durata.
 
-- [ ] **Passo 1 — modello simulato:** `.\.venv\Scripts\python.exe -m pytest` → tutto verde;
+- [x] **Passo 1 — modello simulato:** `.\.venv\Scripts\python.exe -m pytest` → tutto verde;
   `pytest -m browser -v` con Edge; `$env:BROWSER_CHANNEL = "chrome"`, `pytest -m browser -v`, poi
   `Remove-Item Env:BROWSER_CHANNEL`.
-- [ ] **Passo 2 — modello vero, suite completa (Compose spento, `assistente-postgres` attivo):**
+- [x] **Passo 2 — modello vero, suite completa (Compose spento, `assistente-postgres` attivo):**
   `.\.venv\Scripts\python.exe -m pytest -m real -v` (circa 50 minuti) → nessun fallimento
   confermato; atteso `1 skipped` (`PRAGMA` su PostgreSQL) e, se il Task 10 è arrivato al gradino 3,
   `1 xfailed`. Poi `$env:BROWSER_CHANNEL = "chrome"`,
   `pytest tests/test_real.py -m real -v -k frontend`.
-- [ ] **Passo 3 — Docker:**
+- [x] **Passo 3 — Docker:**
   1. `docker port assistente-postgres` → solo `127.0.0.1:5433` (R-C1);
   2. R-C2: con `$env:POSTGRES_PASSWORD` dal `.env`, `docker compose -p assistente-prova up -d --build`;
      `docker compose -p assistente-prova ps` → `postgres` healthy, `backend` attivo;
@@ -721,11 +721,11 @@ Prove nell'ordine; ognuna annotata in `PROGRESS.md` con comando, esito e durata.
   5. R-B7: da Windows PowerShell 5.1, `Invoke-RestMethod http://127.0.0.1:8001/chats/<id>` sulla
      chat del punto 3 o su una con lettere accentate → «è» corretto;
   6. `docker compose down`.
-- [ ] **Passo 4:** controllo dei criteri del §10 della specifica, uno per uno; resoconto
+- [x] **Passo 4:** controllo dei criteri del §10 della specifica, uno per uno; resoconto
   all'utente: eseguito, esito, prove instabili, che cosa resta non dimostrato (per esempio
   l'origine delle chiamate malformate col modello vero, la corsa di R-C2, l'avviso del revisore
   nella bozza).
-- [ ] **Passo 5:** commit `docs(revisione): verifica finale delle correzioni` (`PROGRESS.md` e
+- [x] **Passo 5:** commit `docs(revisione): verifica finale delle correzioni` (`PROGRESS.md` e
   rapporto).
 
 ---

@@ -256,3 +256,22 @@ Un revisore con contesto pulito (subagente in sola lettura, modello Opus) ha let
   `xfail` la risposta stampata si vede solo con `-rA` o `-s`.
 
 Nessun grave o importante aperto dopo il secondo giro.
+
+## 10. Verifica finale (F6, 2026-11-16)
+
+Dopo l'ultima modifica al codice (`10d775c`); dettagli e durate in `PROGRESS.md`, «F6 · Verifica
+finale».
+
+| # | Prova | Modello | Esito |
+|---|---|---|---|
+| 1 | `pytest`; `pytest -m browser` con Edge e con Chrome | simulato | 1051 passed; 25 e 25 passed |
+| 2 | `pytest -m real -v` (Edge) | vero | 65 passed, 1 skipped (atteso), 1 xfailed (CA-58, R-A1 gradino 3), 1 failed poi passato alla ripetizione (instabile) in 53:06 |
+| 3 | `-k frontend` con Chrome | vero | 2 passed |
+| 4 | R-C1 `docker port`; R-C2 con volumi vuoti (`assistente-prova`) | — | solo `127.0.0.1:5433`; `backend` attivo senza riavvii, `/chats` `200` |
+| 5 | Streaming dalla pagina di Compose, «Quanto fa 17 * 23?» | vero | riuscito con `calculate` 2 volte su 3; una volta «391» senza strumento |
+| 6 | R-B10 `printenv POSTGRES_PASSWORD` nell'agente; R-B7 `Invoke-RestMethod` da PowerShell 5.1 | — | riga vuota; «è» corretto, `charset=utf-8` |
+
+Prove instabili: `test_first_turn_information_survives_compression` (il router ha rifiutato «Come mi
+chiamo?» come fuori ambito, poi l'ha accettato) e l'uso di `calculate` dalla pagina. Nessun
+fallimento confermato. R-A8 resta un debito noto per decisione dell'utente; CA-58 resta non
+soddisfatta per limite del modello.
