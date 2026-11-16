@@ -33,8 +33,11 @@
   `TODO.md`.
 - Prove instabili (F6): `test_first_turn_information_survives_compression` (router) e l'uso di
   `calculate` dalla pagina di Compose (2 volte su 3).
-- Prossimo: la scelta del lavoro successivo, un debito di `TODO.md` o la lezione successiva, con il
-  proprio ciclo di specifica e piano. Una sessione nuova parte da questa sezione.
+- Robustezza del servizio (debiti R-B3, R-B4, R-B9) fatta il 2026-11-16 su `dev`, senza push:
+  specifica `docs/superpowers/specs/2026-11-16-robustezza-servizio-design.md`, piano
+  `docs/superpowers/plans/2026-11-16-robustezza-servizio.md`, sezione più sotto.
+- Prossimo: un altro debito di `TODO.md` o la lezione successiva, con il proprio ciclo di
+  specifica e piano. Una sessione nuova parte da questa sezione.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
@@ -2345,6 +2348,44 @@ Task 16 del piano, in sessione.
 - Push su richiesta dell'utente: `git push origin dev` e `git push origin dev:main`
   (`d3b511e..1b77718`, avanzamento rapido accettato), `git fetch origin main:main`; `dev`, `main`,
   `origin/dev` e `origin/main` a `1b77718`. Poi `git branch -d auto-claude` su conferma.
+
+## Robustezza del servizio: R-B3, R-B4, R-B9 (2026-11-16)
+
+Primo debito scelto dall'utente dopo la pulizia: il gruppo «errori e messaggi poco chiari quando
+qualcosa non va». Riconnessione automatica scelta dal progettista su delega dell'utente, al posto
+di «il servizio esce e Compose lo riavvia» e di «solo messaggi più onesti». Specifica e piano
+approvati, esecuzione in linea (senza sottoagenti), un commit per task.
+
+- Prova preliminare (2026-11-16, script usa e getta): con il processo del server MCP ucciso, ogni
+  richiesta fallisce subito con `MCPError` −32000 «Connection closed» e la sessione non si chiude
+  da sola; prompt sconosciuto e risorsa inesistente danno errori diversi. Da qui la regola: si
+  riavvia solo per −32000 (o stream di anyio chiusi).
+- Task 1 (R-B9): `load_client_config` controlla l'indirizzo con `urlsplit` (host e porta);
+  «AGENT_URL non è un indirizzo valido, ricevuto '…'.» nella CLI e nel back-end.
+- Task 2 (R-B4): `McpClient.list_tools(timeout=…)`; `/status` dà a MCP `STATUS_MCP_TIMEOUT` 5 s;
+  `STATUS_TIMEOUT` della CLI da 10 a 20 s.
+- Task 3 (R-B3): `McpClient` riavvia il server con una connessione chiusa e ripete la richiesta
+  una volta; con un tempo scaduto non ripete, ma riavvia prima della richiesta successiva; lock e
+  contatore di generazione per le richieste contemporanee; nessun riavvio dopo `__exit__`. Log
+  `mcp_restart`, `mcp_restarted`, `mcp_restart_failed`. Test con un server di prova
+  (`tests/mcp_test_server.py`, strumento `pid`, avvio che fallisce con `--fail-if`):
+  `tests/test_mcp_client.py` ripetuto tre volte, 53 passed ogni volta.
+- Task 4 (R-B3): controllo di salute di `agent` sano solo con `mcp.status` `ok` (anche con LM
+  Studio spento), provato eseguendo il comando con un `httpx` finto; testo per il modello
+  «Riprova o riavvia il servizio dell'agente».
+- Prova manuale locale (LM Studio con `google/gemma-4-e2b`): servizio avviato, processo del server
+  MCP ucciso con `Stop-Process` → `/status` subito `200` con `mcp` `ok`, nuovo PID,
+  `mcp_restarted duration_ms=981`. Ucciso di nuovo, poi `POST /chat` «Usa lo strumento calculate
+  per calcolare 1234 * 5678.»: la chiamata a `calculate` ha trovato la connessione chiusa,
+  `mcp_restarted duration_ms=1020`, `execution=ok`, risultato 7006652. Dalla CLI «Quanto fa 17 * 23?»
+  → «391» (il riavvio l'ha fatto il `/status` iniziale della CLI; il modello non ha usato lo
+  strumento).
+- Prova manuale in Docker: `docker compose up -d --build`, `agent` `healthy`; processo MCP ucciso
+  dentro il container → dopo 25 s, al controllo di salute, `mcp_restarted duration_ms=970` e
+  `agent` ancora `healthy`. Ucciso di nuovo, poi una domanda con `calculate` dal back-end
+  (`POST /chats/{id}/messages`, la stessa strada della pagina): riavvio, `tools_used` con
+  `calculate` ok, risultato 7006652; chat di prova cancellata, `docker compose down`.
+- Suite: `.\.venv\Scripts\python.exe -m pytest` → 1073 passed, 93 deselected.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

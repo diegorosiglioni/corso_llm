@@ -15,6 +15,7 @@ con il proprio ciclo di specifica e piano (`CLAUDE.md`, «Metodo»). Test senza 
 - [x] Lezione 6, Step 3 · Riassunto: nodo `summary` con `SUMMARY_MAX_MESSAGES` e `SUMMARY_KEEP_MESSAGES`, prove reali e Docker
 - [x] Lezione 6, Step 4–9 (loop autonomo del 2026-11-14 su `auto-claude`, poi revisione, correzioni e verifica del 2026-11-15 e 16): resource `utente://preferenze`, prompt MCP `spiega` e `riassumi_conversazione` con `/prompts` e `/prompt`, agente come servizio HTTP, back-end con chat in PostgreSQL, front-end web, Docker Compose a quattro container
 - [x] Facoltativo · Streaming della risposta con Server-Sent Events: bozza mostrata mentre arriva, strumenti indicati, risposta salvata alla fine
+- [x] Robustezza del servizio (2026-11-16, debiti R-B3, R-B4, R-B9): riavvio automatico del server MCP, controllo di salute di `agent` legato a MCP, `/status` con 5 s per MCP e CLI che aspetta 20 s, `AGENT_URL` malformato come «Configurazione non valida»
 
 ## Debiti noti
 
@@ -33,9 +34,6 @@ di ciascuno nel rapporto [`docs/superpowers/reviews/2026-11-15-auto-claude.md`](
 | R-P1 | La pagina mostra markdown e LaTeX delle risposte così come sono | Servirebbe una libreria o un'istruzione nel prompt, che rischia di far perdere l'uso degli strumenti | §3 |
 | R-A9 | CLI e back-end importano `mcp_client` (quindi `fastmcp`, `langchain_core`) per due dataclass | Minore confermato che l'utente ha scelto di non correggere ora | §3 |
 | R-B2 | Nessun test di `/chat` con uno strumento MCP irraggiungibile durante il turno (solo a livello di grafo) | Come sopra | §3 |
-| R-B3 | MCP morto: `/status` `503` per sempre con «riavvia l'assistente»; healthcheck di `agent` che accetta qualsiasi codice | Come sopra | §3 |
-| R-B4 | `STATUS_TIMEOUT` 10 s contro un'attesa di MCP fino a 35 s: con MCP bloccato la CLI esce invece di avvisare | Come sopra | §3 |
-| R-B9 | `AGENT_URL` malformato → traceback `InvalidURL` invece di «Configurazione non valida» | Come sopra | §3 |
 | R-C5 | `list_chats` e `get_chat` caricano anche la cronologia JSON completa dell'agente | Come sopra | §3 |
 | R-C8 | Test di `test_docker.py` saltati solo senza l'eseguibile `docker`, non senza il plugin `compose` | Come sopra | §3 |
 | R-D2 | `chat_stream` chiuso prima del primo `next` lascia aperta la connessione httpx | Come sopra | §3 |

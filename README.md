@@ -73,7 +73,7 @@ PostgreSQL. Il JavaScript della pagina del front-end si prova con Node.js (`node
 da `pytest`; senza Node il test si salta col motivo). I Dockerfile si controllano come testo, senza
 costruire immagini, e `compose.yaml` con `docker compose config` su una copia con un `.env` di
 credenziali finte, senza il demone (`tests/test_docker.py`; senza la CLI di Docker questi test si
-saltano col motivo). Esito al 2026-11-16: `1051 passed, 93
+saltano col motivo). Esito al 2026-11-16: `1073 passed, 93
 deselected` (le 93 deselezionate sono le 68 prove reali, 28 con LM Studio e 40 test dell'archivio
 ripetuti su PostgreSQL, e i 25 test nel browser).
 
@@ -107,7 +107,7 @@ L'applicazione legge variabili d'ambiente e il file con l'ambito dell'assistente
 | `PREFERENCES_FILE` | no | `assistant/data/preferenze.json` del pacchetto | file JSON delle preferenze dell'utente, letto dal server MCP (sezione «Preferenze dell'utente»); un percorso relativo vale dalla cartella di avvio; un file mancante non blocca l'avvio |
 | `AGENT_HOST` | no | `127.0.0.1` | indirizzo su cui ascolta il servizio HTTP dell'agente (`0.0.0.0` per accettare connessioni da altri computer o container) |
 | `AGENT_PORT` | no | `8000` | porta del servizio HTTP dell'agente (intero tra 1 e 65535) |
-| `AGENT_URL` | no | `http://127.0.0.1:8000` | indirizzo del servizio dell'agente per la CLI (`http://` o `https://`) |
+| `AGENT_URL` | no | `http://127.0.0.1:8000` | indirizzo del servizio dell'agente per la CLI (`http://` o `https://`, con un nome di host e, se c'è, una porta valida) |
 
 Il servizio dell'agente (`python -m assistant.service`) legge tutte le variabili tranne
 `AGENT_URL`; la CLI (`python -m assistant`) legge solo `AGENT_URL` e `LOG_LEVEL`.
@@ -739,9 +739,14 @@ scoperto con `tools/list`; l'applicazione espone al modello solo i sette nomi at
   `created_at` è in UTC.
 
 Se il server MCP non parte, il servizio dell'agente esce con «Server MCP non avviato: <motivo>». Se
-il collegamento si interrompe mentre il servizio è attivo, lo strumento risponde «Strumento non
-raggiungibile: … Riprova o riavvia l'assistente.» e `GET /status` risponde `503`: non c'è
-riconnessione automatica, va riavviato il servizio.
+il server muore mentre il servizio è attivo, la richiesta successiva (uno strumento, `/prompts` o
+`GET /status`) lo riavvia e viene ripetuta una volta; nel log del servizio compaiono
+`mcp_restart reason="Connection closed"` e `mcp_restarted duration_ms=…`. Se il server è bloccato
+(nessuna risposta entro il tempo massimo) la richiesta fallisce senza essere ripetuta e il server
+viene riavviato prima della successiva. Se non riparte, lo strumento risponde «Strumento non
+raggiungibile: server MCP non riavviato: <motivo>. Riprova o riavvia il servizio dell'agente.»
+(`mcp_restart_failed` nel log) e la richiesta successiva riprova. `GET /status` aspetta MCP al più
+5 s; la CLI aspetta `/status` al più 20 s.
 
 In un turno il modello è chiamato al più `MAX_STEPS` volte; se all'ultimo passaggio chiede ancora
 uno strumento, il turno termina con «Ho raggiunto il limite di 5 passaggi senza una risposta
@@ -805,8 +810,10 @@ CLI:
   `http://agent:8000`. Parte solo quando PostgreSQL è pronto (`healthcheck` con `pg_isready`).
 - `agent`: il servizio HTTP dell'agente (`python -m assistant.service`, con il server MCP come
   sottoprocesso nello stesso container e le note nel volume `notes-data`), **non pubblicato**: lo
-  raggiungono solo back-end e CLI sulla rete di Compose. Un `healthcheck` lo dichiara pronto quando
-  `GET /status` risponde, con qualsiasi codice (LM Studio spento dà `503`, ma l'agente c'è). Lo stato
+  raggiungono solo back-end e CLI sulla rete di Compose. Un `healthcheck` lo dichiara sano quando
+  `GET /status` risponde e il server MCP è raggiungibile (`mcp.status` `ok`), anche con LM Studio
+  spento (`503` per il solo modello). Il controllo, ogni 30 s, riavvia un server MCP morto anche se
+  nessuno usa l'app. Lo stato
   si legge da dentro il container:
   `docker compose exec -T agent python -c "import httpx; print(httpx.get('http://127.0.0.1:8000/status').text)"`.
 - `postgres`: PostgreSQL ufficiale (`postgres:18.6`), dati nel volume `postgres-data`, non
@@ -901,6 +908,11 @@ sessione, ogni domanda dà `Errore: agente non raggiungibile su http://127.0.0.1
 la cronologia resta nella CLI: si può riprovare dopo averlo riavviato. Lo stato si controlla con
 `curl.exe -s http://127.0.0.1:8000/status`, che mostra il corpo anche con `503` (con `503`
 `Invoke-RestMethod` dà invece un errore di PowerShell).
+
+**«Configurazione non valida: AGENT_URL non è un indirizzo valido, ricevuto '…'.»** (CLI o
+back-end) L'indirizzo comincia con `http://` o `https://` ma è malformato: per esempio una
+parentesi di IPv6 non chiusa (`http://[::1`), una porta non numerica o fuori da 1–65535, o il nome
+dell'host mancante. Correggere `AGENT_URL`, per esempio `http://127.0.0.1:8000`.
 
 **Il back-end non parte.** «Configurazione non valida: Manca DATABASE_URL.» (o lo schema ricevuto, mai
 l'indirizzo intero): impostare `DATABASE_URL`. «Database non raggiungibile: …» dopo al più 10 s:
