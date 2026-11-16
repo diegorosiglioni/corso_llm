@@ -3,16 +3,23 @@
 import asyncio
 import json
 import logging
+import os
+import re
+import signal
 import sys
+import threading
 import time
+from pathlib import Path
 
 import pytest
 from fastmcp import Client
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from mcp import types as mcp_types
+from mcp.shared.exceptions import MCPError
 from mcp.types import (
     BlobResourceContents,
     GetPromptResult,
+    REQUEST_TIMEOUT,
     ImageContent,
     Prompt,
     TextContent,
@@ -434,3 +441,127 @@ def test_close_releases_the_database(tmp_path):
     with McpClient(command, args, cwd=cwd) as c:
         c.call_tool("add_note", {"text": "a"})
     db.unlink()  # on Windows this fails if the server process still holds the file
+
+
+# --- reconnection (R-B3) ---
+
+TEST_SERVER = Path(__file__).with_name("mcp_test_server.py")
+
+
+@pytest.fixture
+def restartable(tmp_path):
+    flag = tmp_path / "fail-on-start"
+    with McpClient(sys.executable, [str(TEST_SERVER), "--fail-if", str(flag)], timeout=5) as c:
+        yield c, flag
+
+
+def server_pid(client) -> int:
+    return client.call_tool("pid", {})["pid"]
+
+
+def kill_server(client) -> int:
+    pid = server_pid(client)
+    os.kill(pid, signal.SIGTERM)  # TerminateProcess on Windows
+    time.sleep(0.5)  # the client sees the pipe close
+    return pid
+
+
+def restart_logs(caplog) -> list[tuple[int, str]]:
+    return [(r.levelno, r.getMessage()) for r in caplog.records
+            if r.name == "assistant.mcp_client" and r.getMessage().startswith("mcp_restart")]
+
+
+def test_dead_server_is_restarted_and_the_request_repeated(restartable, caplog):
+    client, _ = restartable
+    caplog.set_level(logging.INFO, "assistant.mcp_client")
+    old = kill_server(client)
+    assert [spec.name for spec in client.list_tools()] == ["pid"]
+    assert server_pid(client) != old
+    (level, first), (info, second) = restart_logs(caplog)
+    assert (level, first) == (logging.WARNING, 'mcp_restart reason="Connection closed"')
+    assert info == logging.INFO and re.fullmatch(r"mcp_restarted duration_ms=\d+", second)
+
+
+def test_call_tool_is_repeated_on_the_new_server(restartable):
+    client, _ = restartable
+    old = kill_server(client)
+    assert client.call_tool("pid", {})["pid"] != old
+
+
+def test_server_errors_do_not_restart(client, caplog):
+    caplog.set_level(logging.INFO, "assistant.mcp_client")
+    with pytest.raises(PromptUnavailableError):
+        client.get_prompt("nessuno", {})
+    with pytest.raises(ResourceUnavailableError):
+        client.read_resource("utente://niente")
+    assert "error" in client.call_tool("nessuno", {})
+    assert restart_logs(caplog) == []
+
+
+def test_failed_restart_is_reported_and_retried(restartable, caplog):
+    client, flag = restartable
+    flag.touch()
+    kill_server(client)
+    with pytest.raises(ToolUnavailableError, match=r"^server MCP non riavviato: "):
+        client.list_tools()
+    assert any(level == logging.WARNING and text.startswith("mcp_restart_failed error=")
+               for level, text in restart_logs(caplog))
+    flag.unlink()
+    assert server_pid(client) > 0
+
+
+def test_timeout_is_not_repeated_but_restarts_before_the_next_request(restartable, monkeypatch):
+    client, _ = restartable
+    old, calls = server_pid(client), []
+
+    async def slow(self):
+        calls.append(1)
+        await asyncio.sleep(5)
+    monkeypatch.setattr(Client, "list_tools", slow)
+    with pytest.raises(ToolUnavailableError, match=r"^nessuna risposta entro 0\.2 s$"):
+        client.list_tools(timeout=0.2)
+    assert calls == [1]
+    monkeypatch.undo()
+    assert server_pid(client) != old
+
+
+def test_library_timeout_counts_as_timeout(restartable, monkeypatch):
+    client, _ = restartable
+    old, calls = server_pid(client), []
+
+    async def timed_out(self, *args, **kwargs):
+        calls.append(1)
+        raise MCPError(code=REQUEST_TIMEOUT, message="Timed out")
+    monkeypatch.setattr(Client, "call_tool", timed_out)
+    with pytest.raises(ToolUnavailableError):
+        client.call_tool("pid", {})
+    assert calls == [1]
+    monkeypatch.undo()
+    assert server_pid(client) != old
+
+
+def test_concurrent_requests_restart_once(restartable, caplog):
+    client, _ = restartable
+    caplog.set_level(logging.INFO, "assistant.mcp_client")
+    kill_server(client)
+    barrier, results = threading.Barrier(2), []
+
+    def work():
+        barrier.wait()
+        results.append(len(client.list_tools()))
+    threads = [threading.Thread(target=work) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(30)
+    assert results == [1, 1]
+    assert sum(text.startswith("mcp_restart reason=") for _, text in restart_logs(caplog)) == 1
+
+
+def test_no_restart_after_close(caplog):
+    caplog.set_level(logging.INFO, "assistant.mcp_client")
+    with McpClient(sys.executable, [str(TEST_SERVER)], timeout=5) as c:
+        pass
+    with pytest.raises(ToolUnavailableError, match="^sessione MCP chiusa$"):
+        c.list_tools()
+    assert restart_logs(caplog) == []

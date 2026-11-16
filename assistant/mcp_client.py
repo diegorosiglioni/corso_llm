@@ -1,20 +1,25 @@
 """Synchronous MCP client: one stdio session kept open in a thread with its own event loop.
 
 The asynchrony stays inside this module: the rest of the application calls blocking methods.
+If the server dies, the client starts it again at the next request (R-B3).
 """
 
 import asyncio
 import concurrent.futures
+import json
 import logging
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
+import anyio
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 from langchain_core.tools import BaseTool, StructuredTool
-from mcp.types import TextContent, TextResourceContents
+from mcp.shared.exceptions import MCPError
+from mcp.types import CONNECTION_CLOSED, REQUEST_TIMEOUT, TextContent, TextResourceContents
 
 from assistant.tools import ToolUnavailableError
 
@@ -97,6 +102,27 @@ def _reason(error: BaseException) -> str:
     return str(error) or type(error).__name__
 
 
+def _is_closed(error: BaseException) -> bool:
+    """The connection to the server is gone (the server died): a restart can help."""
+    if isinstance(error, MCPError):
+        return error.code == CONNECTION_CLOSED
+    return isinstance(error, (anyio.ClosedResourceError, anyio.BrokenResourceError))
+
+
+def _is_timeout(error: BaseException) -> bool:
+    """The library gave up waiting for the server (call_tool has its own timeout)."""
+    return isinstance(error, MCPError) and error.code == REQUEST_TIMEOUT
+
+
+class _ConnectionClosed(Exception):
+    """Internal: a request found the connection closed; `generation` is the session it used."""
+
+    def __init__(self, generation: int, reason: str):
+        super().__init__(reason)
+        self.generation = generation
+        self.reason = reason
+
+
 class McpClient:
     def __init__(
         self, command: str, args: list[str], cwd: str | None = None, timeout: float = 30.0
@@ -110,6 +136,10 @@ class McpClient:
         self._serving: concurrent.futures.Future | None = None
         self._client: Client | None = None
         self._stop: asyncio.Event | None = None
+        self._opened = False  # between __enter__ and __exit__: only then a restart is allowed
+        self._lock = threading.Lock()  # one restart at a time
+        self._generation = 0  # number of restarts: tells a thread whether another restarted
+        self._stale_reason: str | None = None  # set by a timeout: restart before the next request
 
     async def _serve(self, ready: concurrent.futures.Future) -> None:
         """Keeps the fastmcp client open; entering and leaving happen in this same task."""
@@ -129,6 +159,17 @@ class McpClient:
             self._client = None
 
     def __enter__(self) -> "McpClient":
+        self._open()
+        self._opened = True
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._opened = False
+        with self._lock:  # waits for a restart in progress
+            self._shutdown()
+
+    def _open(self) -> None:
+        """Starts the server and the session; McpStartupError if it does not answer."""
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(
             target=self._loop.run_forever, name="mcp-client", daemon=True
@@ -146,10 +187,6 @@ class McpClient:
         except BaseException as error:
             self._shutdown()
             raise McpStartupError(_reason(error)) from error
-        return self
-
-    def __exit__(self, *exc) -> None:
-        self._shutdown()
 
     def _shutdown(self) -> None:
         """Closes the session and the subprocess, then stops the loop and its thread."""
@@ -230,19 +267,70 @@ class McpClient:
         """Runs `request(client)` on the session loop; connection problems → ToolUnavailableError.
 
         Without `timeout` the wait is the session timeout plus 5 s; with it, exactly `timeout`.
+        A closed connection restarts the server and repeats the request once; a timeout repeats
+        nothing, but the server is restarted before the next request.
         """
+        if not self._opened:
+            raise ToolUnavailableError("sessione MCP chiusa")
+        stale = self._stale_reason
+        if stale is not None:
+            self._restart(self._generation, stale)
+        try:
+            return self._run(request, timeout)
+        except _ConnectionClosed as closed:
+            self._restart(closed.generation, closed.reason)
+        try:
+            return self._run(request, timeout)
+        except _ConnectionClosed as closed:
+            raise ToolUnavailableError(closed.reason) from None
+
+    def _run(self, request, timeout: float | None):
+        """One attempt of `_submit`; a closed connection becomes _ConnectionClosed."""
+        generation = self._generation
         client, loop = self._client, self._loop
         if client is None or loop is None:
-            raise ToolUnavailableError("sessione MCP chiusa")
+            raise _ConnectionClosed(generation, "sessione MCP chiusa")
         future = asyncio.run_coroutine_threadsafe(request(client), loop)
         wait, shown = (self._timeout + 5, self._timeout) if timeout is None else (timeout, timeout)
         try:
             return future.result(wait)
         except concurrent.futures.TimeoutError:
             future.cancel()
-            raise ToolUnavailableError(f"nessuna risposta entro {shown:g} s") from None
+            reason = f"nessuna risposta entro {shown:g} s"
+            self._stale_reason = reason
+            raise ToolUnavailableError(reason) from None
         except Exception as error:
+            if _is_closed(error):
+                raise _ConnectionClosed(generation, _reason(error)) from error
+            if _is_timeout(error):
+                self._stale_reason = _reason(error)
             raise ToolUnavailableError(_reason(error)) from error
+
+    def _restart(self, seen_generation: int, reason: str) -> None:
+        """Starts a new server process unless another thread already did after `seen_generation`.
+
+        ToolUnavailableError if the client was closed or the server does not start again; in the
+        second case the next request tries again.
+        """
+        with self._lock:
+            if not self._opened:
+                raise ToolUnavailableError("sessione MCP chiusa")
+            if self._generation != seen_generation and self._stale_reason is None:
+                return
+            log.warning("mcp_restart reason=%s", json.dumps(reason, ensure_ascii=False))
+            started = time.monotonic()
+            self._shutdown()
+            try:
+                self._open()
+            except McpStartupError as error:
+                self._stale_reason = reason
+                log.warning(
+                    "mcp_restart_failed error=%s", json.dumps(str(error), ensure_ascii=False)
+                )
+                raise ToolUnavailableError(f"server MCP non riavviato: {error}") from error
+            self._generation += 1
+            self._stale_reason = None
+            log.info("mcp_restarted duration_ms=%d", round((time.monotonic() - started) * 1000))
 
 
 # --- adapter: tools/list catalog → LangChain tools ---
