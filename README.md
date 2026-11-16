@@ -228,10 +228,11 @@ un container), il servizio dell'agente (punto 1 di «Avvio locale») e il back-e
 
 **PostgreSQL in un container** (immagine ufficiale; utente, password e nome sono d'esempio). Sulla
 porta 5432 dell'host può esserci già un PostgreSQL installato: il comando pubblica il container
-sulla 5433.
+sulla 5433, e solo su `127.0.0.1`, quindi è raggiungibile solo da questo computer; `labprova` è la
+password di questo container di prova, non va usata altrove.
 
 ```powershell
-docker run -d --name assistente-postgres -e POSTGRES_USER=lab -e POSTGRES_PASSWORD=labprova -e POSTGRES_DB=assistente -p 5433:5432 postgres:18.6
+docker run -d --name assistente-postgres -e POSTGRES_USER=lab -e POSTGRES_PASSWORD=labprova -e POSTGRES_DB=assistente -p 127.0.0.1:5433:5432 postgres:18.6
 docker exec assistente-postgres pg_isready -U lab -d assistente    # «accepting connections»
 ```
 

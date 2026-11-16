@@ -1223,6 +1223,8 @@ Servizi verificati: Docker 29.9.1 con l'immagine `postgres:18.6`, LM Studio con 
 1. PostgreSQL in un container avviato a mano (`docker run -d --name assistente-postgres -e
    POSTGRES_USER=lab -e POSTGRES_PASSWORD=… -e POSTGRES_DB=assistente -p 5432:5432
    postgres:18.6`), comando da riportare nel README.
+   *Nota del 2026-11-16 (R-C1): questo comando pubblicava la porta su tutte le interfacce; il comando
+   corretto, con `-p 127.0.0.1:5433:5432`, è nel README (sezione del back-end).*
 2. CA-77, `tests/test_backend_store.py`: fixture `engine` parametrizzata (`sqlite` e `postgresql`
    con marcatore `real`); su PostgreSQL ogni test usa uno schema temporaneo (`search_path` alla
    connessione) eliminato alla fine; `TEST_DATABASE_URL` mancante → `pytest.fail` come per LM
@@ -2158,6 +2160,17 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
     147 s. CA-58 registrata come **non soddisfatta per limite del modello** in `requisiti.md`, nel
     rapporto (§6) e nel README («Prompt MCP»); CA-50 in `requisiti.md` e nel rapporto dal servizio.
   Modello simulato: `pytest` 1047 passed dopo il revert.
+- **Task 11 · R-C1, R-C2, R-B10 — fatto.** README: `docker run … -p 127.0.0.1:5433:5432` e la frase
+  sulla password di prova; `compose.yaml`: healthcheck `pg_isready -h 127.0.0.1 …`, `restart:
+  unless-stopped` per `backend`, `POSTGRES_PASSWORD: ""` in `agent` e `assistant`; nota accanto al
+  comando storico del diario (Step 7, punto 5). Modello simulato: 3 test di `test_docker.py` visti
+  fallire (README, healthcheck e `restart`, password nell'agente e nella CLI);
+  `test_every_published_port_is_on_localhost` passava già (Compose pubblicava già solo su
+  `127.0.0.1`) e resta come guardia; poi 43 passed, `pytest` 1051 passed. Docker vero:
+  `docker rm -f assistente-postgres` (solo chat di prova), nuovo `docker run` del README,
+  `pg_isready` «accepting connections», `docker port assistente-postgres` → solo
+  `5432/tcp -> 127.0.0.1:5433`. PostgreSQL vero: `pytest tests/test_backend_store.py -m real` →
+  39 passed, 1 skipped (`PRAGMA`), compresi i test del NUL del Task 5.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

@@ -275,3 +275,30 @@ def test_env_example_has_the_postgres_credentials():
     lines = (ROOT / ".env.example").read_text(encoding="utf-8").splitlines()
     for name in ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"):
         assert any(line.startswith(f"{name}=") for line in lines)
+
+
+def test_readme_publishes_docker_ports_only_on_localhost():  # R-C1
+    lines = [line for line in (ROOT / "README.md").read_text(encoding="utf-8").splitlines()
+             if line.lstrip().startswith("docker run")]
+    ports = [p for line in lines for p in re.findall(r"-p (\S+)", line)]
+    assert ports and all(p.startswith("127.0.0.1:") for p in ports), ports
+
+
+def test_every_published_port_is_on_localhost(compose):  # R-C1
+    for service in compose["services"].values():
+        assert all(p["host_ip"] == "127.0.0.1" for p in service.get("ports", [])), service
+
+
+def test_postgres_is_ready_only_on_tcp_and_the_backend_restarts(compose):  # R-C2
+    assert "-h 127.0.0.1" in compose["services"]["postgres"]["healthcheck"]["test"][1]
+    assert compose["services"]["backend"]["restart"] == "unless-stopped"
+
+
+def test_database_password_stays_out_of_agent_and_cli(tmp_path):  # R-B10
+    result = compose_config(tmp_path, profiles=("cli",))
+    assert result.returncode == 0, result.stderr
+    services = json.loads(result.stdout)["services"]
+    for name in ("agent", "assistant"):
+        assert services[name]["environment"]["POSTGRES_PASSWORD"] == "", name
+    assert "segreta" in services["backend"]["environment"]["DATABASE_URL"]
+

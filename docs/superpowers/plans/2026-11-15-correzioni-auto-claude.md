@@ -583,7 +583,7 @@ def test_explain_prompt_from_the_cli(tmp_path):  # CA-58 (R-A1, R-A2)
   riga 1221)
 - Test: `tests/test_docker.py`
 
-- [ ] **Passo 1: test che falliscono**
+- [x] **Passo 1: test che falliscono**
 
 ```python
 def test_readme_publishes_docker_ports_only_on_localhost():  # R-C1
@@ -612,18 +612,18 @@ def test_database_password_stays_out_of_agent_and_cli(tmp_path):  # R-B10
     assert "segreta" in services["backend"]["environment"]["DATABASE_URL"]
 ```
 
-- [ ] **Passo 2:** `pytest tests/test_docker.py` → i tre test su Compose e quello del README
+- [x] **Passo 2:** `pytest tests/test_docker.py` → i tre test su Compose e quello del README
   falliscono.
-- [ ] **Passo 3:** correzioni: `-p 127.0.0.1:5433:5432` nel README (e la frase «solo da questo
+- [x] **Passo 3:** correzioni: `-p 127.0.0.1:5433:5432` nel README (e la frase «solo da questo
   computer; `labprova` è la password di questo container di prova»); `pg_isready -h 127.0.0.1 -U
   … -d …`; `restart: unless-stopped`; `POSTGRES_PASSWORD: ""` con il commento «la password serve
   solo a postgres e backend».
-- [ ] **Passo 4:** test verdi; `pytest` completo verde.
-- [ ] **Passo 5: prova reale (Docker):** `docker rm -f assistente-postgres` (elimina le chat di
+- [x] **Passo 4:** test verdi; `pytest` completo verde.
+- [x] **Passo 5: prova reale (Docker):** `docker rm -f assistente-postgres` (elimina le chat di
   prova), il nuovo `docker run` del README, `docker port assistente-postgres` → solo
   `5432/tcp -> 127.0.0.1:5433`; poi `pytest tests/test_backend_store.py -m real` → verde
   (comprende i test NUL del Task 5 su PostgreSQL).
-- [ ] **Passo 6: commit** `fix(compose): porte solo locali, avvio a database pronto in TCP, password solo dove serve`.
+- [x] **Passo 6: commit** `fix(compose): porte solo locali, avvio a database pronto in TCP, password solo dove serve`.
 
 ---
 

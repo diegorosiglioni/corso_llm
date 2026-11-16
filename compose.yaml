@@ -38,6 +38,8 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
       - "127.0.0.1:8001:8001"  # la pagina nel browser lo chiama qui (OpenAPI su /docs)
+    # Se esce (per esempio database non ancora pronto al primo avvio) Compose lo riavvia.
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy  # avvio a database pronto
@@ -52,6 +54,8 @@ services:
       dockerfile: docker/agent.Dockerfile  # comando predefinito: python -m assistant.service
     env_file: .env
     environment:
+      # La password serve solo a postgres e backend: qui vuota, vince su quella del .env.
+      POSTGRES_PASSWORD: ""
       # LM Studio sull'host; per un'altra porta o un altro host impostare LMSTUDIO_BASE_URL_DOCKER nel .env.
       LMSTUDIO_BASE_URL: ${LMSTUDIO_BASE_URL_DOCKER:-http://host.docker.internal:1234/v1}
       AGENT_HOST: 0.0.0.0
@@ -79,7 +83,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-assistente}
     healthcheck:
       # $$ : variabili lette nel container. Con -U e -d niente «role "root" does not exist» nel log.
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      # Con -h 127.0.0.1 conta solo il server vero in TCP, non quello temporaneo
+      # dell'inizializzazione (solo socket Unix): il back-end non parte troppo presto.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       start_period: 30s
       start_interval: 1s
       interval: 30s
@@ -100,6 +106,7 @@ services:
     env_file: .env
     environment:
       AGENT_URL: http://agent:8000
+      POSTGRES_PASSWORD: ""  # la password serve solo a postgres e backend
     depends_on:
       agent:
         condition: service_healthy
