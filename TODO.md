@@ -16,6 +16,7 @@ con il proprio ciclo di specifica e piano (`CLAUDE.md`, «Metodo»). Test senza 
 - [x] Lezione 6, Step 4–9 (loop autonomo del 2026-11-14 su `auto-claude`, poi revisione, correzioni e verifica del 2026-11-15 e 16): resource `utente://preferenze`, prompt MCP `spiega` e `riassumi_conversazione` con `/prompts` e `/prompt`, agente come servizio HTTP, back-end con chat in PostgreSQL, front-end web, Docker Compose a quattro container
 - [x] Facoltativo · Streaming della risposta con Server-Sent Events: bozza mostrata mentre arriva, strumenti indicati, risposta salvata alla fine
 - [x] Robustezza del servizio (2026-11-16, debiti R-B3, R-B4, R-B9): riavvio automatico del server MCP, controllo di salute di `agent` legato a MCP, `/status` con 5 s per MCP e CLI che aspetta 20 s, `AGENT_URL` malformato come «Configurazione non valida»
+- [x] Revisione del 2026-11-16 (`REVIEW.md`), I-1: dopo una connessione chiusa il client MCP non ripete più le chiamate agli strumenti (`ToolOutcomeUnknownError`, testo «esito incerto» per il modello). Gli altri punti della revisione sono aperti in `REVIEW.md`, «Punti da riprendere»
 
 ## Debiti noti
 

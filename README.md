@@ -73,7 +73,7 @@ PostgreSQL. Il JavaScript della pagina del front-end si prova con Node.js (`node
 da `pytest`; senza Node il test si salta col motivo). I Dockerfile si controllano come testo, senza
 costruire immagini, e `compose.yaml` con `docker compose config` su una copia con un `.env` di
 credenziali finte, senza il demone (`tests/test_docker.py`; senza la CLI di Docker questi test si
-saltano col motivo). Esito al 2026-11-16: `1074 passed, 93
+saltano col motivo). Esito al 2026-11-16: `1079 passed, 93
 deselected` (le 93 deselezionate sono le 68 prove reali, 28 con LM Studio e 40 test dell'archivio
 ripetuti su PostgreSQL, e i 25 test nel browser).
 
@@ -740,12 +740,17 @@ scoperto con `tools/list`; l'applicazione espone al modello solo i sette nomi at
 
 Se il server MCP non parte, il servizio dell'agente esce con «Server MCP non avviato: <motivo>». Se
 il server muore mentre il servizio è attivo, la richiesta successiva (uno strumento, `/prompts` o
-`GET /status`) lo riavvia e viene ripetuta una volta; nel log del servizio compaiono
-`mcp_restart reason="Connection closed"` e `mcp_restarted duration_ms=…`. Se il server è bloccato
+`GET /status`) lo riavvia; nel log del servizio compaiono `mcp_restart reason="Connection closed"`
+e `mcp_restarted duration_ms=…`. Le richieste di sola lettura (`/prompts`, `GET /status`) vengono
+ripetute una volta. La chiamata a uno strumento no, perché potrebbe avere già scritto (una nota
+salvata o eliminata): il modello riceve «Connessione con lo strumento caduta durante la chiamata
+(Connection closed): l'esito è incerto. Se la chiamata modificava dati, controlla lo stato (per
+esempio con list_notes) prima di ripeterla.» e decide che cosa fare. Se il server è bloccato
 (nessuna risposta entro il tempo massimo) la richiesta fallisce senza essere ripetuta e il server
 viene riavviato prima della successiva. Se non riparte, lo strumento risponde «Strumento non
 raggiungibile: server MCP non riavviato: <motivo>. Riprova o riavvia il servizio dell'agente.»
-(`mcp_restart_failed` nel log) e la richiesta successiva riprova. `GET /status` aspetta MCP al più
+oppure, se la connessione era caduta durante la chiamata, il testo sull'esito incerto con lo stesso
+motivo (`mcp_restart_failed` nel log); la richiesta successiva riprova. `GET /status` aspetta MCP al più
 5 s; la CLI aspetta `/status` al più 20 s.
 
 In un turno il modello è chiamato al più `MAX_STEPS` volte; se all'ultimo passaggio chiede ancora

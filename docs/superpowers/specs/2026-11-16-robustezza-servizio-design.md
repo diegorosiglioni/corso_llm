@@ -74,6 +74,9 @@ il nuovo processo apre lo stesso file.
 scrittura (`add_note`, `delete_note`) solo se il server muore dopo aver scritto e prima di
 rispondere. È un caso raro; con il server già morto la richiesta non arriva proprio.
 
+> Superato il 2026-11-16 da `2026-11-16-ritentativo-mcp-design.md` (I-1 della revisione):
+> `call_tool` non viene più ripetuto; restano ripetute le richieste di sola lettura.
+
 **Log** (logger `assistant.mcp_client`):
 - `WARNING mcp_restart reason="Connection closed"` quando il riavvio comincia;
 - `INFO mcp_restarted duration_ms=…` quando riesce;

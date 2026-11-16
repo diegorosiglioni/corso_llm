@@ -36,8 +36,22 @@
 - Robustezza del servizio (debiti R-B3, R-B4, R-B9) fatta il 2026-11-16 su `dev`, senza push:
   specifica `docs/superpowers/specs/2026-11-16-robustezza-servizio-design.md`, piano
   `docs/superpowers/plans/2026-11-16-robustezza-servizio.md`, sezione più sotto.
-- Prossimo: un altro debito di `TODO.md` o la lezione successiva, con il proprio ciclo di
-  specifica e piano. Una sessione nuova parte da questa sezione.
+- Revisione del progetto del 2026-11-16 in `REVIEW.md` (radice): i punti si correggono uno alla
+  volta, ciascuno con specifica e piano; l'elenco e le caselle sono in «Punti da riprendere».
+- **I-1 fatto** il 2026-11-16 su `dev`, senza push (commit `9b95128`, `2152ba6`; specifica
+  `docs/superpowers/specs/2026-11-16-ritentativo-mcp-design.md`, piano
+  `docs/superpowers/plans/2026-11-16-ritentativo-mcp.md`): dopo una connessione chiusa
+  `call_tool` riavvia il server ma non viene ripetuto e solleva `ToolOutcomeUnknownError`
+  (`assistant/tools.py`); il grafo dà al modello un testo «esito incerto» senza «Riprova».
+  `tools/list`, prompt e resource restano ripetuti. Eseguito: `pytest` → 1079 passed, 93
+  deselected (334 s: computer sotto carico, di solito circa 90 s). In una esecuzione dei soli
+  `tests/test_mcp_client.py` sotto carico, 2 falliti e 1 errore di avvio nei test del riavvio
+  (`timeout=5` del server di prova); ripetuti subito dopo, passati: da tenere d'occhio. Non
+  eseguito: prove `real` (come reagisce il modello al testo nuovo, se controlla con `list_notes`
+  prima di ripetere), `browser`, Docker.
+- Prossimo: I-2 di `REVIEW.md` (ruff, `pytest-cov`, `pyproject.toml`, CI: dipendenze nuove da
+  concordare), poi M-1, M-2 con M-3, R-C4 / R-D1 e gli altri M. Una sessione nuova parte da
+  questa sezione.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
