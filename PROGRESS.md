@@ -2140,6 +2140,24 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
   in `TODO.md` (F5). Annullati `scope.txt`, il test della riga, la prova reale nuova, RF-51 e README:
   nessun cambio al codice. Il Task 10 usa l'ambito di prima, che comprende già le spiegazioni del
   MCP.
+- **Task 10 · R-A2 e R-A1 — fatto, R-A1 al gradino 3.** In `tests/test_real.py` CA-50 e CA-58
+  passano dal servizio: `test_default_timezone_from_preferences_in_the_service` (`PREFERENCES_FILE`
+  con `America/New_York`, `POST /chat`) e `test_explain_prompt_from_the_cli` (CLI con `AGENT_URL`,
+  controllo di merito `MERIT`: server, client, tool, strumenti esterni, fonti di dati, dati esterni);
+  le versioni in processo sono state sostituite. Modello vero:
+  - gradino 1: CA-50 **passed** al primo tentativo (in 234 s insieme a CA-58); CA-58 **failed** due
+    volte (147 s), stessa risposta: il MCP è «il set di regole o il "protocollo" che stabilisce come
+    tu gli dai queste informazioni di sfondo (il contesto)», con un esempio sulle piante. Letta:
+    **sbagliata nel merito** (nessun server, client, strumento o dato esterno);
+  - gradino 2: test del testo di `spiega` aggiornati e visti fallire (4), frase «Se non conosci bene
+    l'argomento, dillo invece di inventare.» aggiunta (`beb25e5`), `pytest` 1047 passed; CA-58
+    **failed** due volte (147 e 145 s), stessa spiegazione sbagliata («il sistema che organizza
+    tutte le informazioni rilevanti…»);
+  - gradino 3: frase tolta con un revert (`1f39857`, messaggio riscritto in Conventional Commits);
+    `xfail(strict=False)` con il motivo «limite del modello»; con il modello vero `1 xfailed` in
+    147 s. CA-58 registrata come **non soddisfatta per limite del modello** in `requisiti.md`, nel
+    rapporto (§6) e nel README («Prompt MCP»); CA-50 in `requisiti.md` e nel rapporto dal servizio.
+  Modello simulato: `pytest` 1047 passed dopo il revert.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

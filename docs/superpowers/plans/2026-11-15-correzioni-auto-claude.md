@@ -507,7 +507,7 @@ def test_router_scope_is_limited_to_lab_topics(real_session, caplog):  # R-A8
   `REFUSAL` già in `tests/test_real.py`; la riga `kind=prompt name="spiega"` del Task 2; l'ambito
   del Task 9.
 
-- [ ] **Passo 1:** sostituire `test_default_timezone_from_preferences` con
+- [x] **Passo 1:** sostituire `test_default_timezone_from_preferences` con
 
 ```python
 def test_default_timezone_from_preferences_in_the_service(tmp_path):  # CA-50 (R-A2)
@@ -526,7 +526,7 @@ def test_default_timezone_from_preferences_in_the_service(tmp_path):  # CA-50 (R
 ```
 
   (accettare anche l'ora con due cifre, come `tool_times`).
-- [ ] **Passo 2:** sostituire `test_explain_prompt` con la versione dalla CLI:
+- [x] **Passo 2:** sostituire `test_explain_prompt` con la versione dalla CLI:
 
 ```python
 MERIT = re.compile(r"\b(server|client|tools?|strumenti esterni|fonti di dati|dati esterni)\b", re.I)
@@ -553,23 +553,23 @@ def test_explain_prompt_from_the_cli(tmp_path):  # CA-58 (R-A1, R-A2)
 ```
 
   `send_prompt` resta per CA-59.
-- [ ] **Passo 3: gradino 1** — `pytest tests/test_real.py -m real -v -rP -k "explain_prompt_from_the_cli or timezone_from_preferences_in_the_service"`.
+- [x] **Passo 3: gradino 1** — `pytest tests/test_real.py -m real -v -rP -k "explain_prompt_from_the_cli or timezone_from_preferences_in_the_service"`.
   CA-50 deve passare (regola del §3). Per CA-58: se passa (anche alla ripetizione), leggere la
   risposta stampata, annotare in `PROGRESS.md` se la spiegazione è corretta nel merito, e andare al
   Passo 6.
-- [ ] **Passo 4: gradino 2** (solo se CA-58 fallisce due volte) — test del testo in
+- [x] **Passo 4: gradino 2** (solo se CA-58 fallisce due volte) — test del testo in
   `tests/test_prompts.py` aggiornati prima (il testo termina con
   `" Se non conosci bene l'argomento, dillo invece di inventare."`), visti fallire; poi
   `explain_prompt` aggiunge la frase; `pytest` completo verde; commit
   `fix(prompt): spiega chiede di non inventare`; CA-58 di nuovo, con la ripetizione. Se passa:
   Passo 6.
-- [ ] **Passo 5: gradino 3** (solo se fallisce ancora) — `git revert` del commit del gradino 2;
+- [x] **Passo 5: gradino 3** (solo se fallisce ancora) — `git revert` del commit del gradino 2;
   `@pytest.mark.xfail(strict=False, reason="limite del modello: spiegazione del Model Context Protocol non corretta nel merito (R-A1)")`
   su `test_explain_prompt_from_the_cli`; CA-58 in `requisiti.md`, rapporto §6 e README registrata
   come **non soddisfatta per limite del modello**, con la risposta ottenuta.
-- [ ] **Passo 6:** `requisiti.md` (CA-50 e CA-58 dal servizio, controllo di merito), README («Prompt
+- [x] **Passo 6:** `requisiti.md` (CA-50 e CA-58 dal servizio, controllo di merito), README («Prompt
   MCP»: risposta ottenuta oggi al posto della frase del 2026-11-14), rapporto §6 aggiornati.
-- [ ] **Passo 7: commit** `test(reali): CA-50 e CA-58 dal servizio con controllo di merito`
+- [x] **Passo 7: commit** `test(reali): CA-50 e CA-58 dal servizio con controllo di merito`
   (con i documenti).
 
 ---

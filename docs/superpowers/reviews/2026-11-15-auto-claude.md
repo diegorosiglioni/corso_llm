@@ -179,10 +179,10 @@ Dai resoconti dei revisori, controllati da Claude; «reale» = con LM Studio.
 
 | Step | Evidenza | Dimostrazione | Stato |
 |------|----------|---------------|-------|
-| 4 | «Che ore sono?» con fuso predefinito `America/New_York` | CA-50 reale (in processo, R-A2) | dimostrata |
+| 4 | «Che ore sono?» con fuso predefinito `America/New_York` | CA-50 reale dal servizio con `PREFERENCES_FILE` (corretto R-A2 il 2026-11-16) | dimostrata |
 | 4 | Cambio di lingua o stile → risposta della sessione successiva | CA-51 reale, solo lingua (R-A11); nel servizio vale dal riavvio (R-A4) | dimostrata |
 | 4 | Lettura della resource nei log, separata dai tool | test senza modello; CA-50 | dimostrata |
-| 5 | `/prompt spiega …` con risposta adeguata | CA-58 reale, controllo debole | **non dimostrata** (R-A1) |
+| 5 | `/prompt spiega …` con risposta adeguata | CA-58 reale dalla CLI attraverso il servizio, con controllo di merito (R-A1, R-A2): fallita due volte, e due volte con la frase «non inventare» nel prompt, poi tolta (2026-11-16) | **non soddisfatta per limite del modello** (R-A1, gradino 3; `xfail`) |
 | 5 | `riassumi_conversazione` riassume la sessione | CA-59 reale (in processo, R-A2) | dimostrata |
 | 5 | Log con prompt, argomenti e messaggi | test senza modello | dimostrata |
 | 6 | Chiamata HTTP con uno strumento, traccia nei log | CA-67 reale | dimostrata |

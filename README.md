@@ -613,10 +613,16 @@ Dal terminale:
   in `scope.txt` comprende spiegazioni di concetti e riassunti della conversazione), agente con gli
   strumenti, revisore.
 - Il testo che comincia con `/` non arriva mai al modello; «quanto fa 6 / 3?» invece è una domanda.
-- Il revisore controlla che la risposta sia coerente con la richiesta, non che sia corretta: nella
-  prova del 2026-11-14 la spiegazione «base» del Model Context Protocol data da `google/gemma-4-e2b`
-  era chiara ma sbagliata nel merito (lo descriveva come il modo in cui il modello usa il contesto, non
-  come il protocollo che collega applicazioni, strumenti e dati). È un limite del modello piccolo.
+- Il revisore controlla che la risposta sia coerente con la richiesta, non che sia corretta. La
+  spiegazione «base» del Model Context Protocol data da `google/gemma-4-e2b` è chiara ma sbagliata
+  nel merito: nelle prove del 2026-11-14 e del 2026-11-16 lo descrive come le regole con cui si dà il
+  contesto al modello («il set di regole o il "protocollo" che stabilisce come tu gli dai queste
+  informazioni di sfondo (il contesto)»), non come il protocollo che collega applicazioni, server,
+  strumenti e dati. Aggiungere al prompt «Se non conosci bene l'argomento, dillo
+  invece di inventare.» non cambia la risposta. È un limite del modello piccolo: l'evidenza «risposta
+  adeguata» dello Step 5 è **non soddisfatta** e la prova reale CA-58
+  (`test_explain_prompt_from_the_cli`, dalla CLI attraverso il servizio, con un controllo di merito)
+  è segnata come fallimento atteso (`xfailed`).
 - Con Docker i comandi funzionano allo stesso modo (`docker compose run --rm assistant`).
 
 Log della prova reale del 2026-11-14 `test_summary_prompt` («Mi chiamo Paolo», «Quanto fa 17 * 23?»,
