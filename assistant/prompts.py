@@ -33,11 +33,7 @@ def explain_prompt(topic: str, level: str) -> str:
         raise ValueError(
             f"Livello non valido: '{level}'. Valori ammessi: {', '.join(LEVELS)}."
         )
-    # the last sentence is general (R-A1, step 2): no hint about any topic
-    return (
-        f"Spiegami {topic} a livello {level}: {LEVELS[level]}."
-        " Se non conosci bene l'argomento, dillo invece di inventare."
-    )
+    return f"Spiegami {topic} a livello {level}: {LEVELS[level]}."
 
 
 def summary_prompt(style: str) -> str:
