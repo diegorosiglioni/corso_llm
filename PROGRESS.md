@@ -19,8 +19,8 @@
 - Prove instabili (F6): `test_first_turn_information_survives_compression` (router) e l'uso di
   `calculate` dalla pagina di Compose (2 volte su 3).
 - Prossimo: la scelta del lavoro successivo, un debito di `TODO.md` o la lezione successiva, con il
-  proprio ciclo di specifica e piano. `docs/superpowers/prossimo-prompt.txt` non è aggiornato dopo
-  il push (decisione dell'utente): i suoi punti 1 e 2 (push, `auto-claude`) sono già fatti.
+  proprio ciclo di specifica e piano. Prompt per la sessione nuova in
+  `docs/superpowers/prossimo-prompt.txt` (aggiornato dopo il push).
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
