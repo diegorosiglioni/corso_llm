@@ -231,3 +231,28 @@ Debiti noti accettati:
 | R-C10 | Le evidenze di Compose sono nel diario e lo streaming da Compose è stato ripetuto il 2026-11-15 |
 | R-D3 | Testo che torna nel campo dopo un tempo scaduto: caso raro, la domanda non si perde |
 | R-P1 | Mostrare markdown e LaTeX richiederebbe una libreria o un'istruzione nel prompt, che rischia di far perdere l'uso degli strumenti (come per lo stile `sintetico`) |
+
+## 9. Revisione delle correzioni (F4, 2026-11-16)
+
+Un revisore con contesto pulito (subagente in sola lettura, modello Opus) ha letto il diff
+`41e39a4..76877c3` con la specifica delle correzioni, questo rapporto e il diario; ha rieseguito
+`pytest` senza modello (1051 passed) e ha verificato i cinque punti della Review Focus del piano
+(tutti OK). Esito «Con correzioni»:
+
+- **Gravi:** nessuno.
+- **Importante (1), corretto:** l'`xfail` di CA-58 sull'intero test nascondeva anche i guasti del
+  percorso CLI → servizio di R-A2. Ora il fallimento atteso è `pytest.xfail(...)` solo quando manca
+  il controllo di merito (`10d775c`). Dimostrazione: un test temporaneo con lo stesso controllo
+  strutturale guasto dà `XFAIL` con il decoratore e `FAILED` con lo schema nuovo; con il modello vero
+  CA-58 dà `1 xfailed` per il solo merito. Il secondo giro del revisore, solo su questa correzione,
+  dice **risolto**.
+- **Minori (4), corretti per decisione dell'utente** (`0033a61`): R-D1 descritto come «descrizione
+  corretta» e non come comportamento cambiato; per CA-58 «le parole cambiano ma la spiegazione resta
+  sbagliata nel merito»; date del 15 e 16 novembre allineate; per l'agente il comportamento a pagina
+  chiusa è dedotto dal back-end, non osservato.
+- **Minori del secondo giro (3):** testo di `requisiti.md` e del piano sul vecchio decoratore
+  (allineato insieme a questa sezione); da decidere con l'utente: un CA-58 che passasse il merito
+  risulterebbe un semplice `passed` (la documentazione direbbe ancora «non soddisfatta»), e con
+  `xfail` la risposta stampata si vede solo con `-rA` o `-s`.
+
+Nessun grave o importante aperto dopo il secondo giro.

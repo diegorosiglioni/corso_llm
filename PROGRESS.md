@@ -2209,6 +2209,10 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
   analogia» nella specifica dello streaming). Secondo giro del revisore lanciato sulla sola
   correzione di CA-58 (`10d775c`). Su richiesta dell'utente (contesto della sessione troppo pieno)
   i Task 14 e 15 passano a un agente con contesto pulito, che riporta il resoconto.
+  Secondo giro: **risolto**, nessun grave o importante; tre minori: testo di `requisiti.md` e del
+  piano sul vecchio decoratore (allineato); da decidere con l'utente: CA-58 che passasse il merito
+  sarebbe un semplice `passed` con la documentazione ancora «non soddisfatta», e la risposta
+  stampata di un `xfailed` si vede solo con `-rA` o `-s`. Esito nel rapporto, §9. **Task 13 fatto.**
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

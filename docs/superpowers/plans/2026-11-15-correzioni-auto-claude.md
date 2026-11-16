@@ -565,7 +565,8 @@ def test_explain_prompt_from_the_cli(tmp_path):  # CA-58 (R-A1, R-A2)
   Passo 6.
 - [x] **Passo 5: gradino 3** (solo se fallisce ancora) — `git revert` del commit del gradino 2;
   `@pytest.mark.xfail(strict=False, reason="limite del modello: spiegazione del Model Context Protocol non corretta nel merito (R-A1)")`
-  su `test_explain_prompt_from_the_cli`; CA-58 in `requisiti.md`, rapporto §6 e README registrata
+  su `test_explain_prompt_from_the_cli` (poi sostituito, nel Task 13, da `pytest.xfail(...)` solo
+  per il controllo di merito: commit `10d775c`); CA-58 in `requisiti.md`, rapporto §6 e README registrata
   come **non soddisfatta per limite del modello**, con la risposta ottenuta.
 - [x] **Passo 6:** `requisiti.md` (CA-50 e CA-58 dal servizio, controllo di merito), README («Prompt
   MCP»: risposta ottenuta oggi al posto della frase del 2026-11-14), rapporto §6 aggiornati.
@@ -657,16 +658,16 @@ def test_database_password_stays_out_of_agent_and_cli(tmp_path):  # R-B10
 
 ### Task 13: Revisione delle correzioni (specifica §7)
 
-- [ ] **Passo 1:** subagente `general-purpose` con contesto pulito, in sola lettura (può eseguire
+- [x] **Passo 1:** subagente `general-purpose` con contesto pulito, in sola lettura (può eseguire
   `pytest` senza modello, niente prove reali né Docker), sul diff
   `git diff 41e39a4..HEAD` (dal commit della specifica), con la specifica delle correzioni e il
   rapporto. Chiede: correzioni che non risolvono il problema, test che non lo dimostrano,
   regressioni, problemi nuovi; gravità grave, importante, minore; per ognuno file, riga e scenario.
-- [ ] **Passo 2:** Claude verifica ogni problema sul codice. Grave o importante confermato →
+- [x] **Passo 2:** Claude verifica ogni problema sul codice. Grave o importante confermato →
   test che fallisce, correzione, commit, poi un secondo giro del revisore solo su quella
   correzione. Minori nuovi → all'utente, che decide (correggere ora o `TODO.md`).
-- [ ] **Passo 3:** dopo il secondo giro con un grave o importante ancora aperto: fermarsi e chiedere.
-- [ ] **Passo 4:** sezione «Revisione delle correzioni» nel rapporto e in `PROGRESS.md`; commit
+- [x] **Passo 3:** dopo il secondo giro con un grave o importante ancora aperto: fermarsi e chiedere.
+- [x] **Passo 4:** sezione «Revisione delle correzioni» nel rapporto e in `PROGRESS.md`; commit
   `docs(revisione): esito della revisione delle correzioni`.
 
 ---
