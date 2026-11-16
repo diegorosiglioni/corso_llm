@@ -1,9 +1,8 @@
 # TODO
 
-Fonte dei lavori mancanti: traccia della lezione 6 in `docs/superpowers/lezione6.md` (step 4–9 e
-streaming facoltativo). Si fa solo ciò che chiede la traccia (decisione dell'utente del
-2026-11-13, vedi `PROGRESS.md`). Regole della modalità autonoma: `CLAUDE.md`, sezione
-«Modalità autonoma». Test senza modello: `.\.venv\Scripts\python.exe -m pytest`.
+Lavori fatti e debiti noti. Nessun punto aperto: un lavoro nuovo (debito o lezione successiva) parte
+con il proprio ciclo di specifica e piano (`CLAUDE.md`, «Metodo»). Test senza modello:
+`.\.venv\Scripts\python.exe -m pytest`.
 
 ## Già fatto
 
@@ -14,56 +13,31 @@ streaming facoltativo). Si fa solo ciò che chiede la traccia (decisione dell'ut
 - [x] Lezione 6, Step 1 · Router: ambito in `scope.txt`, rifiuto senza passare dall'agente, prove reali
 - [x] Lezione 6, Step 2 · Revisore: coerenza della risposta, indicazione all'agente, limite `MAX_REVIEWS`, prove reali
 - [x] Lezione 6, Step 3 · Riassunto: nodo `summary` con `SUMMARY_MAX_MESSAGES` e `SUMMARY_KEEP_MESSAGES`, prove reali e Docker
+- [x] Lezione 6, Step 4–9 (loop autonomo del 2026-11-14 su `auto-claude`, poi revisione, correzioni e verifica del 2026-11-15 e 16): resource `utente://preferenze`, prompt MCP `spiega` e `riassumi_conversazione` con `/prompts` e `/prompt`, agente come servizio HTTP, back-end con chat in PostgreSQL, front-end web, Docker Compose a quattro container
+- [x] Facoltativo · Streaming della risposta con Server-Sent Events: bozza mostrata mentre arriva, strumenti indicati, risposta salvata alla fine
 
-## Step 4 · Resource MCP: preferenze dell'utente
+## Debiti noti
 
-- [x] Specifica dello Step 4 in `docs/superpowers/specs/` e requisiti §12 in `docs/superpowers/requisiti.md` (formato del file delle preferenze, valori predefiniti, variabile d'ambiente del percorso, righe di log), con le scelte del progettista annotate
-- [x] Server MCP: resource `utente://preferenze` (`application/json`) con lingua delle risposte, fuso orario predefinito e stile (sintetico o dettagliato), letta da un file `preferenze.json` di esempio; test che la resource compare in `resources/list` e non in `tools/list`
-- [x] Client MCP: metodo sincrono `read_resource` in `mcp_client.py` e nel `FakeMcpClient` di `conftest.py`; test con il server reale via stdio, resource leggibile e resource assente
-- [x] Host: lettura della resource una sola volta a inizio sessione e testo in cima al prompt di sistema dell'agente; resource non disponibile → valori predefiniti e WARNING nel log; log `resources/read` separato da quelli dei tool; la resource non entra in `bind_tools`; test con client finto
-- [x] Prova reale Step 4 (marcatore `real`, LM Studio attivo): «Che ore sono?» con fuso predefinito `America/New_York` usa quel fuso senza chiederlo; cambio di lingua o stile nel file cambia la risposta della sessione successiva; README aggiornato (sezione preferenze e diagnosi)
+Accettati dall'utente nella rilettura del 2026-11-15 e nelle correzioni del 2026-11-16; descrizione
+di ciascuno nel rapporto [`docs/superpowers/reviews/2026-11-15-auto-claude.md`](docs/superpowers/reviews/2026-11-15-auto-claude.md), §2 (R-D1) e §3 (gli altri).
 
-## Step 5 · Prompt MCP: comandi riusabili nella CLI
-
-- [x] Specifica dello Step 5 in `docs/superpowers/specs/` e requisiti §13 (sintassi di `/prompts` e `/prompt nome chiave=valore` con valori tra virgolette, messaggi d'errore, righe di log)
-- [x] Server MCP: prompt `spiega(argomento, livello="base")` e `riassumi_conversazione(stile)`; test di `prompts/list` (nome, descrizione, argomenti) e `prompts/get`
-- [x] Client MCP: metodi sincroni `list_prompts` e `get_prompt` in `mcp_client.py` e nel `FakeMcpClient`; test con il server reale via stdio
-- [x] Terminale: comando `/prompts` che mostra nome, descrizione e argomenti di ogni prompt; test con client finto
-- [x] Terminale: comando `/prompt nome chiave=valore` con controllo rispetto a `prompts/list` (argomenti obbligatori mancanti o sconosciuti bloccano la richiesta senza chiamare il modello); i messaggi ottenuti entrano nella cronologia e passano dal grafo (router, strumenti, revisore); log con prompt, argomenti e messaggi ricevuti; test con client e modello finti
-- [x] Prova reale Step 5: `/prompt spiega argomento="Model Context Protocol" livello=base` dà una risposta adeguata e `riassumi_conversazione` riassume i turni della sessione; README aggiornato
-
-## Step 6 · L'agente come servizio HTTP
-
-- [x] Specifica dello Step 6 e requisiti §14 (framework HTTP con OpenAPI, formato JSON di messaggi, cronologia e riassunto, codici d'errore, porta), con dipendenze motivate e versioni fissate in `requirements.txt` e `constraints.txt`
-- [x] Modulo dell'agente separato dall'interfaccia: funzione senza stato che riceve messaggio, cronologia e riassunto e restituisce risposta, strumenti usati, cronologia e riassunto aggiornati; serializzazione JSON dei messaggi; test con il grafo simulato
-- [x] Endpoint HTTP di conversazione (messaggio e cronologia in ingresso, risposta e strumenti usati in uscita) con OpenAPI consultabile; test dell'API con il grafo simulato
-- [x] Endpoint di stato (agente, server MCP e modello raggiungibili) ed errori comprensibili con codice HTTP quando modello o strumenti non sono disponibili; test con modello e client MCP finti
-- [x] CLI come client dell'API HTTP (stesso comportamento del terminale attuale, comandi `/prompts` e `/prompt` compresi); test con l'API simulata; README e CLAUDE.md aggiornati con i nuovi comandi di avvio
-- [x] Prova reale Step 6: chiamata HTTP con uno strumento (risposta e traccia nei log), stessa risposta da CLI e API, OpenAPI consultabile; esiti nel diario
-
-## Step 7 · Back-end: API e salvataggio delle chat
-
-- [x] Specifica dello Step 7 e requisiti §15 (struttura del servizio back-end, schema PostgreSQL di chat e messaggi, libreria di accesso al database, configurazione da variabili d'ambiente, come si testa senza PostgreSQL attivo)
-- [x] Back-end: modello dati e archivio di chat e messaggi (creare, elencare con titolo e data dell'ultimo messaggio, leggere in ordine cronologico, eliminare con i messaggi); test dell'archivio
-- [x] Back-end: endpoint di creazione, elenco, lettura ed eliminazione delle chat con OpenAPI; test dell'API
-- [x] Back-end: invio di un messaggio (salva la domanda, chiama l'agente via HTTP con cronologia e riassunto, salva e restituisce la risposta); agente non raggiungibile → errore chiaro e documentato; test con l'agente simulato
-- [x] Prova reale Step 7 con PostgreSQL e agente attivi: chat presenti dopo il riavvio del back-end; README aggiornato
-
-## Step 8 · Front-end: interfaccia di chat
-
-- [x] Specifica dello Step 8 e requisiti §16 (tecnologia del front-end, contratto = OpenAPI del back-end, indirizzo del back-end da configurazione)
-- [x] Front-end: elenco, creazione ed eliminazione delle chat, collegato solo al back-end
-- [x] Front-end: vista dei messaggi e invio, stato di attesa ed errori comprensibili (agente spento → errore mostrato senza bloccare l'interfaccia); test automatici dove possibili
-- [x] Prova reale Step 8 dal browser: conversazione completa con uno strumento, chat presente dopo il riavvio, agente spento gestito; README aggiornato
-
-## Step 9 · Docker Compose: un container per componente
-
-- [x] Dockerfile dell'agente come servizio HTTP (server MCP stdio nel suo container, LM Studio via `host.docker.internal`), del back-end e del front-end
-- [x] `compose.yaml` con quattro servizi (front-end, back-end, agente, PostgreSQL ufficiale): volume dei dati di PostgreSQL, credenziali in `.env` (con esempio in `.env.example`), back-end avviato a database pronto, agente non esposto, front-end raggiungibile dal browser
-- [x] Prova reale Step 9: `docker compose up` avvia i quattro servizi e `docker compose ps` li mostra attivi; chat dal browser con uno strumento visibile nei log dell'agente; chat presenti dopo `down` e `up`; README e CLAUDE.md aggiornati (comandi Docker)
-
-## Facoltativo · Streaming della risposta
-
-- [x] Specifica dello streaming (eventi di testo e strumenti, Server-Sent Events nel back-end, decisione documentata su bozza o sola risposta approvata con il revisore attivo)
-- [x] Streaming nell'agente e nel back-end (messaggio completo salvato alla fine) con test
-- [x] Streaming nel front-end (testo mentre arriva, indicazione dell'uso di uno strumento) e prova reale; README aggiornato
+| Id | Che cosa | Motivo | Rapporto |
+|---|---|---|---|
+| R-D1 | Pagina chiusa durante lo streaming: il turno dell'agente continua e la risposta a volte si salva, a volte no (documentato in specifica dello streaming, README e RF-84) | Salvare la risposta anche a pagina chiusa è utile; un endpoint asincrono che chiude il flusso è un lavoro grande | §2 |
+| R-A8 | Ambito del router largo («informatica, programmazione e intelligenza artificiale»): `/prompt spiega` accetta qualsiasi spiegazione di informatica | La riga ristretta non fa rifiutare al modello una spiegazione di informatica generale (due prove reali fallite il 2026-11-16); l'ambito resta largo per decisione dell'utente | §3 |
+| R-A11 | La prova reale delle preferenze (CA-51) cambia solo la lingua, non lo stile | La traccia chiede «lingua o stile»: la prova sulla lingua basta | §3 |
+| R-B6 | «Stessa risposta da CLI e API» (CA-68): l'uguaglianza dei testi è solo stampata | Le risposte del modello variano: un'uguaglianza esatta CLI/API sarebbe instabile | §3 |
+| R-C4 | Invii contemporanei nella stessa chat: il secondo sovrascrive lo stato dell'agente; chat eliminata durante il salvataggio → `500` | Raro con un solo utente, documentato; va con R-D1 | §3 |
+| R-C10 | Evidenze di Compose (CA-91…CA-93) dimostrate con uno script temporaneo non versionato | Evidenze nel diario; streaming da Compose ripetuto il 2026-11-15 | §3 |
+| R-D3 | Tempo scaduto dopo la risposta del back-end: il testo torna nel campo anche se la domanda è salvata | Raro, la domanda non si perde | §3 |
+| R-P1 | La pagina mostra markdown e LaTeX delle risposte così come sono | Servirebbe una libreria o un'istruzione nel prompt, che rischia di far perdere l'uso degli strumenti | §3 |
+| R-A9 | CLI e back-end importano `mcp_client` (quindi `fastmcp`, `langchain_core`) per due dataclass | Minore confermato che l'utente ha scelto di non correggere ora | §3 |
+| R-B2 | Nessun test di `/chat` con uno strumento MCP irraggiungibile durante il turno (solo a livello di grafo) | Come sopra | §3 |
+| R-B3 | MCP morto: `/status` `503` per sempre con «riavvia l'assistente»; healthcheck di `agent` che accetta qualsiasi codice | Come sopra | §3 |
+| R-B4 | `STATUS_TIMEOUT` 10 s contro un'attesa di MCP fino a 35 s: con MCP bloccato la CLI esce invece di avvisare | Come sopra | §3 |
+| R-B9 | `AGENT_URL` malformato → traceback `InvalidURL` invece di «Configurazione non valida» | Come sopra | §3 |
+| R-C5 | `list_chats` e `get_chat` caricano anche la cronologia JSON completa dell'agente | Come sopra | §3 |
+| R-C8 | Test di `test_docker.py` saltati solo senza l'eseguibile `docker`, non senza il plugin `compose` | Come sopra | §3 |
+| R-D2 | `chat_stream` chiuso prima del primo `next` lascia aperta la connessione httpx | Come sopra | §3 |
+| R-D4 | Il contratto del front-end non confronta con l'OpenAPI i campi degli eventi dello streaming | Come sopra | §3 |
+| R-D5 | La bozza riporta in fondo chi sta leggendo più in alto; `#waiting` annunciato ogni secondo | Come sopra | §3 |

@@ -674,22 +674,22 @@ def test_database_password_stays_out_of_agent_and_cli(tmp_path):  # R-B10
 
 ### Task 14: F5 · Sistemazione dei file del loop (specifica §8)
 
-- [ ] **Passo 1:** `git mv loop.sh _archivio/loop.sh`, `git mv PROMPT.md _archivio/PROMPT.md`.
-- [ ] **Passo 2:** `CLAUDE.md`: «Modalità autonoma» diventa una nota storica di due righe (che cosa
+- [x] **Passo 1:** `git mv loop.sh _archivio/loop.sh`, `git mv PROMPT.md _archivio/PROMPT.md`.
+- [x] **Passo 2:** `CLAUDE.md`: «Modalità autonoma» diventa una nota storica di due righe (che cosa
   ha fatto il loop il 2026-11-14 su `auto-claude`, dove sono `PROGRESS.md` e `_archivio/`); «Confini»
   senza il riferimento al branch `auto-claude` come lavoro in corso; struttura e comandi allineati
   (`server_command`, limiti dei prompt se citati).
-- [ ] **Passo 3:** `TODO.md`: gli step 4–9 e lo streaming riassunti in «Già fatto» (una riga
+- [x] **Passo 3:** `TODO.md`: gli step 4–9 e lo streaming riassunti in «Già fatto» (una riga
   ciascuno); sezione «Debiti noti» con la tabella del §6 della specifica (id, che cosa, motivo,
   rimando al rapporto §3); nessun altro punto aperto; intestazione senza le regole della modalità
   autonoma.
-- [ ] **Passo 4:** `PROGRESS.md`: «Stato attuale» aggiornato; sezioni F4 e F5 con eseguito ed esito;
+- [x] **Passo 4:** `PROGRESS.md`: «Stato attuale» aggiornato; sezioni F4 e F5 con eseguito ed esito;
   nota sui messaggi dei commit del loop (già nello stato attuale: verificare).
-- [ ] **Passo 5:** `docs/superpowers/prossimo-prompt.txt`: riscritto per la sessione dopo
+- [x] **Passo 5:** `docs/superpowers/prossimo-prompt.txt`: riscritto per la sessione dopo
   l'integrazione (push su richiesta, poi i debiti o la lezione successiva).
-- [ ] **Passo 6:** README: `assistente-postgres` descritto come container separato da Compose,
+- [x] **Passo 6:** README: `assistente-postgres` descritto come container separato da Compose,
   usato solo dalle prove reali del back-end (porta 5433 su `127.0.0.1`).
-- [ ] **Passo 7:** `pytest` completo verde (i test non dipendono dai file spostati: verificare con
+- [x] **Passo 7:** `pytest` completo verde (i test non dipendono dai file spostati: verificare con
   `rg "loop.sh|PROMPT.md" tests`); commit `docs: sistemazione dei file del loop autonomo`.
 
 ---

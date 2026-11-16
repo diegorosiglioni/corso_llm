@@ -1,19 +1,18 @@
 # Diario di lavoro
 
-## Stato attuale (2026-11-15)
+## Stato attuale (2026-11-16)
 
 - Step 4–9 e streaming fatti dal loop autonomo il 2026-11-14 su `auto-claude` (commit
-  `320c881`…`c53cc0a`); nessun push. `dev` locale a `428cc8a` (un commit avanti a `origin/dev`),
-  `main`, `origin/dev` e `origin/main` a `d3b511e`.
-- In corso: **revisione e integrazione di `auto-claude`** (specifica e piano del 2026-11-15, sezione
-  «Revisione e integrazione» più sotto). Fatte le fasi F1 (revisione), F2 (prove reali) e F3
-  (rilettura con l'utente): rapporto in `docs/superpowers/reviews/2026-11-15-auto-claude.md`, 3
-  problemi gravi, 4 importanti, 29 minori; decisioni dell'utente nella sezione F3.
-- Specifica e piano delle correzioni (F4, con F5 e F6) approvati dall'utente il 2026-11-15:
-  `docs/superpowers/specs/2026-11-15-correzioni-auto-claude-design.md`,
-  `docs/superpowers/plans/2026-11-15-correzioni-auto-claude.md` (Task 0–16).
-- Prossimo: eseguire il piano dal Task 0 in una sessione nuova (prompt in
-  `docs/superpowers/prossimo-prompt.txt`). Push solo su richiesta dell'utente.
+  `320c881`…`c53cc0a`); poi revisione (F1–F3, 2026-11-15) e correzioni (F4, 2026-11-15 e 16) sullo
+  stesso branch, con la sistemazione dei file del loop (F5). Nessun push. `dev` locale a `428cc8a`
+  (un commit avanti a `origin/dev`), `main`, `origin/dev` e `origin/main` a `d3b511e`.
+- Piano delle correzioni (`docs/superpowers/plans/2026-11-15-correzioni-auto-claude.md`): Task 0–14
+  fatti; Task 15 (verifica finale, F6) in corso, sezione F6 più sotto; Task 16 (avanzamento rapido
+  di `dev` su `auto-claude`) solo dopo il via libera dell'utente al resoconto del Task 15.
+- Esito delle correzioni: R-A8 non corretto, **debito noto** per decisione dell'utente; R-A1 al
+  gradino 3 (CA-58 fallimento atteso per limite del modello); gli altri debiti noti in `TODO.md`.
+- Prossimo: resoconto all'utente e Task 16; poi il push solo su richiesta (prompt per la sessione
+  dopo l'integrazione in `docs/superpowers/prossimo-prompt.txt`).
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
@@ -2213,6 +2212,27 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
   piano sul vecchio decoratore (allineato); da decidere con l'utente: CA-58 che passasse il merito
   sarebbe un semplice `passed` con la documentazione ancora «non soddisfatta», e la risposta
   stampata di un `xfailed` si vede solo con `-rA` o `-s`. Esito nel rapporto, §9. **Task 13 fatto.**
+
+### F5 · Sistemazione dei file del loop — fatto (2026-11-16)
+
+Task 14 del piano, eseguito da un agente con contesto pulito.
+- `git mv` di `loop.sh` e `PROMPT.md` in `_archivio/` (accanto al vecchio `prossimo-prompt.txt`).
+- `CLAUDE.md`: la sezione «Modalità autonoma» è ora una nota storica di due righe; «Confini» senza
+  `auto-claude` come lavoro in corso (rimando ai debiti di `TODO.md`); in «Struttura»
+  `server_command` vuole sempre il file delle preferenze. I limiti dei prompt non sono citati in
+  `CLAUDE.md`: nulla da allineare.
+- `TODO.md`: intestazione senza le regole della modalità autonoma; «Già fatto» con una riga per gli
+  Step 4–9 e una per lo streaming; «Debiti noti» con la tabella del §6 della specifica delle
+  correzioni più R-A8 (id, che cosa, motivo, rimando al rapporto); nessun punto aperto. I due minori
+  del secondo giro di revisione da decidere con l'utente non ci sono.
+- `docs/superpowers/prossimo-prompt.txt` riscritto per la sessione dopo l'integrazione (push su
+  richiesta, poi un debito o la lezione successiva).
+- README: `assistente-postgres` descritto come container separato da Compose, per il back-end
+  locale e le prove reali del back-end, su `127.0.0.1:5433`; corretto lo snippet della discovery
+  dei tool (diagnosi MCP, punto 2), che chiamava ancora `server_command` con due argomenti (dopo
+  R-A3 dava `TypeError`): eseguito da PowerShell, stampa le sette righe attese.
+- Nota sui messaggi dei commit del loop: già nello «Stato attuale», verificata.
+- Controllo: `rg "loop.sh|PROMPT.md" tests` → nessun riferimento nei test.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

@@ -4,7 +4,7 @@ Progetto del corso «Deep Learning e LLM: costruire chatbot e agenti».
 La cartella del progetto è `"C:\Users\diegorosiglioni\Desktop\paolo\test_paolo"`, radice della
 repository: il progetto sta direttamente lì (fino al 2026-11-09 stava in `assistente-laboratorio/`).
 Requisiti, specifica e piano: `docs/superpowers/`.
-Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/superpowers/handoff.md`; leggerlo per primo) e lavori da fare in `TODO.md`; prompt per la prossima sessione in `docs/superpowers/prossimo-prompt.txt`.
+Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/superpowers/handoff.md`; leggerlo per primo) e debiti noti in `TODO.md`; prompt per la prossima sessione in `docs/superpowers/prossimo-prompt.txt`.
 
 ## Struttura e comandi
 - Codice in `assistant/`: `config.py`, `model.py`, `tools.py`, `router.py`, `reviewer.py`,
@@ -22,7 +22,8 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
   logica pura degli strumenti MCP in `units.py`,
   `calculator.py`, `catalog.py` (dati in `assistant/data/catalog.json`), `notes.py`; testi dei
   prompt MCP `spiega` e `riassumi_conversazione` in `prompts.py`; server
-  FastMCP in `mcp_server.py`, client sincrono e adattatore in `mcp_client.py`. Solo
+  FastMCP in `mcp_server.py`, client sincrono e adattatore in `mcp_client.py` (`server_command`
+  vuole sempre il file delle preferenze: nessun valore predefinito). Solo
   `service.py` collega grafo, MCP e modelli; `__main__.py` collega client HTTP e terminale.
 - Back-end (Step 7) nel pacchetto `backend/`, servizio distinto dall'agente: `db.py`
   (schema SQLAlchemy `chats`/`chat_messages`, `create_db_engine`, `init_db`), `store.py`
@@ -123,7 +124,7 @@ Un'applicazione in Python (terminale e pagina web) che conversa con un modello l
 - Implementare solo i requisiti concordati. MCP e i quattro strumenti della lezione 5 e gli
   Step 1–9 della lezione 6 (router, revisore, riassunto, resource delle preferenze, prompt MCP,
   servizio HTTP, back-end, front-end, Compose a quattro container) e lo streaming facoltativo sono
-  implementati (Step 4–9 e streaming in modalità autonoma sul branch `auto-claude`);
+  implementati; i debiti noti rimasti sono in `TODO.md`;
   altri strumenti, altri server MCP, workflow e RAG non vanno anticipati: ognuno avrà il proprio
   ciclo di specifica e piano.
 - Niente interfacce grafiche oltre al front-end web dello Step 8, niente servizi cloud o
@@ -172,21 +173,9 @@ Un'applicazione in Python (terminale e pagina web) che conversa con un modello l
   Se l'avanzamento rapido viene rifiutato (`main` ha commit che `dev` non ha), fermarsi e chiedere:
   niente `--force`, niente merge automatici.
 
-## Modalità autonoma (branch `auto-claude`)
-Dal 2026-11-14, sul branch `auto-claude` il lavoro procede in loop (`loop.sh` avvia una sessione
-con `PROMPT.md` per ogni punto di `TODO.md`) senza nessuno che risponda. Su quel branch valgono
-queste regole al posto di quelle contrarie scritte sopra; tutte le altre restano.
-- I punti di `TODO.md` (step 4–9 della lezione 6 e streaming facoltativo, dalla traccia
-  `docs/superpowers/lezione6.md`) sono concordati, front-end compreso; niente oltre la traccia.
-- L'approvazione di specifica e piano è sostituita dal piano scritto in `PROGRESS.md`; il primo
-  punto di ogni step scrive la specifica in `docs/superpowers/specs/` e i requisiti in
-  `requisiti.md`, che i punti successivi dello step seguono. Le scelte aperte si risolvono con
-  l'opzione consigliata o più standard, annotata in una riga in `PROGRESS.md`.
-- Nuove dipendenze ammesse solo se motivate nella specifica e con versione fissata in
-  `requirements*.txt` e `constraints.txt`.
-- Commit su `auto-claude` (non su `dev`), nel formato di `PROMPT.md`; nessun push.
-- Prove reali (LM Studio, Docker, PostgreSQL, browser): se il servizio non è raggiungibile, il
-  punto va segnato `[!]` con il motivo in `PROGRESS.md`, senza simularne l'esito.
+## Nota storica: modalità autonoma
+Il 2026-11-14 un loop senza nessuno che rispondesse ha fatto gli Step 4–9 e lo streaming sul branch
+`auto-claude`; revisione, correzioni e prove sono in `PROGRESS.md`, script e prompt in `_archivio/`.
 
 ## Documentazione
 - Tenere aggiornato il README con configurazione, avvio, test e diagnosi, riportando solo

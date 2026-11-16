@@ -239,8 +239,11 @@ docker exec assistente-postgres pg_isready -U lab -d assistente    # «accepting
 
 I dati restano nel container (anche dopo `docker stop assistente-postgres` e
 `docker start assistente-postgres`); `docker rm -f assistente-postgres` lo elimina con le chat.
-Con Docker Compose PostgreSQL è invece il servizio `postgres`, con i dati nel volume `postgres-data`
-(sezione «Docker»); è un database distinto da quello di questo container.
+`assistente-postgres` è un container separato, che Docker Compose non crea né usa: serve al
+back-end avviato in locale e alle prove reali del back-end (`TEST_DATABASE_URL`, sezione «Prove
+reali con LM Studio»), sempre sulla porta 5433 di `127.0.0.1`. Con Docker Compose PostgreSQL è
+invece il servizio `postgres`, con i dati nel volume `postgres-data` (sezione «Docker»), non
+pubblicato sull'host; è un database distinto da quello di questo container.
 
 **Avvio del back-end**, in un terzo terminale (servizio dell'agente già avviato):
 
@@ -659,8 +662,10 @@ Senza variabili le prove falliscono con un messaggio esplicito invece di essere 
 Una risposta simulata non dimostra che il modello locale sappia usare lo strumento: lo dimostra
 solo questa prova.
 
-Le prove del back-end richiedono anche PostgreSQL (il container della sezione «Back-end: chat
-salvate su PostgreSQL») e la variabile `TEST_DATABASE_URL`. Ogni prova lavora in uno schema
+Le prove del back-end richiedono anche PostgreSQL (il container `assistente-postgres` della
+sezione «Back-end: chat salvate su PostgreSQL», separato da Docker Compose, su `127.0.0.1:5433`) e
+la variabile `TEST_DATABASE_URL`; il `postgres` di Compose non è pubblicato e non serve a queste
+prove. Ogni prova lavora in uno schema
 temporaneo del database, eliminato alla fine: le tabelle di `public` non vengono toccate, quindi va
 bene anche il database del back-end.
 
@@ -1048,8 +1053,9 @@ assente dal catalogo». La discovery si prova da sola (deve stampare sette righe
 ```powershell
 @'
 from pathlib import Path
+from assistant.config import DEFAULT_PREFERENCES_FILE
 from assistant.mcp_client import McpClient, server_command
-command, args, cwd = server_command(Path("data/notes.sqlite3").resolve(), "WARNING")
+command, args, cwd = server_command(Path("data/notes.sqlite3").resolve(), "WARNING", DEFAULT_PREFERENCES_FILE)
 with McpClient(command, args, cwd=cwd) as client:
     for tool in client.list_tools():
         print(tool.name, "-", tool.description[:50])
