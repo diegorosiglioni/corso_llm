@@ -19,7 +19,7 @@ con il proprio ciclo di specifica e piano (`CLAUDE.md`, «Metodo»). Test senza 
 ## Debiti noti
 
 Accettati dall'utente nella rilettura del 2026-11-15 e nelle correzioni del 2026-11-16; descrizione
-di ciascuno nel rapporto [`docs/superpowers/reviews/2026-11-15-auto-claude.md`](docs/superpowers/reviews/2026-11-15-auto-claude.md), §2 (R-D1) e §3 (gli altri).
+di ciascuno nel rapporto [`docs/superpowers/reviews/2026-11-15-auto-claude.md`](docs/superpowers/reviews/2026-11-15-auto-claude.md), §2 (R-D1), §9 (R-A1a e R-A1b, minori del secondo giro di revisione) e §3 (gli altri).
 
 | Id | Che cosa | Motivo | Rapporto |
 |---|---|---|---|
@@ -41,3 +41,5 @@ di ciascuno nel rapporto [`docs/superpowers/reviews/2026-11-15-auto-claude.md`](
 | R-D2 | `chat_stream` chiuso prima del primo `next` lascia aperta la connessione httpx | Come sopra | §3 |
 | R-D4 | Il contratto del front-end non confronta con l'OpenAPI i campi degli eventi dello streaming | Come sopra | §3 |
 | R-D5 | La bozza riporta in fondo chi sta leggendo più in alto; `#waiting` annunciato ogni secondo | Come sopra | §3 |
+| R-A1a | Se CA-58 (`test_explain_prompt_from_the_cli`) passasse il controllo di merito risulterebbe un semplice `passed`, mentre `requisiti.md`, README e rapporto direbbero ancora «non soddisfatta per limite del modello» | Minore del secondo giro di revisione; l'utente ha scelto di non correggerlo ora (2026-11-16): con il modello attuale il merito non passa | §9 |
+| R-A1b | Con CA-58 `xfailed` la risposta del modello si vede solo con `-rA` o `-s` | Come sopra | §9 |

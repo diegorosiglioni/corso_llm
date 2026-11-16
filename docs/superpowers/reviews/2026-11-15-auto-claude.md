@@ -251,9 +251,10 @@ Un revisore con contesto pulito (subagente in sola lettura, modello Opus) ha let
   sbagliata nel merito»; date del 15 e 16 novembre allineate; per l'agente il comportamento a pagina
   chiusa è dedotto dal back-end, non osservato.
 - **Minori del secondo giro (3):** testo di `requisiti.md` e del piano sul vecchio decoratore
-  (allineato insieme a questa sezione); da decidere con l'utente: un CA-58 che passasse il merito
-  risulterebbe un semplice `passed` (la documentazione direbbe ancora «non soddisfatta»), e con
-  `xfail` la risposta stampata si vede solo con `-rA` o `-s`.
+  (allineato insieme a questa sezione); gli altri due, per decisione dell'utente del 2026-11-16,
+  sono debiti noti in `TODO.md`: **R-A1a**, un CA-58 che passasse il merito risulterebbe un semplice
+  `passed` (la documentazione direbbe ancora «non soddisfatta»), e **R-A1b**, con `xfail` la
+  risposta stampata si vede solo con `-rA` o `-s`.
 
 Nessun grave o importante aperto dopo il secondo giro.
 

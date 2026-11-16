@@ -10,12 +10,13 @@
   fatti (verifica finale F6 del 2026-11-16: nessun fallimento confermato, due prove instabili,
   sezione F6 più sotto); Task 16 (avanzamento rapido di `dev` su `auto-claude`) solo dopo il via
   libera dell'utente al resoconto del Task 15.
-- Resoconto del Task 15 dato all'utente il 2026-11-16 (criteri del §10 del rapporto: 1 soddisfatto
-  con l'eccezione di R-A8, 2 e 3 soddisfatti, 4 da fare); in attesa del via libera, chiesto nella
-  sessione successiva.
-- Da decidere con l'utente: i due minori del secondo giro di revisione (rapporto, §9): un CA-58 che
-  passasse il merito risulterebbe `passed` con i documenti che dicono «non soddisfatta»; con `xfail`
-  la risposta del modello si vede solo con `-rA` o `-s`.
+- Resoconto del Task 15 dato all'utente il 2026-11-16 (criteri del §10 della specifica: 1
+  soddisfatto con l'eccezione di R-A8, 2 e 3 soddisfatti, 4 da fare); **via libera dell'utente** il
+  2026-11-16, nella sessione successiva.
+- I due minori del secondo giro di revisione (rapporto, §9) sono debiti noti in `TODO.md` per
+  decisione dell'utente del 2026-11-16: R-A1a (un CA-58 che passasse il merito risulterebbe `passed`
+  con i documenti che dicono «non soddisfatta») e R-A1b (con `xfail` la risposta del modello si vede
+  solo con `-rA` o `-s`).
 - Prove instabili (F6): `test_first_turn_information_survives_compression` (router) e l'uso di
   `calculate` dalla pagina di Compose (2 volte su 3).
 - Registro del piano, con le righe `Ruling:`, in `.superpowers/sdd/2026-11-15-correzioni-auto-claude/`
@@ -2223,6 +2224,8 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
   piano sul vecchio decoratore (allineato); da decidere con l'utente: CA-58 che passasse il merito
   sarebbe un semplice `passed` con la documentazione ancora «non soddisfatta», e la risposta
   stampata di un `xfailed` si vede solo con `-rA` o `-s`. Esito nel rapporto, §9. **Task 13 fatto.**
+  Il 2026-11-16 l'utente ha scelto di non correggere questi due minori: debiti noti R-A1a e R-A1b in
+  `TODO.md` (solo documenti, nessun cambio ai test).
 
 ### F5 · Sistemazione dei file del loop — fatto (2026-11-16)
 
