@@ -430,9 +430,6 @@ MERIT = re.compile(
 )
 
 
-@pytest.mark.xfail(strict=False, reason=(
-    "limite del modello: spiegazione del Model Context Protocol non corretta nel merito (R-A1)"
-))
 def test_explain_prompt_from_the_cli(tmp_path):  # CA-58 (R-A1, R-A2)
     # The path of the application: CLI → POST /chat with "prompt" → host check in the service.
     command = '/prompt spiega argomento="Model Context Protocol" livello=base'
@@ -451,7 +448,12 @@ def test_explain_prompt_from_the_cli(tmp_path):  # CA-58 (R-A1, R-A2)
     assert re.search(r"prompts/get name=spiega .*status=ok", log), log
     assert "category=conversation" in log and "node=reviewer" in log, log
     assert reply and not reply.startswith(REFUSAL), reply
-    assert MERIT.search(reply), reply
+    # Only the merit check is an expected failure (R-A1, step 3): the path of R-A2 above must pass.
+    if not MERIT.search(reply):
+        pytest.xfail(
+            "limite del modello: spiegazione del Model Context Protocol non corretta nel merito "
+            "(R-A1)"
+        )
 
 
 def test_summary_prompt(real, caplog):  # CA-59

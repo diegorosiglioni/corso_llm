@@ -2187,6 +2187,23 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
     del README lo diceva già).
   - R-A10: README, sezione del front-end: `/prompts` e `/prompt` esistono solo nella CLI.
   - R-C9: `CLAUDE.md`, prove reali del back-end con `.\.venv\Scripts\python.exe -m pytest …`.
+- **Task 13 · Revisione delle correzioni — primo giro fatto, correzione dell'importante fatta.**
+  Un revisore con contesto pulito (subagente in sola lettura, modello Opus) ha rivisto
+  `41e39a4..76877c3` e ha rieseguito `pytest` (1051 passed). Esito «Con correzioni»: nessun grave;
+  **1 importante**, cioè l'`xfail` di CA-58 sull'intero test nascondeva anche i guasti del percorso
+  CLI → servizio di R-A2 (confermato da Claude); **4 minori**, solo testi:
+  1. «comportamento corretto il 2026-11-15, debito R-D1» si legge come «sistemato»; meglio
+     «descrizione corretta»;
+  2. README e CA-58 dicono che con la frase «non inventare» la risposta «non cambia»: cambia, ma
+     resta sbagliata nel merito;
+  3. date del 2026-11-16 e del 2026-11-15 da allineare tra diario e requisiti;
+  4. specifica dello streaming: per l'agente il comportamento è dedotto dal back-end, non osservato.
+  Tutti i cinque punti della Review Focus sono stati verificati come OK. Correzione dell'importante:
+  niente decoratore, `pytest.xfail(...)` solo se manca il controllo di merito, così le verifiche
+  del percorso restano normali. Dimostrazione con un test temporaneo nella scratchpad (stesso
+  controllo strutturale guasto: col decoratore `XFAIL`, con lo schema nuovo `FAILED`); modello vero:
+  CA-58 → `1 xfailed` in 137 s, per il solo controllo di merito; modello simulato: `pytest` 1051
+  passed. Da fare: secondo giro del revisore solo su questa correzione; i minori all'utente.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 
