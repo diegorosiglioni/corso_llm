@@ -1,2 +1,0 @@
-# Script bash con fine riga LF anche su Windows (core.autocrlf=true)
-*.sh text eol=lf

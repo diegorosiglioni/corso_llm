@@ -13,6 +13,8 @@
   conferma dell'utente (`git branch -d`, i suoi commit sono in `dev`).
 - Script e prompt del loop autonomo (`_archivio/`) tolti dalla repository su richiesta dell'utente
   il 2026-11-16: restano solo in locale, esclusi da Git; nei commit vecchi si vedono ancora.
+- `.gitattributes` cancellato il 2026-11-16: conteneva solo la regola `*.sh` con fine riga LF,
+  pensata per `loop.sh`; uscito `_archivio/` da Git, nessun file versionato la usava più.
 - Esito delle correzioni: R-A8 non corretto e R-A1 al gradino 3 (CA-58 fallimento atteso per limite
   del modello); R-A1a e R-A1b (minori del secondo giro di revisione) e gli altri debiti noti in
   `TODO.md`.
