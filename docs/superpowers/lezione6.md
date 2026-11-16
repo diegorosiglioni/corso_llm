@@ -3,7 +3,7 @@
 Data: 2026-11-09
 Stato: **trascrizione della traccia.** Step 1–3 realizzati con approvazione (2026-11-11…13), step 4–9 e
 streaming in modalità autonoma il 2026-11-14 (requisiti §12–§18, `PROGRESS.md`). Riassume fedelmente le
-19 slide di `LLM_Lez_6.pdf` (nella radice, non tracciato). Ogni step avrà il proprio
+19 slide di `LLM_Lez_6.pdf` (mai tracciato, cancellato in locale il 2026-11-16). Ogni step avrà il proprio
 brainstorming, specifica e piano; i requisiti approvati finiranno in `requisiti.md` (§9 e
 seguenti) e nelle specifiche.
 

@@ -7,8 +7,7 @@ tests/
 docs/
 .git
 data/
-# Non servono all'immagine: lezione passata, stato di lavoro degli agenti, materiale del corso
-lezione3/
+# Non servono all'immagine: stato di lavoro degli agenti, materiale del corso
 .superpowers/
 *.pdf
 CLAUDE.md

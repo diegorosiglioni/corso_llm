@@ -23,6 +23,11 @@
 - `docs/superpowers/prossimo-prompt.txt` cancellato su richiesta dell'utente il 2026-11-16: ripeteva
   `CLAUDE.md` e questa sezione e andava riscritto a ogni fine sessione. Il passaggio di consegne
   tra sessioni è «Stato attuale» (voce «Prossimo»).
+- Pulizia locale del 2026-11-16, su richiesta dell'utente: cancellati `lezione3/` e
+  `LLM_Lez_6.pdf` (mai versionati; il contenuto della traccia resta in
+  `docs/superpowers/lezione6.md`) e il branch locale `backup-locale` (un solo `first commit` del
+  2026-10-19, senza storia in comune con `dev`). Tolta la regola su `lezione3/` da `CLAUDE.md`,
+  `.gitignore` e `.dockerignore`; la regola `/LLM_Lez_*.pdf` resta per le slide delle lezioni future.
 - Esito delle correzioni: R-A8 non corretto e R-A1 al gradino 3 (CA-58 fallimento atteso per limite
   del modello); R-A1a e R-A1b (minori del secondo giro di revisione) e gli altri debiti noti in
   `TODO.md`.

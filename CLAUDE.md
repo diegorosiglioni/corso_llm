@@ -129,8 +129,6 @@ Un'applicazione in Python (terminale e pagina web) che conversa con un modello l
   ciclo di specifica e piano.
 - Niente interfacce grafiche oltre al front-end web dello Step 8, niente servizi cloud o
   framework non concordati.
-- La cartella `lezione3/` è una lezione passata: resta solo in locale, esclusa da Git con
-  `.gitignore`. Non leggerla per copiarne il codice e non modificarla.
 - Lavorare nel branch `dev`; nessun altro branch o worktree se non richiesto.
 
 ## Scelte tecniche
