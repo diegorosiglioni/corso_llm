@@ -135,7 +135,7 @@ def test_timeouts():
     client.prompts()
     client.chat([], "", message="ciao")
     assert [r.extensions["timeout"]["read"] for r in requests] == [STATUS_TIMEOUT, CHAT_TIMEOUT]
-    assert (STATUS_TIMEOUT, CHAT_TIMEOUT) == (10, 600)
+    assert (STATUS_TIMEOUT, CHAT_TIMEOUT) == (20, 600)
     assert requests[0].extensions["timeout"]["connect"] == 10.0
     assert requests[1].extensions["timeout"] == {  # R-C6: 10 s to connect, as chat_stream
         "connect": 10.0, "read": 600.0, "write": 600.0, "pool": 600.0,

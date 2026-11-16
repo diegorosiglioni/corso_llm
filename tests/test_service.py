@@ -102,7 +102,7 @@ def test_mcp_startup_failure_exits_1(monkeypatch, server, capsys, tmp_path):  # 
 
 
 class DiscoveryFails(FakeMcpClient):
-    def list_tools(self):
+    def list_tools(self, timeout=None):
         raise ToolUnavailableError("nessuna risposta entro 30 s")
 
 

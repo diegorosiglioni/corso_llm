@@ -157,7 +157,7 @@ def test_status_error_at_startup_exits_1(monkeypatch, capsys):
 
 
 class ToolListFails(FakeMcpClient):
-    def list_tools(self):
+    def list_tools(self, timeout=None):
         raise ToolUnavailableError("sessione MCP chiusa")
 
 

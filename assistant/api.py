@@ -206,6 +206,7 @@ STATUS_RESPONSES = {
 }
 
 INTERNAL_DETAIL = "errore interno dell'agente; dettagli nel log"
+STATUS_MCP_TIMEOUT = 5.0  # GET /status: wait for tools/list (R-B4; the CLI waits 20 s)
 
 # Limits of a prompt request, checked before history and prompts/list (R-A7): no log line gets
 # longer arguments, and the detail names the argument and the limit, never the value.
@@ -413,7 +414,7 @@ async def _in_thread(events: Iterator) -> AsyncIterator:
 
 def _mcp_status(client) -> dict:
     try:
-        tools = client.list_tools()
+        tools = client.list_tools(timeout=STATUS_MCP_TIMEOUT)
     except ToolUnavailableError as error:
         return {"status": "unavailable", "detail": str(error)}
     return {"status": "ok", "detail": f"{len(tools)} strumenti"}

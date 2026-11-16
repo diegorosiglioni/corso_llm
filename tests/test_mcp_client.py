@@ -1,10 +1,13 @@
 """McpClient against the real MCP server started as a stdio subprocess (no LM Studio needed)."""
 
+import asyncio
 import json
 import logging
 import sys
+import time
 
 import pytest
+from fastmcp import Client
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from mcp import types as mcp_types
 from mcp.types import (
@@ -99,6 +102,16 @@ def test_list_tools_over_stdio(client):
     specs = {s.name: s for s in client.list_tools()}
     assert len(specs) == 7 and specs["calculate"].description == CALCULATOR_DESCRIPTION
     assert specs["search_catalog"].input_schema["properties"]["max_results"]["default"] == 5
+
+
+def test_list_tools_with_its_own_timeout(client, monkeypatch):  # R-B4
+    async def slow(self):
+        await asyncio.sleep(5)
+    monkeypatch.setattr(Client, "list_tools", slow)
+    started = time.monotonic()
+    with pytest.raises(ToolUnavailableError, match=r"^nessuna risposta entro 0\.2 s$"):
+        client.list_tools(timeout=0.2)
+    assert time.monotonic() - started < 2
 
 
 def test_call_returns_structured_dict(client):

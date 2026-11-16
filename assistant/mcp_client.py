@@ -170,8 +170,9 @@ class McpClient:
         self._loop = None
         self._client = None
 
-    def list_tools(self) -> list[ToolSpec]:
-        tools = self._submit(lambda client: client.list_tools())
+    def list_tools(self, timeout: float | None = None) -> list[ToolSpec]:
+        """Tools published with tools/list; `timeout` replaces the usual wait (GET /status)."""
+        tools = self._submit(lambda client: client.list_tools(), timeout)
         return [ToolSpec(t.name, t.description or "", t.input_schema) for t in tools]
 
     def call_tool(self, name: str, arguments: dict) -> dict:
@@ -225,19 +226,21 @@ class McpClient:
         except ToolUnavailableError as error:
             raise error_type(str(error)) from error
 
-    def _submit(self, request):
-        """Runs `request(client)` on the session loop; connection problems → ToolUnavailableError."""
+    def _submit(self, request, timeout: float | None = None):
+        """Runs `request(client)` on the session loop; connection problems → ToolUnavailableError.
+
+        Without `timeout` the wait is the session timeout plus 5 s; with it, exactly `timeout`.
+        """
         client, loop = self._client, self._loop
         if client is None or loop is None:
             raise ToolUnavailableError("sessione MCP chiusa")
         future = asyncio.run_coroutine_threadsafe(request(client), loop)
+        wait, shown = (self._timeout + 5, self._timeout) if timeout is None else (timeout, timeout)
         try:
-            return future.result(self._timeout + 5)
+            return future.result(wait)
         except concurrent.futures.TimeoutError:
             future.cancel()
-            raise ToolUnavailableError(
-                f"nessuna risposta entro {self._timeout:g} s"
-            ) from None
+            raise ToolUnavailableError(f"nessuna risposta entro {shown:g} s") from None
         except Exception as error:
             raise ToolUnavailableError(_reason(error)) from error
 

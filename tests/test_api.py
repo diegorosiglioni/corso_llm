@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, HumanMessage
 
-from assistant.api import StreamTurn, _in_thread, _stream_events
+from assistant.api import STATUS_MCP_TIMEOUT, StreamTurn, _in_thread, _stream_events
 from assistant.mcp_client import PromptArgument, PromptMessage, PromptSpec
 from assistant.reviewer import ReviewDecision
 from assistant.tools import ToolUnavailableError
@@ -564,10 +564,16 @@ def test_prompts_unexpected_error_is_500():
 
 # --- GET /status (CA-64) ---
 
+def test_status_gives_mcp_a_short_timeout():  # R-B4
+    client = FakeMcpClient(MCP_SPECS)
+    api(client=client).get("/status")
+    assert client.list_timeouts == [5.0] and STATUS_MCP_TIMEOUT == 5.0
+
+
 class ToolListFails(FakeMcpClient):
     """FakeMcpClient whose tools/list fails as with a closed MCP session."""
 
-    def list_tools(self):
+    def list_tools(self, timeout=None):
         raise ToolUnavailableError("sessione MCP chiusa")
 
 

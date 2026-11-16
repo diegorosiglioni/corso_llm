@@ -174,6 +174,7 @@ class FakeMcpClient:
         self._resources = dict(resources or {})
         self._prompts = dict(prompts or {})
         self.calls: list[tuple[str, dict]] = []
+        self.list_timeouts: list[float | None] = []
         self.resource_reads: list[str] = []
         self.prompt_lists = 0
         self.prompt_gets: list[tuple[str, dict]] = []
@@ -186,7 +187,8 @@ class FakeMcpClient:
     def __exit__(self, *exc) -> None:
         pass
 
-    def list_tools(self) -> list[ToolSpec]:
+    def list_tools(self, timeout: float | None = None) -> list[ToolSpec]:
+        self.list_timeouts.append(timeout)
         return list(self._specs)
 
     def call_tool(self, name: str, arguments: dict) -> dict:

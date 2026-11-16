@@ -15,7 +15,9 @@ import httpx
 
 from assistant.mcp_client import PromptArgument, PromptSpec
 
-STATUS_TIMEOUT = 10.0  # GET /status and GET /prompts (the model check lasts at most 5 s)
+# GET /status and GET /prompts: 5 s for MCP (STATUS_MCP_TIMEOUT of the service), at most 5 s for
+# the model check, plus room for a restart of the MCP server (usually 1-3 s).
+STATUS_TIMEOUT = 20.0
 CHAT_TIMEOUT = 600.0  # POST /chat: a turn may contain several calls to the local model
 CONNECT_TIMEOUT = 10.0  # connection to the agent, for every request
 STREAM_IDLE_TIMEOUT = 60.0  # POST /chat/stream: most time without data (": ping" every 15 s)
