@@ -175,7 +175,8 @@ Un'applicazione in Python (terminale e pagina web) che conversa con un modello l
 
 ## Nota storica: modalità autonoma
 Il 2026-11-14 un loop senza nessuno che rispondesse ha fatto gli Step 4–9 e lo streaming sul branch
-`auto-claude`; revisione, correzioni e prove sono in `PROGRESS.md`, script e prompt in `_archivio/`.
+`auto-claude`; revisione, correzioni e prove sono in `PROGRESS.md`, script e prompt in `_archivio/`, solo in
+locale (esclusa da Git).
 
 ## Documentazione
 - Tenere aggiornato il README con configurazione, avvio, test e diagnosi, riportando solo

@@ -11,6 +11,8 @@
   **Push fatto** su richiesta dell'utente il 2026-11-16: `dev`, `main`, `origin/dev` e
   `origin/main` a `1b77718` (avanzamento rapido di `main`). Branch `auto-claude` cancellato su
   conferma dell'utente (`git branch -d`, i suoi commit sono in `dev`).
+- Script e prompt del loop autonomo (`_archivio/`) tolti dalla repository su richiesta dell'utente
+  il 2026-11-16: restano solo in locale, esclusi da Git; nei commit vecchi si vedono ancora.
 - Esito delle correzioni: R-A8 non corretto e R-A1 al gradino 3 (CA-58 fallimento atteso per limite
   del modello); R-A1a e R-A1b (minori del secondo giro di revisione) e gli altri debiti noti in
   `TODO.md`.
