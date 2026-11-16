@@ -15,13 +15,15 @@ from assistant.prompts import (
 def test_explain_prompt_for_each_level(level):
     assert explain_prompt("Model Context Protocol", level) == (
         f"Spiegami Model Context Protocol a livello {level}: {LEVELS[level]}."
+        " Se non conosci bene l'argomento, dillo invece di inventare."
     )
 
 
 def test_explain_prompt_base_text():
     assert explain_prompt("MCP", "base") == (
         "Spiegami MCP a livello base: con parole semplici, senza dare per scontate conoscenze "
-        "tecniche, e con un esempio concreto."
+        "tecniche, e con un esempio concreto. Se non conosci bene l'argomento, dillo invece di "
+        "inventare."
     )
 
 
