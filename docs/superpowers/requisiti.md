@@ -104,7 +104,8 @@ davvero. È il primo passo di un progetto che continuerà nelle lezioni successi
   `requirements-dev.txt` per i test).
 - **RNF-8** Tutti i comandi documentati (installazione, avvio, test, Docker, diagnosi)
   funzionano in PowerShell su Windows e sono stati verificati.
-- **RNF-9** Il progetto vive interamente in `assistente-laboratorio/`.
+- **RNF-9** *(aggiornato il 2026-11-16)* Il progetto vive interamente nella radice della
+  repository; fino al 2026-11-09 stava nella cartella `assistente-laboratorio/`.
 - **RNF-10** *(2026-11-09)* Lingua: il codice è in inglese (nomi di pacchetto, moduli, classi,
   funzioni, variabili d'ambiente, strumenti e loro argomenti, chiavi JSON dei risultati, commenti
   e docstring), come negli esempi della lezione 5. Sono in italiano i testi che leggono l'utente e

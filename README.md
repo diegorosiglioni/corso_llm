@@ -73,8 +73,8 @@ PostgreSQL. Il JavaScript della pagina del front-end si prova con Node.js (`node
 da `pytest`; senza Node il test si salta col motivo). I Dockerfile si controllano come testo, senza
 costruire immagini, e `compose.yaml` con `docker compose config` su una copia con un `.env` di
 credenziali finte, senza il demone (`tests/test_docker.py`; senza la CLI di Docker questi test si
-saltano col motivo). Esito al 2026-11-14: `1003 passed, 90
-deselected` (le 90 deselezionate sono le 65 prove reali, 27 con LM Studio e 38 test dell'archivio
+saltano col motivo). Esito al 2026-11-16: `1051 passed, 93
+deselected` (le 93 deselezionate sono le 68 prove reali, 28 con LM Studio e 40 test dell'archivio
 ripetuti su PostgreSQL, e i 25 test nel browser).
 
 La pagina vera nel browser installato (Edge; Chrome con `$env:BROWSER_CHANNEL = "chrome"`), pilotato
@@ -87,7 +87,7 @@ browser da scaricare:
 .\.venv\Scripts\python.exe -m pytest -m browser
 ```
 
-Esito al 2026-11-14: `25 passed` in circa 10 s (anche con Chrome).
+Esito al 2026-11-16: `25 passed` in circa 40 s con Edge (con Chrome verificato il 2026-11-14).
 
 ## Configurazione
 
