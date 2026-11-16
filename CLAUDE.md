@@ -4,7 +4,7 @@ Progetto del corso «Deep Learning e LLM: costruire chatbot e agenti».
 La cartella del progetto è `"C:\Users\diegorosiglioni\Desktop\paolo\test_paolo"`, radice della
 repository: il progetto sta direttamente lì (fino al 2026-11-09 stava in `assistente-laboratorio/`).
 Requisiti, specifica e piano: `docs/superpowers/`.
-Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/superpowers/handoff.md`; leggerlo per primo) e debiti noti in `TODO.md`; prompt per la prossima sessione in `docs/superpowers/prossimo-prompt.txt`.
+Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/superpowers/handoff.md`; leggerlo per primo) e debiti noti in `TODO.md`.
 
 ## Struttura e comandi
 - Codice in `assistant/`: `config.py`, `model.py`, `tools.py`, `router.py`, `reviewer.py`,

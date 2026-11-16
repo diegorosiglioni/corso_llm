@@ -9,8 +9,9 @@
   (la storia di Git è il registro).
 - `dev` locale portato su `auto-claude` con avanzamento rapido (F7); su `dev` `pytest` 1051 passed.
   **Push fatto** su richiesta dell'utente il 2026-11-16: `dev`, `main`, `origin/dev` e
-  `origin/main` a `1b77718` (avanzamento rapido di `main`). Branch `auto-claude` cancellato su
-  conferma dell'utente (`git branch -d`, i suoi commit sono in `dev`).
+  `origin/main` a `1b77718` (avanzamento rapido di `main`); secondo push, sempre su richiesta, lo
+  stesso giorno dopo il controllo della repository, con questo aggiornamento del diario. Branch
+  `auto-claude` cancellato su conferma dell'utente (`git branch -d`, i suoi commit sono in `dev`).
 - Script e prompt del loop autonomo (`_archivio/`) tolti dalla repository su richiesta dell'utente
   il 2026-11-16: restano solo in locale, esclusi da Git; nei commit vecchi si vedono ancora.
 - `.gitattributes` cancellato il 2026-11-16: conteneva solo la regola `*.sh` con fine riga LF,
@@ -19,14 +20,16 @@
   `1051 passed, 93 deselected` (`pytest`) e `25 passed` in circa 40 s (`pytest -m browser`, Edge);
   RNF-9 di `requisiti.md` aggiornato (progetto nella radice); cancellata la cartella vuota
   `assistente-laboratorio/`, residuo dello spostamento del 2026-11-09 (mai vista da Git).
+- `docs/superpowers/prossimo-prompt.txt` cancellato su richiesta dell'utente il 2026-11-16: ripeteva
+  `CLAUDE.md` e questa sezione e andava riscritto a ogni fine sessione. Il passaggio di consegne
+  tra sessioni è «Stato attuale» (voce «Prossimo»).
 - Esito delle correzioni: R-A8 non corretto e R-A1 al gradino 3 (CA-58 fallimento atteso per limite
   del modello); R-A1a e R-A1b (minori del secondo giro di revisione) e gli altri debiti noti in
   `TODO.md`.
 - Prove instabili (F6): `test_first_turn_information_survives_compression` (router) e l'uso di
   `calculate` dalla pagina di Compose (2 volte su 3).
 - Prossimo: la scelta del lavoro successivo, un debito di `TODO.md` o la lezione successiva, con il
-  proprio ciclo di specifica e piano. Prompt per la sessione nuova in
-  `docs/superpowers/prossimo-prompt.txt` (aggiornato dopo il push).
+  proprio ciclo di specifica e piano. Una sessione nuova parte da questa sezione.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
