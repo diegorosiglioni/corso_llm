@@ -2171,6 +2171,22 @@ LM Studio; «modello vero» = LM Studio con `google/gemma-4-e2b`.
   `pg_isready` «accepting connections», `docker port assistente-postgres` → solo
   `5432/tcp -> 127.0.0.1:5433`. PostgreSQL vero: `pytest tests/test_backend_store.py -m real` →
   39 passed, 1 skipped (`PRAGMA`), compresi i test del NUL del Task 5.
+- **Task 12 · R-D1, R-A4, R-A10, R-C9 — fatto (solo documentazione).**
+  - R-D1, osservazione con uno script nella scratchpad (back-end vero `create_app` su SQLite in
+    memoria servito da uvicorn in un thread, agente finto con pause, client httpx che chiude il
+    flusso dopo `question` e `text`):
+    1. chiusura durante una pausa di 5 s, poi altro testo e `done`: `outcome=client_gone` dopo
+       circa 9 s, alla scrittura dell'evento successivo; risposta **non** salvata (solo la domanda);
+    2. chiusura mentre arrivano eventi ogni 0,2 s: `outcome=client_gone`, risposta non salvata;
+    3. chiusura durante una pausa di 20 s seguita subito da `done`: `outcome=done` a 20 s, risposta
+       **salvata** (il `ping` dei 15 s non si è accorto della chiusura).
+    Specifica dello streaming (§1 e righe di log), README (diagnosi dello streaming) e RF-84
+    descrivono ora questo comportamento, con «comportamento corretto il 2026-11-15, debito R-D1».
+  - R-A4: `CLAUDE.md` (Obiettivo, Step 4), RF-41 e l'introduzione del README: preferenze lette
+    all'avvio del servizio dell'agente, una modifica vale dal riavvio (la sezione delle preferenze
+    del README lo diceva già).
+  - R-A10: README, sezione del front-end: `/prompts` e `/prompt` esistono solo nella CLI.
+  - R-C9: `CLAUDE.md`, prove reali del back-end con `.\.venv\Scripts\python.exe -m pytest …`.
 
 ## Storico (ex `docs/superpowers/handoff.md`, fino al 2026-11-13)
 

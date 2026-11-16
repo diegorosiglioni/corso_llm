@@ -70,9 +70,10 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
   - prove reali (LM Studio attivo, variabili impostate; circa 30 minuti): `.\.venv\Scripts\python.exe -m pytest -m real -v`
   - prove reali del back-end (PostgreSQL nel container del README, porta 5433):
     `$env:TEST_DATABASE_URL = "postgresql://lab:labprova@127.0.0.1:5433/assistente"`, poi
-    `pytest tests/test_backend_store.py -m real` (solo PostgreSQL), `pytest tests/test_real.py -m real -k backend`
-    e, dal browser con tutti i servizi, `pytest tests/test_real.py -m real -k frontend` (compreso lo
-    streaming; solo le prove dello streaming con `-k stream`)
+    `.\.venv\Scripts\python.exe -m pytest tests/test_backend_store.py -m real` (solo PostgreSQL),
+    `.\.venv\Scripts\python.exe -m pytest tests/test_real.py -m real -k backend` e, dal browser con
+    tutti i servizi, `.\.venv\Scripts\python.exe -m pytest tests/test_real.py -m real -k frontend`
+    (compreso lo streaming; solo le prove dello streaming con `-k stream`)
   - avvio locale, in due terminali: servizio `.\.venv\Scripts\python.exe -m assistant.service`
     (variabili di LM Studio), poi CLI `.\.venv\Scripts\python.exe -m assistant`; back-end in un
     terzo terminale con `DATABASE_URL` impostata: `.\.venv\Scripts\python.exe -m backend`;
@@ -94,8 +95,9 @@ Un'applicazione in Python (terminale e pagina web) che conversa con un modello l
 - (lezione 6, Step 3) un nodo riassunto all'inizio del turno, oltre `SUMMARY_MAX_MESSAGES`,
   sostituisce i turni vecchi con un riassunto nello stato (letto da agente, router e revisore) e
   conserva almeno gli ultimi `SUMMARY_KEEP_MESSAGES`, tagliando sempre all'inizio di un turno;
-- (lezione 6, Step 4) legge una volta a inizio sessione la resource MCP `utente://preferenze`
-  (lingua, fuso predefinito, stile) e la mette in cima al prompt di sistema dell'agente;
+- (lezione 6, Step 4) legge una volta, all'avvio del servizio dell'agente, la resource MCP
+  `utente://preferenze` (lingua, fuso predefinito, stile) e la mette in cima al prompt di sistema
+  dell'agente; una modifica vale dal riavvio del servizio;
 - (lezione 6, Step 5) i comandi `/prompts` e `/prompt nome chiave=valore` elencano e richiamano i
   prompt MCP `spiega` e `riassumi_conversazione`; i messaggi ottenuti passano dal grafo;
 - (lezione 6, Step 6) espone il grafo come servizio HTTP dell'agente (FastAPI, senza stato:

@@ -374,8 +374,9 @@ scelte del progettista sono nella sua §1. CA-46…CA-52 verificati il 2026-11-1
   `preferenze`, tipo `application/json`), che a ogni lettura restituisce il contenuto del file. La
   resource compare in `resources/list` e non in `tools/list`. Un file mancante, illeggibile o che non
   contiene un oggetto JSON produce un errore MCP con un messaggio in italiano.
-- **RF-41** *Lettura dell'host* — L'applicazione legge la resource una sola volta, a inizio sessione
-  e prima della prima domanda, e mette in cima al prompt di sistema dell'agente un testo con lingua,
+- **RF-41** *Lettura dell'host* — L'applicazione legge la resource una sola volta, all'avvio del
+  servizio dell'agente e prima della prima domanda (una modifica vale dal riavvio del servizio;
+  R-A4), e mette in cima al prompt di sistema dell'agente un testo con lingua,
   fuso predefinito e stile; il fuso predefinito si usa quando l'utente chiede data o ora senza
   indicare un luogo o un fuso. La resource non è passata al modello come strumento (`bind_tools`
   riceve gli stessi strumenti di prima) e il modello non la richiede. Router, revisore e riassunto
@@ -679,7 +680,10 @@ la pagina ora usa l'endpoint con lo streaming.
 - **RF-84** *Errori* — Gli errori scoperti prima del flusso hanno il codice HTTP e il corpo
   `{"error", "detail"}` degli endpoint senza streaming; quelli durante il flusso arrivano come evento
   `error` con gli stessi codici e chiudono il flusso. Dopo un errore o un'interruzione la domanda
-  resta salvata senza risposta e lo stato dell'agente della chat non cambia.
+  resta salvata senza risposta e lo stato dell'agente della chat non cambia. Una pagina chiusa
+  durante il turno è un'interruzione solo se il back-end se ne accorge scrivendo un evento prima
+  che arrivi `done`; altrimenti la risposta è salvata (comportamento corretto il 2026-11-15,
+  debito R-D1).
 - **RF-85** *Pagina* — La pagina invia con lo streaming, mostra il testo mentre arriva (segnato come
   bozza), indica lo strumento in uso durante l'attesa e poi il suo risultato, segnala la riscrittura
   chiesta dal revisore, sostituisce la bozza con la risposta salvata alla fine e mostra gli errori come

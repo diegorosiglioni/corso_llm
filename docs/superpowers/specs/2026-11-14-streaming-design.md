@@ -47,7 +47,7 @@ Tutte «scelta del progettista» (modalità autonoma: opzione consigliata o più
 | Errori prima e dopo l'inizio | Gli errori che si scoprono **prima** di eseguire il grafo (richiesta, cronologia, prompt, chat inesistente, database, agente non raggiungibile o che rifiuta la richiesta) restano **risposte JSON** con lo stesso codice HTTP e lo stesso corpo degli endpoint senza streaming; quelli **durante** il turno (LM Studio irraggiungibile o in errore, errore imprevisto, agente che si interrompe o va oltre il tempo) diventano un evento **`error`** `{error, detail}` con gli stessi codici | Dopo il primo byte il codice HTTP è già `200`; prima, conviene che client e test trattino gli errori come oggi. I controlli preliminari stanno in una **dipendenza di FastAPI** (eseguita prima del generatore) che solleva l'`ApiError` del servizio, convertita in JSON da un gestore delle eccezioni |
 | Contenuto di `done` | Agente: lo stesso corpo di `ChatResponse` (`reply`, `tools_used`, `history`, `summary`), calcolato dallo stesso codice di `run_turn`. Back-end: lo stesso corpo di `SendMessageResponse` (`question`, `answer`), dopo il salvataggio | Una sola definizione di risposta per endpoint; il back-end non manda al browser cronologia e riassunto dell'agente |
 | Salvataggio nel back-end | Domanda salvata **prima** di aprire il flusso (come oggi); risposta, strumenti, cronologia e riassunto salvati **solo all'evento `done`** dell'agente, nella stessa operazione di `add_answer` di oggi | La traccia: «salva il messaggio completo alla fine». Con un errore o un'interruzione la chat resta come dopo un errore dell'agente oggi: domanda senza risposta, stato dell'agente invariato |
-| Browser che chiude la pagina durante il turno | Il back-end smette di leggere e chiude il flusso dell'agente, che si ferma al passo successivo; la domanda resta senza risposta, lo stato dell'agente non cambia; riga di log `outcome=client_gone` | Lo stesso esito di un errore dell'agente, già gestito dalla pagina (domanda senza risposta); continuare il turno senza nessuno che legge richiederebbe un lavoro in background che il progetto non ha |
+| Browser che chiude la pagina durante il turno | Il back-end se ne accorge solo quando prova a scrivere al browser l'evento successivo dell'agente: allora chiude il flusso dell'agente, la domanda resta senza risposta, lo stato dell'agente non cambia e il log ha `outcome=client_gone`. Se invece il prossimo evento dell'agente è `done`, la risposta viene salvata come sempre (`outcome=done`), anche se nessuno la legge; il `ping` dei 15 s non basta ad accorgersene. Se l'utente rimanda la domanda mentre il primo turno è ancora in corso, i turni sono due (R-C4) (comportamento corretto il 2026-11-15, debito R-D1) | Lo stesso esito di un errore dell'agente, già gestito dalla pagina (domanda senza risposta); fermare subito il turno o continuarlo senza nessuno che legge richiederebbe un lavoro in background che il progetto non ha |
 | Tempi | Back-end → agente: connessione 10 s come oggi, **60 s** al massimo senza ricevere nulla (con il `ping` ogni 15 s solo un agente bloccato li supera), **600 s** per l'intero turno (come `CHAT_TIMEOUT`); oltre → `error` `agent_timeout`. Pagina: 660 s per l'intero invio, come oggi | Stessi limiti complessivi degli Step 6–8; il limite tra due eventi scopre prima un agente fermo |
 | Riconnessione | **Nessuna**: niente `id` negli eventi né `Last-Event-ID`; un flusso interrotto è un errore e la pagina rilegge la chat | Il turno non si può riprendere a metà; rileggere la chat mostra la domanda salvata, come dopo gli errori dello Step 8 |
 | Indicazione degli strumenti nella pagina | All'evento `tool_start` la risposta in arrivo mostra «Uso lo strumento calculate…»; a `tool_end` la riga diventa quella dello Step 8 (nome, argomenti, risultato, errore segnalato) | La traccia: «indica l'uso di uno strumento»; riusa il formato già noto all'utente |
@@ -123,7 +123,9 @@ Le eccezioni del grafo (per esempio `openai.APIError`) escono dal generatore com
 - Log: `api request=chat_stream kind=… history=… summary_chars=…`; alla fine
   `api response=chat_stream status=200 outcome=done tools=… reply_chars=… history=… text_events=…
   resets=… duration_ms=…` (INFO), oppure `outcome=error error=… detail=…` (WARNING, ERROR per
-  `internal_error`), oppure `outcome=client_gone` (INFO) se il client chiude prima della fine. I log
+  `internal_error`), oppure `outcome=client_gone` (INFO) se il servizio si accorge che il client ha
+  chiuso prima della fine: come osservato nel back-end, alla scrittura di un evento (comportamento
+  corretto il 2026-11-15, debito R-D1). I log
   del grafo, degli strumenti e di MCP restano quelli di oggi.
 
 ### Modelli (`assistant/model.py`)
@@ -166,7 +168,10 @@ con `disable_streaming=True`; l'agente no. Nessun altro cambiamento.
 - Log: `backend request=send_message_stream chat=… chars=…`; alla fine
   `backend response=send_message_stream chat=… status=200 outcome=done tools=… reply_chars=…
   duration_ms=…`, oppure `outcome=error error=… detail=…` (WARNING; ERROR per `internal_error`),
-  oppure `outcome=client_gone`; errori prima del flusso con le righe di oggi
+  oppure `outcome=client_gone` quando la scrittura di un evento al browser fallisce (pagina chiusa
+  con un turno che non è ancora finito; se arriva prima `done`, la riga è `outcome=done`:
+  comportamento corretto il 2026-11-15, debito R-D1);
+  errori prima del flusso con le righe di oggi
   (`backend response=send_message_stream chat=… status=… error=…`). Mai il testo dei messaggi.
 - CORS: invariato (metodo `POST`, intestazione `Content-Type` già ammessi).
 - Il contratto `frontend/backend-openapi.json` si rigenera con `UPDATE_CONTRACT=1`.

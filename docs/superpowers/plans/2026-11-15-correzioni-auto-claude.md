@@ -635,23 +635,23 @@ def test_database_password_stays_out_of_agent_and_cli(tmp_path):  # R-B10
   `docs/superpowers/specs/2026-11-14-streaming-design.md` (§1 riga «Browser che chiude la pagina»,
   §4 e §6 righe di log)
 
-- [ ] **Passo 1: R-D1, osservazione** — script nella scratchpad (non nel progetto): back-end
+- [x] **Passo 1: R-D1, osservazione** — script nella scratchpad (non nel progetto): back-end
   (`create_app`) su SQLite in memoria servito da uvicorn in un thread, con un agente finto il cui
   `chat_stream` manda `text`, poi attende 5 s, poi `done`; un client httpx apre
   `/messages/stream`, legge `question`, chiude. Casi: chiusura durante l'attesa; chiusura mentre
   arrivano eventi. Annotare per ciascuno: riga `outcome=…` del log e se la risposta è salvata nella
   chat. Esito in `PROGRESS.md`.
-- [ ] **Passo 2: R-D1, testi** — specifica dello streaming, README e requisiti descrivono il
+- [x] **Passo 2: R-D1, testi** — specifica dello streaming, README e requisiti descrivono il
   comportamento osservato (risposta salvata se il turno finisce; `client_gone` solo quando la
   scrittura di un evento fallisce; due turni se l'utente rimanda la domanda, R-C4), con una riga
   «comportamento corretto il 2026-11-15, debito R-D1».
-- [ ] **Passo 3: R-A4** — `CLAUDE.md` (Obiettivo, Step 4), RF-41, README: preferenze lette
+- [x] **Passo 3: R-A4** — `CLAUDE.md` (Obiettivo, Step 4), RF-41, README: preferenze lette
   all'avvio del servizio dell'agente, una modifica vale dal riavvio del servizio.
-- [ ] **Passo 4: R-A10** — README, sezione «Front-end: la chat nel browser»: nella pagina
+- [x] **Passo 4: R-A10** — README, sezione «Front-end: la chat nel browser»: nella pagina
   «/prompt …» è una domanda normale al modello; i comandi esistono solo nella CLI.
-- [ ] **Passo 5: R-C9** — `CLAUDE.md`, prove reali del back-end con
+- [x] **Passo 5: R-C9** — `CLAUDE.md`, prove reali del back-end con
   `.\.venv\Scripts\python.exe -m pytest …`.
-- [ ] **Passo 6:** `git diff` riletto; commit `docs: preferenze all'avvio del servizio, /prompt nella pagina, comandi e pagina chiusa nello streaming`.
+- [x] **Passo 6:** `git diff` riletto; commit `docs: preferenze all'avvio del servizio, /prompt nella pagina, comandi e pagina chiusa nello streaming`.
 
 ---
 

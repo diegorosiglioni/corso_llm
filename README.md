@@ -9,8 +9,9 @@ Dopo l'agente un revisore LLM controlla che la risposta sia coerente con la doma
 il motivo torna all'agente, che riscrive la risposta (al più `MAX_REVIEWS` revisioni per turno).
 All'inizio di ogni turno, quando la cronologia supera `SUMMARY_MAX_MESSAGES` messaggi, un nodo
 riassunto comprime i turni vecchi in un riassunto che agente, router e revisore ricevono nel prompt
-di sistema. All'avvio l'applicazione legge dal server MCP la resource `utente://preferenze` (lingua
-delle risposte, fuso orario predefinito, stile) e la mette in cima al prompt di sistema dell'agente.
+di sistema. All'avvio del servizio dell'agente l'applicazione legge dal server MCP la resource
+`utente://preferenze` (lingua delle risposte, fuso orario predefinito, stile) e la mette in cima al
+prompt di sistema dell'agente.
 Il server MCP offre anche due prompt riusabili, `spiega` e `riassumi_conversazione`, che l'utente
 richiama dal terminale con i comandi `/prompts` e `/prompt`.
 Grafo, server MCP e modelli girano in un **servizio HTTP dell'agente** (FastAPI, senza stato,
@@ -320,7 +321,8 @@ leggere, creare o aprire altre chat (il testo scritto e non inviato resta nella 
 aspetta la risposta fino a 660 s (il back-end aspetta l'agente fino a 600 s). Gli errori compaiono
 in un riquadro rosso in cima alla vista, chiudibile, senza bloccare la pagina; dopo un errore
 dell'agente la chat mostra la domanda salvata, negli altri casi il testo torna nel campo per
-riprovare.
+riprovare. I comandi `/prompts` e `/prompt` esistono solo nella CLI: nella pagina un testo come
+«/prompt spiega argomento=MCP» è una domanda normale mandata al modello.
 
 La pagina invia con lo **streaming** (`POST /chats/{chat_id}/messages/stream`, sezione precedente):
 sotto la riga d'attesa compare la **risposta in arrivo**, con il bordo tratteggiato e l'etichetta
@@ -934,7 +936,11 @@ router, limite di passaggi), con `resets=` maggiore di zero c'è stato un `reset
 revisore). Il log del back-end ha `backend response=send_message_stream chat=… status=200
 outcome=…`: `done`, `error` (con `error=` e `detail=`, come per i messaggi senza streaming) o
 `client_gone` (pagina chiusa o ricaricata durante il turno: la domanda resta senza risposta e si
-rimanda). «La risposta si è interrotta prima della fine» nella pagina vuol dire che la connessione
+rimanda). Il back-end si accorge della pagina chiusa solo quando prova a scriverle l'evento
+successivo: se il prossimo evento dell'agente è già la fine del turno, la risposta viene salvata
+(`outcome=done`) e compare riaprendo la chat; rimandare la domanda mentre il turno è ancora in corso
+ne avvia un secondo (comportamento corretto il 2026-11-15, debito R-D1). «La risposta si è
+interrotta prima della fine» nella pagina vuol dire che la connessione
 con il back-end si è chiusa senza l'evento finale (back-end fermato durante il turno).
 
 **LM Studio non raggiungibile.** All'avvio la CLI mostra «Attenzione: modello non disponibile (LM
