@@ -10,6 +10,11 @@ from langchain_core.tools import BaseTool, tool
 class ToolUnavailableError(Exception):
     """Raised by a tool when the service behind it does not answer (connection error)."""
 
+
+class ToolOutcomeUnknownError(ToolUnavailableError):
+    """The connection closed during a tool call: the tool may or may not have run."""
+
+
 CURRENT_TIME_DESCRIPTION = (
     "Restituisce data e ora correnti nel fuso orario indicato. `timezone` è un nome IANA, "
     'per esempio "Europe/Rome" o "Asia/Tokyo".'

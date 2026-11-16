@@ -1,7 +1,8 @@
 """Synchronous MCP client: one stdio session kept open in a thread with its own event loop.
 
 The asynchrony stays inside this module: the rest of the application calls blocking methods.
-If the server dies, the client starts it again at the next request (R-B3).
+If the server dies, the client starts it again at the next request (R-B3); read-only requests
+are repeated once, tool calls are not (I-1).
 """
 
 import asyncio
@@ -21,7 +22,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 from mcp.shared.exceptions import MCPError
 from mcp.types import CONNECTION_CLOSED, REQUEST_TIMEOUT, TextContent, TextResourceContents
 
-from assistant.tools import ToolUnavailableError
+from assistant.tools import ToolOutcomeUnknownError, ToolUnavailableError
 
 log = logging.getLogger(__name__)
 
@@ -213,11 +214,15 @@ class McpClient:
         return [ToolSpec(t.name, t.description or "", t.input_schema) for t in tools]
 
     def call_tool(self, name: str, arguments: dict) -> dict:
-        """Tool result as a dict; a tool error becomes {"error": ...}."""
+        """Tool result as a dict; a tool error becomes {"error": ...}.
+
+        Never sent twice: a connection closed during the call → ToolOutcomeUnknownError.
+        """
         result = self._submit(
             lambda client: client.call_tool(
                 name, arguments, timeout=self._timeout, raise_on_error=False
-            )
+            ),
+            repeat=False,
         )
         if result.is_error:
             return {"error": "\n".join(getattr(c, "text", "") for c in result.content)}
@@ -263,12 +268,14 @@ class McpClient:
         except ToolUnavailableError as error:
             raise error_type(str(error)) from error
 
-    def _submit(self, request, timeout: float | None = None):
+    def _submit(self, request, timeout: float | None = None, *, repeat: bool = True):
         """Runs `request(client)` on the session loop; connection problems → ToolUnavailableError.
 
         Without `timeout` the wait is the session timeout plus 5 s; with it, exactly `timeout`.
         A closed connection restarts the server and repeats the request once; a timeout repeats
-        nothing, but the server is restarted before the next request.
+        nothing, but the server is restarted before the next request. With `repeat=False` (tool
+        calls, which may write) the server is restarted but the request is not sent again: the
+        caller gets ToolOutcomeUnknownError (I-1).
         """
         if not self._opened:
             raise ToolUnavailableError("sessione MCP chiusa")
@@ -278,6 +285,12 @@ class McpClient:
         try:
             return self._run(request, timeout)
         except _ConnectionClosed as closed:
+            if not repeat:
+                try:
+                    self._restart(closed.generation, closed.reason)
+                except ToolUnavailableError as error:
+                    raise ToolOutcomeUnknownError(str(error)) from error
+                raise ToolOutcomeUnknownError(closed.reason) from None
             self._restart(closed.generation, closed.reason)
         try:
             return self._run(request, timeout)

@@ -17,6 +17,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from mcp import types as mcp_types
 from mcp.shared.exceptions import MCPError
 from mcp.types import (
+    CONNECTION_CLOSED,
     BlobResourceContents,
     GetPromptResult,
     REQUEST_TIMEOUT,
@@ -50,7 +51,7 @@ from assistant.prompts import (
     explain_prompt,
     summary_prompt,
 )
-from assistant.tools import ToolUnavailableError
+from assistant.tools import ToolOutcomeUnknownError, ToolUnavailableError
 from conftest import MCP_SPECS, FakeMcpClient
 
 
@@ -482,10 +483,64 @@ def test_dead_server_is_restarted_and_the_request_repeated(restartable, caplog):
     assert info == logging.INFO and re.fullmatch(r"mcp_restarted duration_ms=\d+", second)
 
 
-def test_call_tool_is_repeated_on_the_new_server(restartable):
+def test_call_tool_is_not_repeated_after_a_closed_connection(restartable, caplog):
     client, _ = restartable
+    caplog.set_level(logging.INFO, "assistant.mcp_client")
     old = kill_server(client)
-    assert client.call_tool("pid", {})["pid"] != old
+    with pytest.raises(ToolOutcomeUnknownError, match="^Connection closed$"):
+        client.call_tool("pid", {})
+    assert sum(text.startswith("mcp_restart reason=") for _, text in restart_logs(caplog)) == 1
+    assert server_pid(client) != old  # the next call finds the new server
+
+
+def test_call_tool_is_sent_once(restartable, monkeypatch):
+    client, _ = restartable
+    old, calls = server_pid(client), []
+
+    async def closed(self, *args, **kwargs):
+        calls.append(1)
+        raise MCPError(code=CONNECTION_CLOSED, message="Connection closed")
+    monkeypatch.setattr(Client, "call_tool", closed)
+    with pytest.raises(ToolOutcomeUnknownError):
+        client.call_tool("pid", {})
+    assert calls == [1]
+    monkeypatch.undo()
+    assert server_pid(client) != old
+
+
+def test_call_tool_outcome_is_unknown_when_the_restart_fails(restartable):
+    client, flag = restartable
+    flag.touch()
+    kill_server(client)
+    with pytest.raises(ToolOutcomeUnknownError, match=r"^server MCP non riavviato: "):
+        client.call_tool("pid", {})
+    flag.unlink()
+    assert server_pid(client) > 0
+
+
+def test_concurrent_tool_calls_restart_once(restartable, caplog):
+    client, _ = restartable
+    caplog.set_level(logging.INFO, "assistant.mcp_client")
+    kill_server(client)
+    barrier, errors = threading.Barrier(2), []
+
+    def work():
+        barrier.wait()
+        try:
+            client.call_tool("pid", {})
+        except ToolOutcomeUnknownError as error:
+            errors.append(str(error))
+    threads = [threading.Thread(target=work) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(30)
+    assert len(errors) == 2
+    assert sum(text.startswith("mcp_restart reason=") for _, text in restart_logs(caplog)) == 1
+
+
+def test_unknown_outcome_is_a_tool_unavailable_error():
+    assert issubclass(ToolOutcomeUnknownError, ToolUnavailableError)
 
 
 def test_server_errors_do_not_restart(client, caplog):
