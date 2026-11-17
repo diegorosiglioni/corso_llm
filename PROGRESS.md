@@ -1,6 +1,6 @@
 # Diario di lavoro
 
-## Stato attuale (2026-11-16)
+## Stato attuale (2026-11-17)
 
 - Step 4–9 e streaming fatti dal loop autonomo il 2026-11-14 su `auto-claude`; poi revisione
   (F1–F3), correzioni (F4), sistemazione dei file del loop (F5), verifica finale (F6) e integrazione
@@ -49,9 +49,25 @@
   (`timeout=5` del server di prova); ripetuti subito dopo, passati: da tenere d'occhio. Non
   eseguito: prove `real` (come reagisce il modello al testo nuovo, se controlla con `list_notes`
   prima di ripetere), `browser`, Docker.
-- Prossimo: I-2 di `REVIEW.md` (ruff, `pytest-cov`, `pyproject.toml`, CI: dipendenze nuove da
-  concordare), poi M-1, M-2 con M-3, R-C4 / R-D1 e gli altri M. Una sessione nuova parte da
-  questa sezione.
+- **Lezione 7 avviata il 2026-11-17** (RAG: ingestion e ricerca semantica sulle ricette
+  dell'Artusi, senza generazione). Traccia trascritta in `docs/superpowers/lezione7.md` (PDF solo in
+  locale). Decisioni dell'utente: pacchetto `rag/` in questa repository; campi del payload in
+  inglese (`has_doses` al posto di `contiene_dosi`); **Qdrant** come nella lezione (valutato e
+  scartato PostgreSQL con pgvector); ingestion, ricerca e valutazione lanciate dal computer, Qdrant
+  quinto servizio di Compose su `127.0.0.1:6333`; modello di embedding scelto dall'utente
+  (`EMBEDDING_MODEL` obbligatoria, nessun valore predefinito). Corpus già presente in locale:
+  `data/Ricettario.txt` (Gutenberg 59047).
+- Specifica dell'esercizio 1 **approvata** e salvata (commit `6a446e8`):
+  `docs/superpowers/specs/2026-11-17-ingestion-ricette-design.md`. Piano scritto, **da rivedere
+  dall'utente**: `docs/superpowers/plans/2026-11-17-ingestion-ricette.md` (11 task). Proposta di
+  esecuzione: nativa (in sessione), in attesa di scelta. Nessun codice scritto.
+- Prossimo: l'utente rivede il piano e sceglie l'esecuzione (nativa consigliata o con
+  sotto-agenti); poi Task 1–11. Il piano si ferma per chiedere: almeno tre domande dell'utente con
+  la ricetta attesa (Task 9), il modello di embedding caricato in LM Studio (Task 10), se salvare a
+  parte la modifica in sospeso di `CLAUDE.md` (Task 11). Dopo l'esercizio 1: modifica A
+  (`has_doses`) e modifica B (titolo nel testo indicizzato), ciascuna con specifica e piano.
+  I punti di `REVIEW.md` (I-2, M-1, …) restano in sospeso. Una sessione nuova parte da questa
+  sezione.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
