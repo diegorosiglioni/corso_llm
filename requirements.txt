@@ -24,3 +24,5 @@ httpx==0.28.1
 SQLAlchemy==2.1.8
 # Driver PostgreSQL di SQLAlchemy, con la libreria client precompilata (lezione 6, Step 7)
 psycopg[binary]==3.3.9
+# Client di Qdrant per l'indice delle ricette; stessa versione minore dell'immagine in compose.yaml (lezione 7)
+qdrant-client==1.20.0

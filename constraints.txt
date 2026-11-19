@@ -25,11 +25,15 @@ fastmcp==4.1.6
 fastmcp-slim==4.1.6
 greenlet==3.5.6
 griffelib==2.4.1
+grpcio==1.85.3
 h11==0.16.0
+h2==4.4.1
+hpack==4.2.0
 httpcore==1.0.9
 httpcore2==2.16.0
 httpx==0.28.1
 httpx2==2.16.0
+hyperframe==6.1.0
 idna==3.20
 iniconfig==2.3.1
 jiter==0.18.0
@@ -52,6 +56,7 @@ markdown-it-py==4.2.0
 mcp==2.3.0
 mcp-types==2.3.0
 mdurl==0.1.2
+numpy==2.5.5
 openai==3.37.0
 openapi-pydantic==0.6.0
 opentelemetry-api==1.45.2
@@ -62,6 +67,8 @@ pathable==0.6.0
 platformdirs==4.14.5
 playwright==1.65.2
 pluggy==1.7.0
+portalocker==4.4.2
+protobuf==7.36.2
 psycopg==3.3.9
 psycopg-binary==3.3.9
 py-key-value-aio==0.4.6
@@ -77,6 +84,7 @@ python-dotenv==1.2.4
 python-multipart==0.0.33
 pywin32==312
 PyYAML==6.0.3
+qdrant-client==1.20.0
 referencing==0.37.0
 regex==2026.9.29
 requests==2.34.2

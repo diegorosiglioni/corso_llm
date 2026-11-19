@@ -1,7 +1,7 @@
 # Nome fisso: immagini e volumi non dipendono dalla cartella in cui si trova la repository.
 name: assistente-laboratorio
 
-# docker compose up avvia i quattro servizi: frontend, backend, agent, postgres.
+# docker compose up avvia i cinque servizi: frontend, backend, agent, postgres, qdrant.
 # La CLI (assistant) è nel profilo cli: docker compose run --rm assistant.
 # Credenziali di PostgreSQL nel file .env (esempio in .env.example), escluso da Git.
 
@@ -97,6 +97,16 @@ services:
       # Dalla versione 18 i dati stanno in /var/lib/postgresql/<versione>/docker.
       - postgres-data:/var/lib/postgresql
 
+  # Qdrant: indice vettoriale delle ricette (lezione 7), usato da python -m rag.ingest, rag.search
+  # e rag.evaluate lanciati dal computer. Dashboard su http://127.0.0.1:6333/dashboard.
+  # Nessun servizio dipende da lui; da solo: docker compose up -d qdrant.
+  qdrant:
+    image: qdrant/qdrant:v1.20.0  # stessa versione minore di qdrant-client (requirements.txt)
+    ports:
+      - "127.0.0.1:6333:6333"  # solo da questo computer
+    volumes:
+      - qdrant-data:/qdrant/storage  # la collezione sopravvive al riavvio
+
   # CLI, client dell'agente: docker compose run --rm assistant (avvia anche agent). Profilo cli:
   # non parte con docker compose up.
   assistant:
@@ -118,3 +128,4 @@ services:
 volumes:
   notes-data: {}
   postgres-data: {}
+  qdrant-data: {}

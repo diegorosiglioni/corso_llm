@@ -145,7 +145,7 @@ def test_dockerignore_keeps_secrets_and_local_data_out_of_the_context():
 # compose.yaml, read by Docker itself with `docker compose config` (no daemon, no images).
 
 FAKE_ENV = "POSTGRES_USER=utente\nPOSTGRES_PASSWORD=segreta\nPOSTGRES_DB=chatdb\n"
-MAIN_SERVICES = {"frontend", "backend", "agent", "postgres"}
+MAIN_SERVICES = {"frontend", "backend", "agent", "postgres", "qdrant"}
 
 
 def compose_config(tmp_path: Path, env_text: str = FAKE_ENV, profiles: tuple[str, ...] = ()):
@@ -178,9 +178,9 @@ def compose(tmp_path):
     return json.loads(result.stdout)
 
 
-def test_compose_up_starts_exactly_the_four_services(compose):
+def test_compose_up_starts_exactly_the_five_services(compose):
     assert set(compose["services"]) == MAIN_SERVICES
-    assert set(compose["volumes"]) == {"notes-data", "postgres-data"}
+    assert set(compose["volumes"]) == {"notes-data", "postgres-data", "qdrant-data"}
 
 
 def test_cli_is_only_in_the_cli_profile(tmp_path):
@@ -249,6 +249,24 @@ def test_postgres_uses_the_official_image_a_volume_and_a_healthcheck(compose):
     )
     test = postgres["healthcheck"]["test"]
     assert test[0] == "CMD-SHELL" and "pg_isready" in test[1]
+
+
+def test_qdrant_has_a_pinned_image_a_local_port_and_a_volume(compose):
+    qdrant = compose["services"]["qdrant"]
+    assert qdrant["image"] == "qdrant/qdrant:v1.20.0"
+    (published,) = qdrant["ports"]
+    assert (published["host_ip"], published["published"], published["target"]) == (
+        "127.0.0.1", "6333", 6333,
+    )
+    (volume,) = qdrant["volumes"]
+    assert (volume["type"], volume["source"], volume["target"]) == (
+        "volume", "qdrant-data", "/qdrant/storage",
+    )
+
+
+def test_no_service_depends_on_qdrant(compose):
+    for name, service in compose["services"].items():
+        assert "qdrant" not in service.get("depends_on", {}), name
 
 
 def test_backend_waits_for_the_database_and_uses_internal_addresses(compose):
