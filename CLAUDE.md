@@ -4,65 +4,21 @@ Progetto del corso «Deep Learning e LLM: costruire chatbot e agenti».
 La cartella del progetto è `"C:\Users\diegorosiglioni\Desktop\paolo\test_paolo"`, radice della
 repository: il progetto sta direttamente lì (fino al 2026-11-09 stava in `assistente-laboratorio/`).
 Requisiti, specifica e piano: `docs/superpowers/`.
-Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/superpowers/handoff.md`; leggerlo per primo) e debiti noti in `TODO.md`.
+Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/superpowers/handoff.md`; leggerne per prima la sezione «Stato attuale» in cima, righe 3–57; mai il file intero, oltre 230 kB: cercarlo con Grep o leggere solo le righe utili) e debiti noti in `TODO.md`.
 
 ## Struttura e comandi
-- Codice in `assistant/`: `config.py`, `model.py`, `tools.py`, `router.py`, `reviewer.py`,
-  `summary.py`, `preferences.py`, `graph.py`, `agent.py` (turno senza stato e messaggi in JSON),
-  `api.py` (app FastAPI del servizio HTTP dell'agente: `/chat`, `/chat/stream` in Server-Sent
-  Events da `stream_turn` di `agent.py`, `/prompts`, `/status`),
-  `service.py` (avvio del servizio con `python -m assistant.service`, `AGENT_HOST`/`AGENT_PORT`),
-  `api_client.py` (client HTTP della CLI e del back-end: `AgentClient` con `chat_stream`,
-  `iter_sse`, `AgentError`, `RemoteSession`),
-  `session.py` (sessione in processo che usa `agent.py`, per prove reali e test), `terminal.py`,
-  `commands.py` (comandi della CLI che cominciano con `/`, controllo dell'host dei prompt usato dal
-  servizio); `__main__.py` è la CLI, client del servizio (`AGENT_URL`); ambito del router in
-  `assistant/data/scope.txt` (sostituibile con `SCOPE_FILE`); preferenze dell'utente (resource MCP
-  `utente://preferenze`) in `assistant/data/preferenze.json` (sostituibile con `PREFERENCES_FILE`);
-  logica pura degli strumenti MCP in `units.py`,
-  `calculator.py`, `catalog.py` (dati in `assistant/data/catalog.json`), `notes.py`; testi dei
-  prompt MCP `spiega` e `riassumi_conversazione` in `prompts.py`; server
-  FastMCP in `mcp_server.py`, client sincrono e adattatore in `mcp_client.py` (`server_command`
-  vuole sempre il file delle preferenze: nessun valore predefinito). Solo
-  `service.py` collega grafo, MCP e modelli; `__main__.py` collega client HTTP e terminale.
-- Back-end (Step 7) nel pacchetto `backend/`, servizio distinto dall'agente: `db.py`
-  (schema SQLAlchemy `chats`/`chat_messages`, `create_db_engine`, `init_db`), `store.py`
-  (`ChatStore`: chat, messaggi visibili e stato dell'agente), `api.py` (app FastAPI: `/chats`,
-  `/chats/{chat_id}`, `/chats/{chat_id}/messages` che inoltra la domanda all'agente e
-  `/chats/{chat_id}/messages/stream` che ne inoltra il flusso SSE), `config.py` (`DATABASE_URL`, `AGENT_URL`, `BACKEND_HOST`/`BACKEND_PORT`),
-  `__main__.py` (avvio con `python -m backend`). Da `assistant` importa solo il client dell'agente
-  e la configurazione (logging, `AGENT_URL`, `LOG_LEVEL`); `assistant` non importa nulla da
-  `backend`. Il back-end ammette il browser dalle origini di `CORS_ORIGINS`.
-- Front-end (Step 8) nel pacchetto `frontend/`: `config.py` (`BACKEND_URL`,
-  `FRONTEND_HOST`/`FRONTEND_PORT`), `app.py` (file statici e `/config.js`), `__main__.py` (avvio con
-  `python -m frontend`), pagina in `frontend/static/` (HTML, CSS, JavaScript senza framework:
-  `api.js` client del back-end con il lettore SSE `readEvents` e `sendMessageStream`, `texts.js`
-  testi e funzioni pure, compresa `applyEvent` per la bozza in arrivo, `app.js` DOM; la pagina
-  invia con lo streaming), contratto
-  `frontend/backend-openapi.json` (OpenAPI del back-end, rigenerato con `UPDATE_CONTRACT=1` su
-  `tests/test_frontend_contract.py`). Da `assistant` importa solo la configurazione; nulla da
-  `backend`.
-- Test in `tests/`; il modello finto (`FakeModel`; `StreamingFakeModel` per lo streaming), il router finto (`ConversationRouter`), il
-  revisore finto (`ApprovingReviewer`), il client MCP finto (`FakeMcpClient`), il servizio finto
-  (`fake_service`: l'app vera su un grafo finto, con `TestClient`) e gli aiuti comuni sono in
-  `conftest.py`. I test MCP avviano il server
-  reale via stdio. I test del back-end (`test_backend_*.py`) usano SQLite in memoria con lo stesso
-  `init_db`, senza PostgreSQL. Le prove con LM Studio stanno in `test_real.py` (marcatore `real`).
-  Il JavaScript del front-end si prova con `node --test` (`tests/frontend/*.test.mjs`, lanciati da
-  `test_frontend_js.py`); la pagina in Edge con Playwright in `test_frontend_browser.py`
-  (marcatore `browser`, escluso dalla suite predefinita). I Dockerfile si controllano come testo
-  in `test_docker.py`, e `compose.yaml` con `docker compose config` (copia in una cartella
-  temporanea con un `.env` finto; saltato senza la CLI di Docker).
-- Immagini Docker (Step 9): un Dockerfile per servizio in `docker/` (`agent.Dockerfile`, che serve
-  anche la CLI, `backend.Dockerfile`, `frontend.Dockerfile`), contesto di build la radice; stesse
-  prime istruzioni (base fissata e `requirements.txt`) per condividere il livello delle dipendenze.
-  `compose.yaml`: `frontend` (`127.0.0.1:8080`), `backend` (`127.0.0.1:8001`), `agent` e `postgres`
-  (non pubblicati, volumi `notes-data` e `postgres-data`), CLI `assistant` nel profilo `cli`;
-  credenziali `POSTGRES_*` nel `.env` (password obbligatoria per ogni comando `docker compose`).
-- Note in SQLite: in locale `NOTES_DB` (default `data/notes.sqlite3`, ignorato da Git), in
-  Docker il volume `notes-data`.
-- Dipendenze dirette in `requirements.txt` (app) e `requirements-dev.txt` (test); tutte le
-  versioni verificate in `constraints.txt`, richiamato da `requirements.txt`.
+- Pacchetti: `assistant/` (agente, servizio HTTP, CLI, server e client MCP), `backend/` (Step 7),
+  `frontend/` (Step 8), `docker/` (Step 9); test in `tests/`, finti comuni in `conftest.py`.
+- Confini: solo `assistant/service.py` collega grafo, MCP e modelli; `assistant/__main__.py`
+  collega client HTTP e terminale. `backend` importa da `assistant` solo il client dell'agente e
+  la configurazione, `frontend` solo la configurazione; `assistant` non importa nulla da loro.
+- `server_command` (`mcp_client.py`) vuole sempre il file delle preferenze: nessun valore predefinito.
+- Il contratto `frontend/backend-openapi.json` si rigenera con `UPDATE_CONTRACT=1` su
+  `tests/test_frontend_contract.py`.
+- I Dockerfile in `docker/` hanno le stesse prime istruzioni (base fissata e `requirements.txt`)
+  per condividere il livello delle dipendenze; contesto di build la radice.
+- Ogni comando `docker compose` vuole la password `POSTGRES_*` nel `.env`.
+- Versioni verificate in `constraints.txt`, richiamato da `requirements.txt`.
 - Comandi da PowerShell nella radice della repository, senza attivare l'ambiente:
   - ambiente: `py -3.13 -m venv .venv` e `.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`
   - test senza modello: `.\.venv\Scripts\python.exe -m pytest`
