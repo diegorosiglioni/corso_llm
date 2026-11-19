@@ -893,7 +893,10 @@ senza distinguere maiuscole e minuscole). Ogni risultato mostra score, ricetta, 
 **Valutazione**: le domande con fonte attesa in `rag/data/questions.json` (un altro file con
 `--questions`); per ognuna la posizione e lo score della ricetta attesa tra i primi k, in una
 tabella Markdown preceduta da modello, collezione, punti e parametri. A parità di indice e domande
-la tabella è identica a ogni esecuzione:
+la tabella è identica a ogni esecuzione. Il modello e i punti vengono dalla collezione; strategia,
+dimensione e overlap invece vengono dalle variabili della sessione che lancia la valutazione:
+vanno impostate come per l'ingestion che ha costruito l'indice, altrimenti l'intestazione descrive
+un altro indice:
 
 ```powershell
 .\.venv\Scripts\python.exe -m rag.evaluate
