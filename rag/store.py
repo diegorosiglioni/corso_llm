@@ -91,12 +91,19 @@ def ensure_indexes(client: QdrantClient, name: str) -> None:
 
 def check_collection(client: QdrantClient, name: str, dimension: int, model: str) -> None:
     """For search and evaluation: the collection exists, has points, and matches model and dimension."""
-    if count_points(client, name) == 0:
+    require_points(client, name)
+    with _qdrant_errors(f"il controllo della collezione '{name}'"):
+        _check_model_and_dimension(client, name, dimension, model)
+
+
+def require_points(client: QdrantClient, name: str) -> int:
+    """Number of points of the collection; StoreError if it is missing or empty."""
+    points = count_points(client, name)
+    if points == 0:
         raise StoreError(
             f"La collezione '{name}' non esiste o è vuota: eseguire prima python -m rag.ingest"
         )
-    with _qdrant_errors(f"il controllo della collezione '{name}'"):
-        _check_model_and_dimension(client, name, dimension, model)
+    return points
 
 
 def _check_model_and_dimension(client: QdrantClient, name: str, dimension: int, model: str) -> None:
