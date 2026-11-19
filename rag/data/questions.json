@@ -1,0 +1,11 @@
+[
+  {"question": "Quanta farina serve per 400 grammi di patate negli gnocchi?", "expected": [89]},
+  {"question": "Quanti cappelletti bastano a un mangiatore moderato?", "expected": [7]},
+  {"question": "Che vino si usa per il pollo alla cacciatora?", "expected": [208]},
+  {"question": "Perché gli gnocchi possono sciogliersi nell'acqua?", "expected": [89]},
+  {"question": "Come si chiama il cacciucco sulle coste dell'Adriatico?", "expected": [455, 456]},
+  {"question": "Qual è la ricetta del tiramisù?", "expected": []},
+  {"question": "Come si cucinano i petti di pollo e quali ricette si possono fare con essi?", "expected": [207, 269]},
+  {"question": "Che salsa al prezzemolo posso servire con la carne bollita?", "expected": [119, 120]},
+  {"question": "Come si conservano i pomodori per averli tutto l'anno?", "expected": [732]}
+]
