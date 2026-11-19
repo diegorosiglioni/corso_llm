@@ -1,9 +1,11 @@
-"""python -m rag.evaluate [--k N] [--questions FILE]: for every question with an expected source,
-where the first chunk of an expected recipe appears among the k results. Markdown table on stdout,
-identical for the same index and questions.
+"""python -m rag.evaluate [--k N] [--questions FILE] [--doses]: for every question with an expected
+source, where the first chunk of an expected recipe appears among the k results. Markdown table on
+stdout, identical for the same index, questions and options. --doses searches only the chunks with
+a dose list, for every question.
 
-Strategy, size and overlap in the header come from the current configuration: evaluate with the
-same variables used for the ingestion."""
+Strategy, size and overlap in the header are read from the payload of the index (saved by the
+ingestion); for an index built before they were saved, they come from the current configuration,
+marked «(dalla configurazione)»."""
 
 import argparse
 import json
@@ -17,10 +19,11 @@ from rag.config import ConfigError, configure_logging, load_config
 from rag.corpus import EXPECTED_RECIPES
 from rag.embedder import EmbeddingError, check_embedding_model, create_embedder
 from rag.search import DEFAULT_TOP_K, SearchError, SearchResult, format_score, search, validate
-from rag.store import StoreError, connect, count_points
+from rag.store import StoreError, connect, count_points, stored_chunking
 
 DEFAULT_QUESTIONS = Path(__file__).parent / "data" / "questions.json"
 DASH = "—"
+FROM_CONFIGURATION = " (dalla configurazione)"
 
 
 @dataclass(frozen=True)
@@ -119,6 +122,10 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] = os.environ)
         "--questions", type=Path, default=DEFAULT_QUESTIONS,
         help="file JSON delle domande (predefinito rag/data/questions.json)",
     )
+    parser.add_argument(
+        "--doses", action="store_true",
+        help="cerca solo tra i chunk con un elenco di ingredienti, per ogni domanda",
+    )
     args = parser.parse_args(argv)
     try:
         config = load_config(env)
@@ -132,24 +139,33 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] = os.environ)
             outcomes = [
                 evaluate_question(question, search(
                     client, embedder, config.collection, config.embedding_model,
-                    question.question, args.k,
+                    question.question, args.k, doses=args.doses,
                 ))
                 for question in questions
             ]
             points = count_points(client, config.collection)
+            chunking = stored_chunking(client, config.collection)
         finally:
             client.close()
     except (ConfigError, SearchError, ValueError, EmbeddingError, StoreError) as error:
         print(error, file=sys.stderr)
         return 1
+    if chunking is None:
+        strategy, size, overlap = (
+            f"{value}{FROM_CONFIGURATION}"
+            for value in (config.chunk_strategy, config.chunk_size, config.chunk_overlap)
+        )
+    else:
+        strategy, size, overlap = (str(value) for value in chunking)
     header = {
         "modello": config.embedding_model,
         "collezione": config.collection,
         "punti": str(points),
-        "strategia": config.chunk_strategy,
-        "dimensione": str(config.chunk_size),
-        "overlap": str(config.chunk_overlap),
+        "strategia": strategy,
+        "dimensione": size,
+        "overlap": overlap,
         "k": str(args.k),
+        "filtro dosi": "sì" if args.doses else "no",
     }
     print(format_report(header, outcomes))
     return 0

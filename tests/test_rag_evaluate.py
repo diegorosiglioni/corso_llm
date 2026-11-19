@@ -13,6 +13,7 @@ from rag.evaluate import (
 )
 from rag.ingest import run_ingest
 from rag.search import SearchResult
+from rag.store import ChunkPoint, ensure_collection, point_id, upsert_points
 
 VALID = {"LMSTUDIO_BASE_URL": "http://127.0.0.1:1234/v1", "EMBEDDING_MODEL": "modello-scelto"}
 
@@ -115,8 +116,56 @@ def test_main_prints_a_reproducible_table(tmp_path, capsys, offline):
     first = capsys.readouterr().out
     assert evaluate_module.main(["--questions", str(path), "--k", "2"], VALID) == 0
     assert capsys.readouterr().out == first
-    assert "- **punti:** 2" in first and "- **k:** 2" in first and "- **strategia:** paragraph" in first
+    assert first.splitlines()[:8] == [
+        "- **modello:** modello-scelto", "- **collezione:** recipes", "- **punti:** 2",
+        "- **strategia:** paragraph", "- **dimensione:** 1200", "- **overlap:** 200",
+        "- **k:** 2", "- **filtro dosi:** no",
+    ]
     assert "| pollo fritto | 1 | 1 |" in first and first.rstrip().endswith("Fonte attesa trovata in 1 casi su 1.")
+
+
+def questions_file(tmp_path, content):
+    path = tmp_path / "q.json"
+    path.write_text(content, encoding="utf-8")
+    return str(path)
+
+
+def test_header_from_the_index_not_the_session(tmp_path, capsys, offline):
+    config = load_config({**VALID, "CHUNK_STRATEGY": "window", "CHUNK_SIZE": "300", "CHUNK_OVERLAP": "50"})
+    run_ingest(config, [Recipe(1, "Pollo fritto", "Fritti", "Pollo fritto nell'olio.")], offline, FakeEmbedder())
+    path = questions_file(tmp_path, '[{"question": "pollo", "expected": [1]}]')
+    assert evaluate_module.main(["--questions", path], VALID) == 0
+    out = capsys.readouterr().out
+    assert "- **strategia:** window\n- **dimensione:** 300\n- **overlap:** 50\n" in out
+
+
+def test_header_falls_back_to_the_configuration(tmp_path, capsys, offline):
+    text = "Pollo fritto nell'olio."
+    ensure_collection(offline, "recipes", FakeEmbedder.DIMENSION, "modello-scelto")
+    upsert_points(offline, "recipes", [ChunkPoint(point_id("Ricettario.txt", 1, 0), FakeEmbedder.vector(text), {
+        "source": "Ricettario.txt", "recipe_number": 1, "title": "Pollo fritto", "chapter": "Fritti",
+        "chunk_index": 0, "text": text, "embedding_model": "modello-scelto", "has_doses": False,
+    })])
+    path = questions_file(tmp_path, '[{"question": "pollo", "expected": [1]}]')
+    assert evaluate_module.main(["--questions", path], VALID) == 0
+    out = capsys.readouterr().out
+    assert ("- **strategia:** paragraph (dalla configurazione)\n"
+            "- **dimensione:** 1200 (dalla configurazione)\n"
+            "- **overlap:** 200 (dalla configurazione)\n") in out
+
+
+def test_main_with_doses(tmp_path, capsys, offline):
+    recipes = [Recipe(1, "Pollo fritto", "Fritti", "Pollo fritto nell'olio.\n\nPollo, N. 1.\nOlio, grammi 100."),
+               Recipe(2, "Pollo lesso", "Lesso", "Pollo lesso nel brodo.")]
+    run_ingest(load_config(VALID), recipes, offline, FakeEmbedder())
+    path = questions_file(tmp_path, '[{"question": "pollo fritto", "expected": [1]}, '
+                                    '{"question": "pollo lesso", "expected": [2]}]')
+    assert evaluate_module.main(["--questions", path, "--doses"], VALID) == 0
+    out = capsys.readouterr().out
+    assert "- **filtro dosi:** sì" in out
+    assert "| pollo fritto | 1 | 1 |" in out and "| pollo lesso | 2 | assente |" in out
+    assert evaluate_module.main(["--questions", path], VALID) == 0
+    assert "| pollo lesso | 2 | 1 |" in capsys.readouterr().out
 
 
 def test_main_invalid_questions_file(tmp_path, capsys, monkeypatch):
