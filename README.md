@@ -77,9 +77,9 @@ da `pytest`; senza Node il test si salta col motivo). I Dockerfile si controllan
 costruire immagini, e `compose.yaml` con `docker compose config` su una copia con un `.env` di
 credenziali finte, senza il demone (`tests/test_docker.py`; senza la CLI di Docker questi test si
 saltano col motivo). La ricerca nelle ricette (`rag/`) si prova con Qdrant in memoria
-(`qdrant-client`) e un embedder finto, senza LM Studio né Qdrant. Esito al 2026-11-19: `1209
-passed, 95 deselected` in circa 5 minuti (le 95 deselezionate sono le 70 prove reali, 28 con LM
-Studio, 40 test dell'archivio ripetuti su PostgreSQL e 2 della ricerca nelle ricette, e i 25 test
+(`qdrant-client`) e un embedder finto, senza LM Studio né Qdrant. Esito al 2026-11-20: `1251
+passed, 96 deselected` in circa 4 minuti (le 96 deselezionate sono le 71 prove reali, 28 con LM
+Studio, 40 test dell'archivio ripetuti su PostgreSQL e 3 della ricerca nelle ricette, e i 25 test
 nel browser).
 
 La prova reale della ricerca nelle ricette (LM Studio con il modello di embedding, Qdrant di

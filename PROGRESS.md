@@ -137,9 +137,13 @@
     commentate in `docs/retrieval.md` («Dopo la modifica A»): il filtro toglie le ricette in prosa;
   - messaggio «Alcuni punti non hanno has_doses…» verificato su una collezione di prova
     (`recipes_diag`, cancellata).
-  Non eseguito: **`pytest` intero** (permesso negato: la regola dell'utente vuole che lo si chieda
-  prima), quindi i conteggi della suite nel README restano quelli del 2026-11-19; prove `real` delle
-  lezioni precedenti, `browser`, Docker completo.
+  - suite intera, su richiesta dell'utente dopo la revisione finale: `pytest` → 1251 passed, 96
+    deselected (259 s), senza le variabili di LM Studio; conteggi aggiornati nel README e CA-118
+    soddisfatto (la revisione l'aveva trovato dichiarato senza la suite: corretto in `f01cce1`,
+    poi la suite).
+  Revisione finale dell'intero branch (revisore separato): nessun problema critico o importante;
+  cinque minori rimandati, elencati nel registro.
+  Non eseguito: prove `real` delle lezioni precedenti, `browser`, Docker completo.
 - **Prossimo:** modifica B con specifica e piano. Push solo su richiesta. I punti di `REVIEW.md`
   restano in sospeso.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
