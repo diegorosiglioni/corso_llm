@@ -59,8 +59,8 @@
   `data/Ricettario.txt` (Gutenberg 59047).
 - Specifica dell'esercizio 1 approvata (commit `6a446e8`):
   `docs/superpowers/specs/2026-11-17-ingestion-ricette-design.md`. Piano approvato il 2026-11-19
-  (`docs/superpowers/plans/2026-11-17-ingestion-ricette.md`, 11 task), **esecuzione nativa in
-  corso**, su `dev`, senza push. Registro di esecuzione (solo locale, escluso da Git):
+  (`docs/superpowers/plans/2026-11-17-ingestion-ricette.md`, 11 task), **eseguito in modo nativo**
+  (Task 1–11), su `dev`, senza push. Registro di esecuzione (solo locale, escluso da Git):
   `.superpowers/sdd/2026-11-17-ingestion-ricette/progress.md`, con le righe `Task N: complete` e
   tutte le decisioni (`Ruling:`) da riportare all'utente alla fine.
 - **Task 1–9 fatti** (commit `980a57b`…`88ec259`): servizio `qdrant` (v1.20.0) in Compose e
@@ -77,21 +77,38 @@
   lui); le due successive (salsa verde → 119, 120; conserva di pomodoro → 732) scritte da Claude su
   richiesta esplicita dell'utente, con le fonti scelte dai titoli prima di ogni ricerca. Il criterio 7
   della specifica ne chiede tre dell'utente: dichiararlo in `docs/retrieval.md`.
-- Modello di embedding (Task 10): consigliato e scaricato **bge-m3** (`gpustack/bge-m3-GGUF`,
-  multilingue, non vuole prefissi come prevede la specifica); in `GET /v1/models` compare come
-  `text-embedding-bge-m3` (accanto a `text-embedding-nomic-embed-text-v1.5` e al modello di chat).
-  **Da far confermare all'utente** prima di usarlo. Computer: i7-1355U, 48 GB, grafica integrata.
-- Task 10 avviato: `tests/test_rag_real.py` scritto (ricette 85–95 in una collezione di prova, due
-  ingestion, ricerca con e senza filtro, `--recreate` sul server); senza variabili viene saltato.
-- **Prossimo:** confermare `EMBEDDING_MODEL=text-embedding-bge-m3`, poi Task 10 dal passo 3
-  (`LMSTUDIO_BASE_URL=http://127.0.0.1:1234/v1`, Docker Desktop e `docker compose up -d qdrant`):
-  prova reale, ingestion completa due volte, riavvio di Qdrant, valutazione due volte, due query
-  commentate (la seconda: petti di pollo con `--chapter Umidi`, se l'utente non sceglie altro),
-  `docker compose up -d --build` (l'utente ha detto sì: verificare i cinque servizi), `docs/retrieval.md`.
-  Poi Task 11 (README, `CLAUDE.md` chiedendo prima della sua modifica in sospeso, requisiti,
-  diario, suite intera una volta) e la revisione finale dell'intero branch. Mai in stage `CLAUDE.md`
-  (modifica dell'utente) né `docs/superpowers/prossimo-prompt.txt`. Dopo l'esercizio 1: modifiche A e
-  B, ciascuna con specifica e piano; i punti di `REVIEW.md` restano in sospeso.
+- Modello di embedding: **bge-m3** (`gpustack/bge-m3-GGUF`, multilingue, senza prefissi),
+  `EMBEDDING_MODEL=text-embedding-bge-m3` **confermato dall'utente il 2026-11-19**. Computer:
+  i7-1355U, 48 GB, grafica integrata.
+- **Esercizio 1 fatto il 2026-11-19** (Task 10–11; commit `a7f36b4` per `docs/retrieval.md`, poi
+  la documentazione; la modifica dell'utente a `CLAUDE.md` in un commit a parte, `241afbf`, su sua
+  scelta). Eseguito, con esito:
+  - prova reale `pytest tests/test_rag_real.py -m real -v` → 2 passed (30 s; `--recreate` sul
+    server riparte da 0: il difetto della modalità locale su disco non c'è sul server);
+  - ingestion completa due volte: `Ricette: 790 · chunk: 1143 · punti prima: 0 · punti dopo: 1143 ·
+    rimossi: 0`, poi `punti prima: 1143 · punti dopo: 1143 · rimossi: 0` (circa 4 min 45 s
+    ciascuna); dopo `docker compose restart qdrant` ancora 1143 punti; un punto controllato con
+    tutti i campi del payload; dashboard risponde 200;
+  - `rag.evaluate` due volte, tabelle identiche: fonte trovata in 6 casi su 8 (assenti 208, pollo
+    alla cacciatora, e 119/120, salsa verde; 732 in posizione 2);
+  - query commentate in `docs/retrieval.md`: pollo alla cacciatora con `--chapter Fritti` (208 al
+    5° posto) e tiramisù (seconda scelta dall'utente: nessuna risposta, score 0,523–0,531);
+    `--chapter Fritti --k 3` → 3 risultati di Fritti, `--k 21` rifiutato;
+  - messaggi d'errore reali (modello mancante o non servito, modello diverso, LM Studio e Qdrant
+    spenti, collezione assente, capitolo sconosciuto, libro mancante) riportati nel README;
+  - `docker compose up -d --build`: cinque servizi Up, `agent` e `postgres` healthy, pagina 200,
+    `GET /chats` del back-end 200;
+  - suite intera una volta: `pytest` → 1209 passed, 95 deselected (291 s), con LM Studio e Qdrant
+    accesi ma senza variabili (i test usano Qdrant in memoria); `tests/test_docker.py` rieseguito
+    dopo il README → 48 passed.
+  Non eseguito: `pytest` con LM Studio e Qdrant spenti davvero; prove `real` delle lezioni
+  precedenti, `browser`; download del libro da Gutenberg (in manutenzione il 2026-11-19: nel README
+  l'indirizzo e lo SHA-256 del file usato, senza comando).
+- Revisione finale dell'intero branch e decisioni (`Ruling:`) nel registro
+  `.superpowers/sdd/2026-11-17-ingestion-ricette/progress.md` e nel resoconto all'utente.
+- **Prossimo:** modifica A (`has_doses`), poi B (titolo nel testo indicizzato), ciascuna con
+  specifica e piano; il criterio 7 (tre domande dell'utente) è soddisfatto solo in parte. Push solo
+  su richiesta. I punti di `REVIEW.md` restano in sospeso.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 

@@ -709,3 +709,54 @@ la pagina ora usa l'endpoint con lo streaming.
 | CA-102 | Con LM Studio, PostgreSQL, agente, back-end e front-end, dal browser: il testo compare prima della fine del turno, lo strumento è indicato durante l'attesa, la risposta salvata resta dopo la ricarica. | reale |
 | CA-103 | `/chat`, `/chats/{chat_id}/messages` e la CLI invariati: la suite esistente passa senza modifiche ai suoi test. | automatica |
 | CA-104 | README con lo streaming (endpoint, eventi, decisione sulla bozza, diagnosi). | revisione |
+
+## 19. Lezione 7, esercizio 1 — ingestion e ricerca sulle ricette (2026-11-17)
+
+Riferimento: traccia della lezione 7 (riassunto in `lezione7.md`). Specifica
+`specs/2026-11-17-ingestion-ricette-design.md` (dettagli di corpus, chunking, payload, messaggi),
+piano `plans/2026-11-17-ingestion-ricette.md`. Solo retrieval, senza generazione; le modifiche A
+(`has_doses`) e B (titolo nel testo indicizzato) e lo strumento MCP della lezione 8 avranno ciascuno
+il proprio ciclo. Esiti delle verifiche in `PROGRESS.md` e in `docs/retrieval.md`: CA-105…CA-111
+verificati il 2026-11-19 con `text-embedding-bge-m3` (LM Studio) e Qdrant v1.20.0 in Compose;
+CA-111 solo in parte (sotto); CA-112 con `pytest`.
+
+- **RF-88** *Pacchetto indipendente* — `rag/` non importa da `assistant`, `backend`, `frontend` e
+  nessuno lo importa. I comandi `python -m rag.ingest`, `rag.search`, `rag.evaluate` si lanciano
+  dal computer; Qdrant è il quinto servizio di Compose, pubblicato solo su `127.0.0.1:6333`, con la
+  collezione nel volume `qdrant-data`.
+- **RF-89** *Corpus* — Dal file di Project Gutenberg (`CORPUS_FILE`, escluso da Git) le 790 ricette
+  numerate, ciascuna con numero, titolo, capitolo (uno dei 23) e testo pulito; prefazione,
+  introduzioni dei capitoli, appendice e indice non entrano.
+- **RF-90** *Chunking* — Strategia `paragraph` o `window`, dimensione e overlap dalle variabili
+  (`CHUNK_STRATEGY`, `CHUNK_SIZE`, `CHUNK_OVERLAP`), con i limiti della specifica §11.
+- **RF-91** *Embedding* — `EMBEDDING_MODEL` obbligatoria, senza valore predefinito, controllata su
+  `GET /v1/models`; lo stesso modello per chunk e domande, a lotti di `EMBEDDING_BATCH_SIZE`; meno
+  vettori dei testi o dimensioni diverse sono un errore.
+- **RF-92** *Punti* — Un punto per chunk, ID stabile (UUID 5 di sorgente, ricetta, chunk), payload
+  `source`, `recipe_number`, `title`, `chapter`, `chunk_index`, `text`, `embedding_model`.
+  L'ingestion ripetuta non duplica e toglie i punti dei chunk spariti; un modello o una dimensione
+  diversi da quelli della collezione bloccano ingestion, ricerca e valutazione fino a
+  `--recreate`. Alla fine stampa ricette, chunk, punti prima, punti dopo e rimossi.
+- **RF-93** *Ricerca* — top-k (k da 1 a 20, predefinito 5) con filtro facoltativo per capitolo
+  applicato durante la ricerca; capitolo sconosciuto rifiutato con l'elenco; ogni risultato con
+  score, ricetta, titolo, capitolo, `chunk_index` e testo.
+- **RF-94** *Valutazione* — Domande con fonte attesa in `rag/data/questions.json`; tabella Markdown
+  con posizione e score della fonte e score migliore, preceduta da modello e parametri; identica a
+  parità di indice e domande.
+- **RF-95** *Errori* — Configurazione non valida, libro mancante o non UTF-8, LM Studio o Qdrant
+  irraggiungibili, collezione assente: messaggio in italiano su stderr e codice 1, senza traceback.
+
+| ID | Verifica | Come |
+|----|----------|------|
+| CA-105 | Sul file vero: 790 ricette numerate da 1 a 790 senza buchi, 23 capitoli, ciascuna con numero, titolo, capitolo e testo pulito. | automatica e reale |
+| CA-106 | Strategia, dimensione e overlap cambiano dalle variabili; test su una ricetta breve e una lunga. | automatica |
+| CA-107 | `EMBEDDING_MODEL` obbligatoria e verificata su `/v1/models`; stesso modello per chunk e domande; ogni punto registra il modello; un modello diverso blocca ingestion e ricerca finché non si usa `--recreate`. | automatica e reale |
+| CA-108 | Due ingestion complete reali danno lo stesso numero di punti (in `docs/retrieval.md`). | reale |
+| CA-109 | `python -m rag.search "…" --chapter Fritti --k 3` restituisce al massimo 3 risultati, tutti del capitolo Fritti; `--k 21` è rifiutato. | automatica e reale |
+| CA-110 | Ogni risultato mostra ricetta, titolo, capitolo e `chunk_index`. | automatica e reale |
+| CA-111 | `python -m rag.evaluate` stampa una tabella identica a parità di indice e domande; la valutazione di partenza è in `docs/retrieval.md`, con almeno tre domande dell'utente. | reale e revisione |
+| CA-112 | `pytest` passa con LM Studio e Qdrant spenti; `data/` e `.env` restano fuori da Git. | automatica |
+
+CA-111 è soddisfatto in parte: delle tre domande in più, una è scritta dall'utente; le altre due le
+ha scritte Claude su sua richiesta esplicita, con le fonti scelte prima della ricerca
+(`docs/retrieval.md`).

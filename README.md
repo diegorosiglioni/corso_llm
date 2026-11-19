@@ -22,8 +22,11 @@ chiama l'agente con la cronologia salvata: le chat restano dopo il riavvio.
 Un **front-end** (`python -m frontend`) serve una pagina di chat per il browser che parla solo con il
 back-end: elenco, creazione ed eliminazione delle chat, messaggi con gli strumenti usati, risposta
 mostrata mentre arriva (streaming con Server-Sent Events).
-Con **Docker Compose** front-end, back-end, agente e PostgreSQL girano ciascuno nel proprio container
-(`docker compose up -d --build`, sezione «Docker»).
+Con **Docker Compose** front-end, back-end, agente, PostgreSQL e Qdrant girano ciascuno nel proprio
+container (`docker compose up -d --build`, sezione «Docker»).
+Il pacchetto **`rag/`** (lezione 7) indicizza in Qdrant le ricette dell'Artusi e cerca i passaggi più
+vicini a una domanda, con filtro per capitolo e una valutazione riproducibile (sezione «Ricerca
+nelle ricette»).
 
 Requisiti e specifica: [`docs/superpowers/`](docs/superpowers/).
 
@@ -73,9 +76,22 @@ PostgreSQL. Il JavaScript della pagina del front-end si prova con Node.js (`node
 da `pytest`; senza Node il test si salta col motivo). I Dockerfile si controllano come testo, senza
 costruire immagini, e `compose.yaml` con `docker compose config` su una copia con un `.env` di
 credenziali finte, senza il demone (`tests/test_docker.py`; senza la CLI di Docker questi test si
-saltano col motivo). Esito al 2026-11-16: `1079 passed, 93
-deselected` (le 93 deselezionate sono le 68 prove reali, 28 con LM Studio e 40 test dell'archivio
-ripetuti su PostgreSQL, e i 25 test nel browser).
+saltano col motivo). La ricerca nelle ricette (`rag/`) si prova con Qdrant in memoria
+(`qdrant-client`) e un embedder finto, senza LM Studio né Qdrant. Esito al 2026-11-19: `1209
+passed, 95 deselected` in circa 5 minuti (le 95 deselezionate sono le 70 prove reali, 28 con LM
+Studio, 40 test dell'archivio ripetuti su PostgreSQL e 2 della ricerca nelle ricette, e i 25 test
+nel browser).
+
+La prova reale della ricerca nelle ricette (LM Studio con il modello di embedding, Qdrant di
+Compose, libro in `data/`; circa 30 s) indicizza le ricette 85–95 in una collezione di prova,
+due volte, cerca con e senza filtro per capitolo e prova `--recreate`; la collezione è cancellata
+alla fine:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_rag_real.py -m real -v
+```
+
+Esito al 2026-11-19 con `text-embedding-bge-m3`: `2 passed`.
 
 La pagina vera nel browser installato (Edge; Chrome con `$env:BROWSER_CHANNEL = "chrome"`), pilotato
 da Playwright senza finestra, con il back-end vero su SQLite in memoria, un agente finto (risposta con
@@ -803,9 +819,100 @@ model_unavailable`. Per eseguire solo queste:
 .\.venv\Scripts\python.exe -m pytest -m real -v -k "http_chat or same_answer or openapi_and_status or without_lm_studio"
 ```
 
+## Ricerca nelle ricette (lezione 7)
+
+Il pacchetto `rag/`, indipendente dall'assistente (non importa da `assistant`, `backend`,
+`frontend` e nessuno lo importa), indicizza le 790 ricette della «Scienza in cucina e l'arte di
+mangiar bene» di Pellegrino Artusi in **Qdrant** e cerca i passaggi più vicini a una domanda (solo
+retrieval: nessuna risposta generata). Tre comandi, lanciati dal computer:
+`python -m rag.ingest`, `python -m rag.search`, `python -m rag.evaluate`. Risultati, tabella di
+valutazione e query commentate: [`docs/retrieval.md`](docs/retrieval.md).
+
+**Il libro** va messo in `data/Ricettario.txt` (cartella esclusa da Git): è il testo UTF-8 di
+Project Gutenberg, `https://www.gutenberg.org/ebooks/59047.txt.utf-8`. Il file usato per i
+risultati di `docs/retrieval.md` ha SHA-256
+`4B49E6E754B3F7C90E394D00B421F60061BFFB39B9C212D2F956EFAD70901E47`:
+
+```powershell
+(Get-FileHash data\Ricettario.txt).Hash
+```
+
+**Variabili** (nel `.env.example` i valori predefiniti, commentati):
+
+| Variabile | Obbligatoria | Default | Significato |
+|-----------|--------------|---------|-------------|
+| `LMSTUDIO_BASE_URL` | sì | — | API di LM Studio, la stessa dell'assistente |
+| `EMBEDDING_MODEL` | sì | — | modello di embedding, identificativo restituito da `GET /v1/models`; nessun valore predefinito |
+| `QDRANT_URL` | no | `http://127.0.0.1:6333` | indirizzo di Qdrant |
+| `QDRANT_COLLECTION` | no | `recipes` | nome della collezione |
+| `CORPUS_FILE` | no | `data/Ricettario.txt` | libro, relativo alla cartella di avvio |
+| `CHUNK_STRATEGY` | no | `paragraph` | `paragraph` (paragrafi interi fino alla dimensione) o `window` (finestra di caratteri) |
+| `CHUNK_SIZE` | no | `1200` | caratteri per chunk (≥ 100) |
+| `CHUNK_OVERLAP` | no | `200` | caratteri ripetuti tra chunk vicini (da 0 a metà di `CHUNK_SIZE`) |
+| `EMBEDDING_BATCH_SIZE` | no | `32` | testi per chiamata a `/v1/embeddings` (≥ 1) |
+| `LOG_LEVEL` | no | `INFO` | come per l'assistente |
+
+Lo stesso modello calcola i vettori dei chunk e quelli delle domande; ogni punto registra il
+modello nel campo `embedding_model`. Il modello va caricato in LM Studio (per esempio
+`text-embedding-bge-m3`, usato per `docs/retrieval.md`):
+
+```powershell
+docker compose up -d qdrant      # solo Qdrant; serve comunque POSTGRES_PASSWORD nel .env
+$env:LMSTUDIO_BASE_URL = "http://127.0.0.1:1234/v1"
+$env:EMBEDDING_MODEL = "text-embedding-bge-m3"
+.\.venv\Scripts\python.exe -m rag.ingest
+```
+
+L'ingestion legge il libro, lo divide in chunk, calcola i vettori a lotti e li scrive in Qdrant con
+ID stabili (ricetta, chunk): rieseguita riscrive gli stessi punti, senza duplicati, e toglie quelli
+che non esistono più. Con bge-m3 e i valori predefiniti dura circa 5 minuti e stampa:
+
+```
+Ricette: 790 · chunk: 1143 · punti prima: 0 · punti dopo: 1143 · rimossi: 0
+```
+
+e, la seconda volta, `punti prima: 1143 · punti dopo: 1143 · rimossi: 0`. Per cambiare modello
+(o dimensione dei vettori) si ricrea la collezione: `python -m rag.ingest --recreate`; senza,
+ingestion e ricerca con un modello diverso si fermano con un messaggio.
+
+**Ricerca**: k da 1 a 20 (predefinito 5), filtro facoltativo per capitolo (uno dei 23 del libro,
+senza distinguere maiuscole e minuscole). Ogni risultato mostra score, ricetta, titolo, capitolo,
+`chunk_index` e il testo del chunk:
+
+```powershell
+.\.venv\Scripts\python.exe -m rag.search "Che vino si usa per il pollo alla cacciatora?" --chapter Fritti --k 5
+```
+
+```
+1. 0,473 · ricetta 205 «Pollo dorato I» · Fritti · chunk 0
+  Prendete un pollastro giovane, vuotatelo, …
+…
+5. 0,450 · ricetta 208 «Pollo alla cacciatora» · Fritti · chunk 0
+```
+
+**Valutazione**: le domande con fonte attesa in `rag/data/questions.json` (un altro file con
+`--questions`); per ognuna la posizione e lo score della ricetta attesa tra i primi k, in una
+tabella Markdown preceduta da modello, collezione, punti e parametri. A parità di indice e domande
+la tabella è identica a ogni esecuzione:
+
+```powershell
+.\.venv\Scripts\python.exe -m rag.evaluate
+```
+
+```
+| Quanta farina serve per 400 grammi di patate negli gnocchi? | 89 | 1 | 0,671 | 0,671 |
+…
+Fonte attesa trovata in 6 casi su 8.
+```
+
+**Dashboard** di Qdrant su `http://127.0.0.1:6333/dashboard`: collezione `recipes`, punti con il
+payload (`source`, `recipe_number`, `title`, `chapter`, `chunk_index`, `text`, `embedding_model`).
+La collezione sta nel volume `qdrant-data`: dopo `docker compose restart qdrant` conta gli stessi
+punti.
+
 ## Docker
 
-LM Studio resta sull'host. `compose.yaml` definisce quattro servizi, ognuno in un container, più la
+LM Studio resta sull'host. `compose.yaml` definisce cinque servizi, ognuno in un container, più la
 CLI:
 
 - `frontend`: la pagina della chat (`python -m frontend`), pubblicata solo su
@@ -823,6 +930,10 @@ CLI:
   `docker compose exec -T agent python -c "import httpx; print(httpx.get('http://127.0.0.1:8000/status').text)"`.
 - `postgres`: PostgreSQL ufficiale (`postgres:18.6`), dati nel volume `postgres-data`, non
   pubblicato.
+- `qdrant`: l'indice vettoriale delle ricette (`qdrant/qdrant:v1.20.0`, sezione «Ricerca nelle
+  ricette»), pubblicato solo su `127.0.0.1:6333` perché i comandi `rag` girano sul computer; dati
+  nel volume `qdrant-data`. Nessun servizio dipende da lui; da solo parte con
+  `docker compose up -d qdrant`.
 - `assistant`: la CLI, client dell'agente (`AGENT_URL=http://agent:8000`), nel profilo `cli`: non
   parte con `docker compose up`, si avvia con `docker compose run --rm assistant` quando `agent` è
   pronto.
@@ -835,17 +946,18 @@ costruisce `DATABASE_URL` del back-end: la password è obbligatoria per **ogni**
 compose` (senza, si ferma con «Manca POSTGRES_PASSWORD nel file .env»), va scelta senza i caratteri
 `@ : / % #` e vale solo alla prima creazione del volume `postgres-data`.
 
-### Avvio dei quattro servizi e chat dal browser
+### Avvio dei cinque servizi e chat dal browser
 
 ```powershell
 Copy-Item .env.example .env      # solo la prima volta; poi cambiare POSTGRES_PASSWORD
-docker compose up -d --build     # costruisce le immagini e avvia frontend, backend, agent, postgres
-docker compose ps                # quattro servizi Up; agent e postgres (healthy)
+docker compose up -d --build     # costruisce le immagini e avvia frontend, backend, agent, postgres, qdrant
+docker compose ps                # cinque servizi Up; agent e postgres (healthy)
 ```
 
 Poi si apre `http://127.0.0.1:8080` nel browser. `docker compose ps` mostra le porte: `frontend`
-`127.0.0.1:8080->8080/tcp`, `backend` `127.0.0.1:8001->8001/tcp`, `agent` solo `8000/tcp` e
-`postgres` solo `5432/tcp` (non pubblicati: dall'host `http://127.0.0.1:8000` non risponde). Il
+`127.0.0.1:8080->8080/tcp`, `backend` `127.0.0.1:8001->8001/tcp`, `qdrant`
+`127.0.0.1:6333->6333/tcp`, `agent` solo `8000/tcp` e `postgres` solo `5432/tcp` (non pubblicati:
+dall'host `http://127.0.0.1:8000` non risponde). Il
 back-end parte dopo che `postgres` è `(healthy)`. I log si leggono servizio per servizio:
 
 ```powershell
@@ -868,7 +980,7 @@ docker compose run --rm assistant
 ```
 
 `docker compose run --rm assistant` avvia anche `agent` (se non è già attivo), che resta attivo dopo
-l'uscita dalla CLI fino a `docker compose down`; con i quattro servizi avviati la CLI usa lo stesso
+l'uscita dalla CLI fino a `docker compose down`; con i servizi avviati la CLI usa lo stesso
 `agent` della pagina. La CLI parte solo con `run`, non con `docker compose up` (profilo `cli`), che
 non collegherebbe l'input del terminale. Per una prova non interattiva serve `-T`:
 
@@ -1125,3 +1237,49 @@ esecuzione del servizio, per esempio per verificare il messaggio di configurazio
 ```powershell
 docker compose run --rm -T -e LMSTUDIO_MODEL= agent
 ```
+
+### Ricerca nelle ricette
+
+Ogni errore stampa un messaggio su stderr ed esce con codice 1, senza traceback; messaggi verificati
+il 2026-11-19 con bge-m3:
+
+**Manca il modello.** «Manca EMBEDDING_MODEL: l'identificativo del modello di embedding restituito
+da GET /v1/models di LM Studio.»: impostare `$env:EMBEDDING_MODEL`. Se il nome non è tra quelli di
+LM Studio, il messaggio elenca quelli disponibili («Il modello di embedding 'bge-inventato'
+(EMBEDDING_MODEL) non è tra quelli di LM Studio: text-embedding-bge-m3, … Caricarlo in LM Studio o
+correggere EMBEDDING_MODEL.»).
+
+**LM Studio spento.** «LM Studio non raggiungibile su http://127.0.0.1:1299/v1.»: avviare il server
+di LM Studio o correggere `LMSTUDIO_BASE_URL`.
+
+**Errore di dimensione (modello diverso da quello della collezione).** «La collezione 'recipes' ha
+vettori di dimensione 1024, il modello 'text-embedding-nomic-embed-text-v1.5' ne produce 768: per
+reindicizzare eseguire python -m rag.ingest --recreate» (lo stesso in ricerca e valutazione).
+Un modello diverso con la stessa dimensione è bloccato allo stesso modo («La collezione 'recipes'
+contiene embedding di '…', la configurazione usa '…': per reindicizzare eseguire python -m
+rag.ingest --recreate»): i vettori di due modelli non si confrontano. Il modello della collezione si legge nel campo `embedding_model` di un punto, dalla
+dashboard.
+
+**Qdrant non raggiungibile.** «Qdrant non raggiungibile su http://127.0.0.1:6399: avviarlo con
+docker compose up -d qdrant»: controllare `docker compose ps` (servizio `qdrant` Up, porta
+`127.0.0.1:6333->6333/tcp`) e `QDRANT_URL`.
+
+**Collezione vuota o assente.** «La collezione 'nessuna' non esiste o è vuota: eseguire prima python
+-m rag.ingest». Dopo un riavvio la collezione resta grazie al volume `qdrant-data` di
+`compose.yaml`: se sparisce, il volume non è montato.
+
+**Risultati duplicati.** Gli ID dei punti sono stabili (ricetta e chunk): rieseguire l'ingestion non
+duplica. Il controllo è la riga di riepilogo, con «punti dopo» uguale al numero di chunk.
+
+**Filtro senza risultati.** Un capitolo scritto diversamente da quelli del libro è rifiutato con
+l'elenco dei capitoli validi: «Capitolo sconosciuto: 'Fritto'. Capitoli: Brodi, gelatina e sughi,
+…, Fritti, …, Cose diverse.»; maiuscole e minuscole non contano.
+
+**Libro mancante.** «Impossibile leggere il libro 'data/manca.txt': No such file or directory.»:
+controllare `CORPUS_FILE` e la cartella di avvio.
+
+**Passaggio giusto ma incompleto, risultati generici, fonte non chiara.** Ogni risultato mostra
+ricetta, titolo, capitolo e `chunk_index`: i chunk vicini della stessa ricetta hanno lo stesso
+numero e `chunk_index` consecutivi. Chunk troppo grandi danno risultati generici: provare
+`CHUNK_SIZE` più piccolo o `CHUNK_STRATEGY=window`, con `--recreate`, e confrontare le tabelle di
+`python -m rag.evaluate`.
