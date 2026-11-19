@@ -767,7 +767,8 @@ Riferimento: traccia della lezione 7 (esercizio 2, «A · Metadati»). Specifica
 `specs/2026-11-20-modifica-a-dosi-design.md` (regola, approcci scartati), piano
 `plans/2026-11-20-modifica-a-dosi.md`. Parte dalla §19, che resta valida dove questa sezione non la
 cambia. Esiti delle verifiche in `PROGRESS.md` e in `docs/retrieval.md` («Dopo la modifica A»):
-CA-113…CA-118 verificati il 2026-11-20 con `text-embedding-bge-m3` e Qdrant v1.20.0 in Compose.
+CA-113…CA-117 verificati il 2026-11-20 con `text-embedding-bge-m3` e Qdrant v1.20.0 in Compose;
+CA-118 solo in parte (sotto).
 
 - **RF-96** *Campo has_doses* — Ogni punto ha `has_doses` (booleano, con indice sul payload): vero
   se il chunk contiene un paragrafo di almeno due righe, che non comincia con `[Illustrazione`, con
@@ -793,3 +794,7 @@ CA-113…CA-118 verificati il 2026-11-20 con `text-embedding-bge-m3` e Qdrant v1
 | CA-116 | `rag.search "…" --doses --chapter … --k 3`: al massimo 3 risultati, tutti `· dosi` e del capitolo; capitolo senza chunk con dosi → «Nessun risultato.». | automatica e reale |
 | CA-117 | `rag.evaluate` e `rag.evaluate --doses`: tabelle identiche a parità di indice, domande e opzioni, in `docs/retrieval.md` con il commento domanda per domanda. | reale e revisione |
 | CA-118 | Intestazione della valutazione dal payload dell'indice, ripiego sulla configurazione segnalato; `pytest` passa senza LM Studio né Qdrant. | automatica |
+
+CA-118 è soddisfatto in parte: il 2026-11-20 sono stati eseguiti solo i test di `rag/` e
+`tests/test_docker.py` (218 passed); la suite intera non è stata eseguita (va chiesta prima
+all'utente) e l'ultimo `pytest` completo resta quello del 2026-11-19 (1209 passed).
