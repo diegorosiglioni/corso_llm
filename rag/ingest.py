@@ -2,7 +2,11 @@
 
 Repeatable: stable IDs and upsert, then the points of the same source not written in this run are
 removed, so the number of points is always the number of current chunks. --recreate deletes the
-collection first (to change the embedding model)."""
+collection first (to change the embedding model).
+
+Every point records, besides source, recipe, chapter, text and model, whether the chunk holds a dose
+list (`has_doses`, rule in rag/doses.py) and the chunking parameters used (`chunk_strategy`,
+`chunk_size`, `chunk_overlap`), which the evaluation reads back from the index."""
 
 import argparse
 import logging
@@ -15,6 +19,7 @@ from pathlib import Path
 from rag.chunking import split_recipe
 from rag.config import ConfigError, RagConfig, configure_logging, load_config
 from rag.corpus import CorpusError, Recipe, load_corpus
+from rag.doses import has_doses
 from rag.embedder import Embedder, EmbeddingError, check_embedding_model, create_embedder
 from rag.store import (
     ChunkPoint, StoreError, connect, count_points, drop_collection, ensure_collection, point_id,
@@ -59,6 +64,10 @@ def run_ingest(
             "chunk_index": chunk.chunk_index,
             "text": chunk.text,
             "embedding_model": config.embedding_model,
+            "has_doses": has_doses(chunk.text),
+            "chunk_strategy": config.chunk_strategy,
+            "chunk_size": config.chunk_size,
+            "chunk_overlap": config.chunk_overlap,
         }
         for recipe in recipes
         for chunk in split_recipe(

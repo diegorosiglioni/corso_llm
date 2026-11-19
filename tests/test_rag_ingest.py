@@ -75,7 +75,15 @@ def test_payload_of_a_point(qdrant):
         "source": "Ricettario.txt", "recipe_number": 1, "title": "Brodo",
         "chapter": "Brodi, gelatina e sughi", "chunk_index": 0,
         "text": "Brodo di carne con sedano e carota.", "embedding_model": "modello-scelto",
+        "has_doses": False, "chunk_strategy": "paragraph", "chunk_size": 100, "chunk_overlap": 20,
     }
+
+
+def test_payload_marks_the_dose_list(qdrant):
+    text = "Farina, grammi 200.\nUova, N. 2.\n\nImpastate."
+    run_ingest(config, [*RECIPES, Recipe(4, "Pasta", "Paste", text)], qdrant, FakeEmbedder())
+    (_, payload), = query(qdrant, "recipes", FakeEmbedder().embed([text])[0], 1, None)
+    assert payload["recipe_number"] == 4 and payload["has_doses"] is True
 
 
 def test_other_model_needs_recreate(qdrant):
