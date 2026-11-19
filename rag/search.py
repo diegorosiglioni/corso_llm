@@ -1,8 +1,9 @@
-"""python -m rag.search "domanda" [--chapter NOME] [--k N]: the k chunks nearest to a question,
-with their source (recipe, title, chapter, chunk position).
+"""python -m rag.search "domanda" [--chapter NOME] [--k N] [--doses]: the k chunks nearest to a
+question, with their source (recipe, title, chapter, chunk position) and whether they hold a dose list.
 
-The question is embedded as it is, with the same method as the chunks; the chapter filter is
-applied by Qdrant during the search."""
+The question is embedded as it is, with the same method as the chunks; the chapter filter and the
+--doses filter (has_doses = true) are applied by Qdrant during the search. With --doses, a collection
+where some points lack has_doses is refused: they would be left out without saying so."""
 
 import argparse
 import os
@@ -13,10 +14,11 @@ from dataclasses import dataclass
 from rag.config import ConfigError, configure_logging, load_config
 from rag.corpus import CHAPTERS
 from rag.embedder import Embedder, EmbeddingError, check_embedding_model, create_embedder
-from rag.store import StoreError, check_collection, connect, query
+from rag.store import StoreError, check_collection, connect, count_missing, query
 
 DEFAULT_TOP_K = 5
 MAX_TOP_K = 20
+MISSING_DOSES = "Alcuni punti non hanno has_doses: eseguire python -m rag.update_payload"
 
 
 class SearchError(Exception):
@@ -32,6 +34,7 @@ class SearchResult:
     chapter: str
     chunk_index: int
     text: str
+    has_doses: bool = False
 
 
 def resolve_chapter(name: str) -> str:
@@ -61,10 +64,13 @@ def search(
     question: str,
     k: int = DEFAULT_TOP_K,
     chapter: str | None = None,
+    doses: bool = False,
 ) -> list[SearchResult]:
     chapter_name = validate(question, k, chapter)
     vector = embedder.embed([question])[0]
     check_collection(client, collection, len(vector), model)
+    if doses and count_missing(client, collection, "has_doses") > 0:
+        raise StoreError(MISSING_DOSES)
     return [
         SearchResult(
             rank=rank,
@@ -74,9 +80,10 @@ def search(
             chapter=payload["chapter"],
             chunk_index=payload["chunk_index"],
             text=payload["text"],
+            has_doses=payload.get("has_doses", False),
         )
         for rank, (score, payload) in enumerate(
-            query(client, collection, vector, k, chapter_name), start=1
+            query(client, collection, vector, k, chapter_name, doses), start=1
         )
     ]
 
@@ -94,6 +101,7 @@ def format_results(results: Sequence[SearchResult]) -> str:
         header = (
             f"{result.rank}. {format_score(result.score)} · ricetta {result.recipe_number} "
             f"«{result.title}» · {result.chapter} · chunk {result.chunk_index}"
+            + (" · dosi" if result.has_doses else "")
         )
         body = "\n".join(f"  {line}" if line else "" for line in result.text.splitlines())
         blocks.append(f"{header}\n{body}")
@@ -111,6 +119,9 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] = os.environ)
         "--k", type=int, default=DEFAULT_TOP_K,
         help=f"numero di risultati, da 1 a {MAX_TOP_K} (predefinito {DEFAULT_TOP_K})",
     )
+    parser.add_argument(
+        "--doses", action="store_true", help="solo i chunk con un elenco di ingredienti",
+    )
     args = parser.parse_args(argv)
     try:
         config = load_config(env)
@@ -121,7 +132,7 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] = os.environ)
         try:
             results = search(
                 client, create_embedder(config), config.collection, config.embedding_model,
-                args.question, args.k, args.chapter,
+                args.question, args.k, args.chapter, args.doses,
             )
         finally:
             client.close()

@@ -1,7 +1,7 @@
 """Top-k search with chapter filter, on recipes indexed in memory with the fake embedder."""
 
 import pytest
-from qdrant_client import QdrantClient
+from qdrant_client import QdrantClient, models
 
 from conftest import FakeEmbedder
 from rag import search as search_module
@@ -14,13 +14,15 @@ from rag.search import (
 from rag.store import StoreError
 
 VALID = {"LMSTUDIO_BASE_URL": "http://127.0.0.1:1234/v1", "EMBEDDING_MODEL": "modello-scelto"}
+DOSES = "\n\nOlio, grammi 100.\nSale, quanto basta."   # a dose list: has_doses true
 RECIPES = [
-    Recipe(1, "Pollo fritto", "Fritti", "Pollo fritto dorato nell'olio."),
-    Recipe(2, "Fritto misto", "Fritti", "Fritto misto di pollo e verdure."),
+    Recipe(1, "Pollo fritto", "Fritti", "Pollo fritto dorato nell'olio." + DOSES),
+    Recipe(2, "Fritto misto", "Fritti", "Fritto misto di pollo e verdure." + DOSES),
     Recipe(3, "Carciofi fritti", "Fritti", "Carciofi fritti in pastella."),
     Recipe(4, "Frittelle", "Fritti", "Frittelle di riso con zucchero."),
     Recipe(5, "Cervello fritto", "Fritti", "Cervello fritto con limone."),
-    Recipe(6, "Pollo lesso", "Lesso", "Pollo lesso con il brodo."),
+    Recipe(6, "Pollo lesso", "Lesso", "Pollo lesso con il brodo." + DOSES),
+    Recipe(7, "Arrosto", "Arrosti", "Arrosto di vitella al forno."),
 ]
 
 
@@ -42,7 +44,7 @@ def test_results_carry_the_source(indexed):
     results = run(indexed, "pollo lesso con il brodo", k=2)
     assert results[0] == SearchResult(
         rank=1, score=results[0].score, recipe_number=6, title="Pollo lesso", chapter="Lesso",
-        chunk_index=0, text="Pollo lesso con il brodo.")
+        chunk_index=0, text="Pollo lesso con il brodo." + DOSES, has_doses=True)
     assert len(results) == 2 and results[0].score >= results[1].score
 
 
@@ -78,6 +80,34 @@ def test_blank_question(indexed, question):
         run(indexed, question)
 
 
+def test_doses_filter_returns_only_dose_chunks(indexed):
+    results = run(indexed, "pollo", k=5, doses=True)
+    assert sorted(r.recipe_number for r in results) == [1, 2, 6]
+    assert all(r.has_doses for r in results)
+
+
+def test_without_doses_the_flag_is_reported(indexed):
+    results = run(indexed, "pollo", k=7)
+    assert {r.recipe_number for r in results if r.has_doses} == {1, 2, 6}
+    assert len(results) == 7
+
+
+def test_doses_with_chapter(indexed):
+    assert [r.recipe_number for r in run(indexed, "pollo", doses=True, chapter="Lesso")] == [6]
+
+
+def test_doses_in_a_chapter_without_doses(indexed):
+    assert run(indexed, "arrosto", doses=True, chapter="Arrosti") == []
+
+
+def test_doses_on_points_without_the_field(indexed):
+    indexed.delete_payload("recipes", keys=["has_doses"], points=models.Filter(), wait=True)
+    with pytest.raises(StoreError) as error:
+        run(indexed, doses=True)
+    assert str(error.value) == "Alcuni punti non hanno has_doses: eseguire python -m rag.update_payload"
+    assert len(run(indexed)) == DEFAULT_TOP_K
+
+
 def test_other_model_is_blocked(indexed):
     with pytest.raises(StoreError, match="--recreate"):
         search(indexed, FakeEmbedder(), "recipes", "altro", "pollo")
@@ -95,11 +125,11 @@ def test_unknown_chapter_lists_the_chapters():
 
 def test_result_line():
     text = format_results([
-        SearchResult(1, 0.7771, 89, "Gnocchi di patate", "Minestre asciutte e di magro", 0, "Testo\nseconda riga"),
+        SearchResult(1, 0.7771, 89, "Gnocchi di patate", "Minestre asciutte e di magro", 0, "Testo\nseconda riga", True),
         SearchResult(2, 0.7, 90, "Gnocchi di farina gialla", "Minestre asciutte e di magro", 1, "Altro"),
     ])
     assert text.splitlines() == [
-        "1. 0,777 · ricetta 89 «Gnocchi di patate» · Minestre asciutte e di magro · chunk 0",
+        "1. 0,777 · ricetta 89 «Gnocchi di patate» · Minestre asciutte e di magro · chunk 0 · dosi",
         "  Testo",
         "  seconda riga",
         "",
@@ -128,8 +158,8 @@ def test_main_without_ingestion(capsys, offline):
 
 def test_main_prints_the_results(capsys, offline):
     run_ingest(load_config(VALID), RECIPES, offline, FakeEmbedder())
-    assert search_module.main(["pollo lesso", "--chapter", "Lesso", "--k", "3"], VALID) == 0
-    assert capsys.readouterr().out.splitlines()[0].endswith("· ricetta 6 «Pollo lesso» · Lesso · chunk 0")
+    assert search_module.main(["pollo lesso", "--chapter", "Lesso", "--k", "3", "--doses"], VALID) == 0
+    assert capsys.readouterr().out.splitlines()[0].endswith("· ricetta 6 «Pollo lesso» · Lesso · chunk 0 · dosi")
 
 
 @pytest.mark.parametrize("argv, message", [
