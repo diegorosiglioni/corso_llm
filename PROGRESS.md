@@ -1,6 +1,6 @@
 # Diario di lavoro
 
-## Stato attuale (2026-11-17)
+## Stato attuale (2026-11-19)
 
 - Step 4–9 e streaming fatti dal loop autonomo il 2026-11-14 su `auto-claude`; poi revisione
   (F1–F3), correzioni (F4), sistemazione dei file del loop (F5), verifica finale (F6) e integrazione
@@ -57,17 +57,41 @@
   quinto servizio di Compose su `127.0.0.1:6333`; modello di embedding scelto dall'utente
   (`EMBEDDING_MODEL` obbligatoria, nessun valore predefinito). Corpus già presente in locale:
   `data/Ricettario.txt` (Gutenberg 59047).
-- Specifica dell'esercizio 1 **approvata** e salvata (commit `6a446e8`):
-  `docs/superpowers/specs/2026-11-17-ingestion-ricette-design.md`. Piano scritto, **da rivedere
-  dall'utente**: `docs/superpowers/plans/2026-11-17-ingestion-ricette.md` (11 task). Proposta di
-  esecuzione: nativa (in sessione), in attesa di scelta. Nessun codice scritto.
-- Prossimo: l'utente rivede il piano e sceglie l'esecuzione (nativa consigliata o con
-  sotto-agenti); poi Task 1–11. Il piano si ferma per chiedere: almeno tre domande dell'utente con
-  la ricetta attesa (Task 9), il modello di embedding caricato in LM Studio (Task 10), se salvare a
-  parte la modifica in sospeso di `CLAUDE.md` (Task 11). Dopo l'esercizio 1: modifica A
-  (`has_doses`) e modifica B (titolo nel testo indicizzato), ciascuna con specifica e piano.
-  I punti di `REVIEW.md` (I-2, M-1, …) restano in sospeso. Una sessione nuova parte da questa
-  sezione.
+- Specifica dell'esercizio 1 approvata (commit `6a446e8`):
+  `docs/superpowers/specs/2026-11-17-ingestion-ricette-design.md`. Piano approvato il 2026-11-19
+  (`docs/superpowers/plans/2026-11-17-ingestion-ricette.md`, 11 task), **esecuzione nativa in
+  corso**, su `dev`, senza push. Registro di esecuzione (solo locale, escluso da Git):
+  `.superpowers/sdd/2026-11-17-ingestion-ricette/progress.md`, con le righe `Task N: complete` e
+  tutte le decisioni (`Ruling:`) da riportare all'utente alla fine.
+- **Task 1–9 fatti** (commit `980a57b`…`88ec259`): servizio `qdrant` (v1.20.0) in Compose e
+  `qdrant-client` 1.20.0; `rag/config.py`, `corpus.py`, `chunking.py`, `embedder.py`, `store.py`,
+  `ingest.py`, `search.py`, `evaluate.py`, `rag/data/questions.json`. Eseguiti solo i test delle parti
+  toccate (richiesta dell'utente): `pytest tests/test_rag_*.py tests/test_docker.py` → 176 passed.
+  Suite intera: una volta sola, alla fine (Task 11), anche per i conteggi del README.
+- Decisioni durante l'esecuzione (dettagli nel registro): la riga `MINESTRE` (raggruppa due
+  capitoli) chiude la ricetta 6 e la sua introduzione non è indicizzata; sul libro vero 790 ricette,
+  1143 chunk (`paragraph`, 1200/200), 1086 (`window`). `qdrant-client` in modalità locale su disco
+  (`path=`) fa ricomparire i punti dopo `delete_collection`: test in memoria; `--recreate` da
+  verificare sul server (prova reale).
+- Domande di prova (Task 9): **una sola dell'utente** (petti di pollo → 207, 269, fonti scelte da
+  lui); le due successive (salsa verde → 119, 120; conserva di pomodoro → 732) scritte da Claude su
+  richiesta esplicita dell'utente, con le fonti scelte dai titoli prima di ogni ricerca. Il criterio 7
+  della specifica ne chiede tre dell'utente: dichiararlo in `docs/retrieval.md`.
+- Modello di embedding (Task 10): consigliato e scaricato **bge-m3** (`gpustack/bge-m3-GGUF`,
+  multilingue, non vuole prefissi come prevede la specifica); in `GET /v1/models` compare come
+  `text-embedding-bge-m3` (accanto a `text-embedding-nomic-embed-text-v1.5` e al modello di chat).
+  **Da far confermare all'utente** prima di usarlo. Computer: i7-1355U, 48 GB, grafica integrata.
+- Task 10 avviato: `tests/test_rag_real.py` scritto (ricette 85–95 in una collezione di prova, due
+  ingestion, ricerca con e senza filtro, `--recreate` sul server); senza variabili viene saltato.
+- **Prossimo:** confermare `EMBEDDING_MODEL=text-embedding-bge-m3`, poi Task 10 dal passo 3
+  (`LMSTUDIO_BASE_URL=http://127.0.0.1:1234/v1`, Docker Desktop e `docker compose up -d qdrant`):
+  prova reale, ingestion completa due volte, riavvio di Qdrant, valutazione due volte, due query
+  commentate (la seconda: petti di pollo con `--chapter Umidi`, se l'utente non sceglie altro),
+  `docker compose up -d --build` (l'utente ha detto sì: verificare i cinque servizi), `docs/retrieval.md`.
+  Poi Task 11 (README, `CLAUDE.md` chiedendo prima della sua modifica in sospeso, requisiti,
+  diario, suite intera una volta) e la revisione finale dell'intero branch. Mai in stage `CLAUDE.md`
+  (modifica dell'utente) né `docs/superpowers/prossimo-prompt.txt`. Dopo l'esercizio 1: modifiche A e
+  B, ciascuna con specifica e piano; i punti di `REVIEW.md` restano in sospeso.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
