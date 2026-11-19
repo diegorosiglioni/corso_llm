@@ -1,6 +1,6 @@
 # Diario di lavoro
 
-## Stato attuale (2026-11-19)
+## Stato attuale (2026-11-20)
 
 - Step 4–9 e streaming fatti dal loop autonomo il 2026-11-14 su `auto-claude`; poi revisione
   (F1–F3), correzioni (F4), sistemazione dei file del loop (F5), verifica finale (F6) e integrazione
@@ -116,9 +116,32 @@
   ricalcolo); strategia, dimensione e overlap nel payload (chiude il problema importante della
   revisione dell'esercizio 1); libro rinominato in `TODO.md`. Le due domande che mancano
   all'utente le aggiungerà più avanti: la valutazione dopo A usa le 9 di oggi.
-- **Prossimo:** eseguire il piano della modifica A dal Task 1 (skill executing-plans), poi la
-  modifica B con specifica e piano. Push solo su richiesta. I punti di `REVIEW.md` restano in
-  sospeso.
+- **Modifica A fatta il 2026-11-20** (Task 1–8, esecuzione nativa, commit `64d5b56`…, su `dev`,
+  senza push): `rag/doses.py`, indice e filtro `has_doses` in `rag/store.py`, ingestion con
+  `has_doses` e parametri del chunking, `python -m rag.update_payload`, `--doses` in ricerca e
+  valutazione, intestazione della valutazione dall'indice. Registro (solo locale):
+  `.superpowers/sdd/2026-11-20-modifica-a-dosi/progress.md`, con le decisioni (`Ruling:`).
+  Eseguito, con esito:
+  - test delle parti toccate: `pytest tests/test_rag_*.py tests/test_docker.py` → 218 passed, 3
+    deselected (le prove reali);
+  - prova reale `pytest tests/test_rag_real.py -m real -v` → 3 passed (32 s; la nuova toglie campo
+    e indice `has_doses`, `run_update` li rimette, vettore invariato);
+  - sul libro 398 chunk con dosi su 1143 (345 ricette; la specifica diceva 400, misurati con una
+    prima espressione regolare);
+  - collezione `recipes` vera: `rag.update_payload` due volte → `Punti: 1143 · aggiornati: 1143 ·
+    con dosi: 398 · senza campo: 0`; vettore della 89/0 con lo stesso SHA-256 prima e dopo; indice
+    `has_doses` creato; ancora 1143 punti;
+  - `rag.search … --doses --chapter "Minestre asciutte e di magro" --k 3` → 89, 106, 103, tutti
+    `· dosi`; con `--chapter Fritti` 177, 202, 172;
+  - `rag.evaluate` 6 su 8 (come prima), `rag.evaluate --doses` 3 su 8, tabelle identiche a coppie,
+    commentate in `docs/retrieval.md` («Dopo la modifica A»): il filtro toglie le ricette in prosa;
+  - messaggio «Alcuni punti non hanno has_doses…» verificato su una collezione di prova
+    (`recipes_diag`, cancellata).
+  Non eseguito: **`pytest` intero** (permesso negato: la regola dell'utente vuole che lo si chieda
+  prima), quindi i conteggi della suite nel README restano quelli del 2026-11-19; prove `real` delle
+  lezioni precedenti, `browser`, Docker completo.
+- **Prossimo:** modifica B con specifica e piano. Push solo su richiesta. I punti di `REVIEW.md`
+  restano in sospeso.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 

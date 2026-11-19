@@ -43,8 +43,10 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
     `http://127.0.0.1:8080`)
   - ricerca nelle ricette (libro in `data/Ricettario.txt`, `docker compose up -d qdrant`,
     `LMSTUDIO_BASE_URL` ed `EMBEDDING_MODEL` impostate): `.\.venv\Scripts\python.exe -m rag.ingest`
-    (`--recreate` per cambiare modello), `.\.venv\Scripts\python.exe -m rag.search "domanda" --chapter Fritti --k 5`,
-    `.\.venv\Scripts\python.exe -m rag.evaluate`; prova reale (circa 30 s):
+    (`--recreate` per cambiare modello), `.\.venv\Scripts\python.exe -m rag.update_payload`
+    (`has_doses` sui punti esistenti, senza ricalcolare gli embedding),
+    `.\.venv\Scripts\python.exe -m rag.search "domanda" --chapter Fritti --k 5 --doses`,
+    `.\.venv\Scripts\python.exe -m rag.evaluate` (anche `--doses`); prova reale (circa 30 s):
     `.\.venv\Scripts\python.exe -m pytest tests/test_rag_real.py -m real -v`
   - Docker: `docker compose up -d --build` avvia `frontend`, `backend`, `agent`, `postgres` e
     `qdrant` (solo `127.0.0.1:6333`, dashboard su `/dashboard`)
@@ -81,6 +83,8 @@ Un'applicazione in Python (terminale e pagina web) che conversa con un modello l
 - (lezione 7, esercizio 1) indicizza in Qdrant le 790 ricette dell'Artusi con ingestion ripetibile
   senza duplicati, cerca i passaggi top-k con filtro per capitolo e valuta la ricerca su domande con
   fonte attesa (solo retrieval, senza generazione; Qdrant quinto servizio di Compose);
+- (lezione 7, modifica A) segna con `has_doses` i chunk con l'elenco delle dosi, lo aggiunge ai
+  punti esistenti senza ricalcolare gli embedding e permette di cercare solo tra quelli (`--doses`);
 - usa un modello servito da LM Studio, che resta sul computer host;
 - conserva la cronologia della conversazione per la durata della sessione nella CLI; nel
   back-end le chat sono persistenti;
@@ -95,8 +99,8 @@ Un'applicazione in Python (terminale e pagina web) che conversa con un modello l
   Step 1–9 della lezione 6 (router, revisore, riassunto, resource delle preferenze, prompt MCP,
   servizio HTTP, back-end, front-end, Compose a quattro container) e lo streaming facoltativo sono
   implementati; i debiti noti rimasti sono in `TODO.md`;
-  ingestion e ricerca della lezione 7 implementate; generazione, strumento MCP della ricerca e
-  modifiche A e B ciascuna col proprio ciclo;
+  ingestion e ricerca della lezione 7 e modifica A (`has_doses`, filtro `--doses`) implementate;
+  generazione, strumento MCP della ricerca e modifica B ciascuna col proprio ciclo;
   altri strumenti, altri server MCP e workflow non vanno anticipati: ognuno avrà il proprio
   ciclo di specifica e piano.
 - Niente interfacce grafiche oltre al front-end web dello Step 8, niente servizi cloud o

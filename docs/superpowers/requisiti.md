@@ -760,3 +760,36 @@ CA-111 solo in parte (sotto); CA-112 con `pytest`.
 CA-111 è soddisfatto in parte: delle tre domande in più, una è scritta dall'utente; le altre due le
 ha scritte Claude su sua richiesta esplicita, con le fonti scelte prima della ricerca
 (`docs/retrieval.md`).
+
+## 20. Lezione 7, esercizio 2 — modifica A: chunk con le dosi (2026-11-20)
+
+Riferimento: traccia della lezione 7 (esercizio 2, «A · Metadati»). Specifica
+`specs/2026-11-20-modifica-a-dosi-design.md` (regola, approcci scartati), piano
+`plans/2026-11-20-modifica-a-dosi.md`. Parte dalla §19, che resta valida dove questa sezione non la
+cambia. Esiti delle verifiche in `PROGRESS.md` e in `docs/retrieval.md` («Dopo la modifica A»):
+CA-113…CA-118 verificati il 2026-11-20 con `text-embedding-bge-m3` e Qdrant v1.20.0 in Compose.
+
+- **RF-96** *Campo has_doses* — Ogni punto ha `has_doses` (booleano, con indice sul payload): vero
+  se il chunk contiene un paragrafo di almeno due righe, che non comincia con `[Illustrazione`, con
+  almeno una riga che contiene una quantità (specifica §3). L'ingestion scrive anche
+  `chunk_strategy`, `chunk_size` e `chunk_overlap`.
+- **RF-97** *Punti esistenti* — `python -m rag.update_payload` calcola `has_doses` dal testo salvato
+  in ogni punto e scrive solo quel campo, senza ricalcolare gli embedding né contattare LM Studio;
+  crea l'indice se manca; stampa `Punti · aggiornati · con dosi · senza campo` ed esce con codice 1
+  se qualche punto resta senza campo. Rieseguito dà lo stesso risultato.
+- **RF-98** *Ricerca con --doses* — Solo chunk con `has_doses` vero, al massimo k, combinabile con
+  `--chapter`, filtro applicato da Qdrant durante la ricerca; ogni risultato con `has_doses` vero
+  mostra `· dosi`. Se qualche punto non ha il campo: «Alcuni punti non hanno has_doses: eseguire
+  python -m rag.update_payload».
+- **RF-99** *Valutazione* — `rag.evaluate --doses` applica il filtro a tutte le domande;
+  l'intestazione aggiunge `filtro dosi` e legge strategia, dimensione e overlap dal payload, o dalla
+  configurazione con l'indicazione «(dalla configurazione)» se i punti non li hanno.
+
+| ID | Verifica | Come |
+|----|----------|------|
+| CA-113 | `has_doses`: elenco con unità → vero; elenco senza unità, versi, didascalia, dose nella prosa, riga di dosi isolata → falso; elenco in un paragrafo successivo → vero. Sul libro, 398 chunk su 1143. | automatica e reale |
+| CA-114 | `rag.update_payload` due volte sulla collezione dell'esercizio 1: stessi conteggi, 1143 punti, `senza campo: 0`; il vettore di un punto è identico prima e dopo; l'indice `has_doses` viene creato. | automatica e reale |
+| CA-115 | Aggiornamento interrotto a metà, poi rieseguito → `senza campo: 0`; nel frattempo `--doses` è rifiutato col messaggio. | automatica |
+| CA-116 | `rag.search "…" --doses --chapter … --k 3`: al massimo 3 risultati, tutti `· dosi` e del capitolo; capitolo senza chunk con dosi → «Nessun risultato.». | automatica e reale |
+| CA-117 | `rag.evaluate` e `rag.evaluate --doses`: tabelle identiche a parità di indice, domande e opzioni, in `docs/retrieval.md` con il commento domanda per domanda. | reale e revisione |
+| CA-118 | Intestazione della valutazione dal payload dell'indice, ripiego sulla configurazione segnalato; `pytest` passa senza LM Studio né Qdrant. | automatica |

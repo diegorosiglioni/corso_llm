@@ -17,6 +17,8 @@ con il proprio ciclo di specifica e piano (`CLAUDE.md`, «Metodo»). Test senza 
 - [x] Facoltativo · Streaming della risposta con Server-Sent Events: bozza mostrata mentre arriva, strumenti indicati, risposta salvata alla fine
 - [x] Robustezza del servizio (2026-11-16, debiti R-B3, R-B4, R-B9): riavvio automatico del server MCP, controllo di salute di `agent` legato a MCP, `/status` con 5 s per MCP e CLI che aspetta 20 s, `AGENT_URL` malformato come «Configurazione non valida»
 - [x] Revisione del 2026-11-16 (`REVIEW.md`), I-1: dopo una connessione chiusa il client MCP non ripete più le chiamate agli strumenti (`ToolOutcomeUnknownError`, testo «esito incerto» per il modello). Gli altri punti della revisione sono aperti in `REVIEW.md`, «Punti da riprendere»
+- [x] Lezione 7, esercizio 1 (2026-11-19): ingestion delle 790 ricette in Qdrant, ricerca top-k con filtro per capitolo, valutazione (`docs/retrieval.md`)
+- [x] Lezione 7, modifica A (2026-11-20): `has_doses` nel payload con indice, `rag.update_payload` senza ricalcolare gli embedding, `--doses` in ricerca e valutazione
 
 ## Debiti noti
 
@@ -42,3 +44,4 @@ di ciascuno nel rapporto [`docs/superpowers/reviews/2026-11-15-auto-claude.md`](
 | R-D5 | La bozza riporta in fondo chi sta leggendo più in alto; `#waiting` annunciato ogni secondo | Come sopra | §3 |
 | R-A1a | Se CA-58 (`test_explain_prompt_from_the_cli`) passasse il controllo di merito risulterebbe un semplice `passed`, mentre `requisiti.md`, README e rapporto direbbero ancora «non soddisfatta per limite del modello» | Minore del secondo giro di revisione; l'utente ha scelto di non correggerlo ora (2026-11-16): con il modello attuale il merito non passa | §9 |
 | R-A1b | Con CA-58 `xfailed` la risposta del modello si vede solo con `-rA` o `-s` | Come sopra | §9 |
+| R-L7a | Lo stesso libro con un altro nome di file (`CORPUS_FILE`) raddoppia i punti: `source` entra nell'ID e la rimozione dei punti superati guarda solo la sorgente corrente | Minore della revisione finale dell'esercizio 1 della lezione 7 (2026-11-19), rimandato nella specifica della modifica A; rimedio attuale: `python -m rag.ingest --recreate` | registro dell'esercizio 1 |

@@ -84,14 +84,15 @@ nel browser).
 
 La prova reale della ricerca nelle ricette (LM Studio con il modello di embedding, Qdrant di
 Compose, libro in `data/`; circa 30 s) indicizza le ricette 85–95 in una collezione di prova,
-due volte, cerca con e senza filtro per capitolo e prova `--recreate`; la collezione è cancellata
-alla fine:
+due volte, cerca con e senza filtro per capitolo, prova `--recreate` e, su punti a cui ha tolto
+`has_doses` e il suo indice, `rag.update_payload` (vettori invariati, indice ricreato) seguito dalla
+ricerca con `--doses`; la collezione è cancellata alla fine:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_rag_real.py -m real -v
 ```
 
-Esito al 2026-11-19 con `text-embedding-bge-m3`: `2 passed`.
+Esito al 2026-11-20 con `text-embedding-bge-m3`: `3 passed` in circa 30 s.
 
 La pagina vera nel browser installato (Edge; Chrome con `$env:BROWSER_CHANNEL = "chrome"`), pilotato
 da Playwright senza finestra, con il back-end vero su SQLite in memoria, un agente finto (risposta con
@@ -824,9 +825,10 @@ model_unavailable`. Per eseguire solo queste:
 Il pacchetto `rag/`, indipendente dall'assistente (non importa da `assistant`, `backend`,
 `frontend` e nessuno lo importa), indicizza le 790 ricette della «Scienza in cucina e l'arte di
 mangiar bene» di Pellegrino Artusi in **Qdrant** e cerca i passaggi più vicini a una domanda (solo
-retrieval: nessuna risposta generata). Tre comandi, lanciati dal computer:
-`python -m rag.ingest`, `python -m rag.search`, `python -m rag.evaluate`. Risultati, tabella di
-valutazione e query commentate: [`docs/retrieval.md`](docs/retrieval.md).
+retrieval: nessuna risposta generata). Quattro comandi, lanciati dal computer:
+`python -m rag.ingest`, `python -m rag.update_payload`, `python -m rag.search`,
+`python -m rag.evaluate`. Risultati, tabelle di valutazione e query commentate:
+[`docs/retrieval.md`](docs/retrieval.md).
 
 **Il libro** va messo in `data/Ricettario.txt` (cartella esclusa da Git): è il testo UTF-8 di
 Project Gutenberg, `https://www.gutenberg.org/ebooks/59047.txt.utf-8`. Il file usato per i
@@ -875,9 +877,36 @@ e, la seconda volta, `punti prima: 1143 · punti dopo: 1143 · rimossi: 0`. Per 
 (o dimensione dei vettori) si ricrea la collezione: `python -m rag.ingest --recreate`; senza,
 ingestion e ricerca con un modello diverso si fermano con un messaggio.
 
+**Chunk con le dosi** (modifica A). Ogni punto ha il campo booleano `has_doses`, con un indice:
+vero se il chunk contiene almeno un paragrafo di due o più righe, che non comincia con
+`[Illustrazione`, con almeno una riga che contiene una quantità (`grammi`, `gr.`, `decilitri`,
+`litro`, `chilogrammi`, `N.` e un numero, `quanto basta`, `cucchiaio`, `bicchiere`, `etto` e le
+loro forme; regola in `rag/doses.py`). Funziona perché la pulizia del libro riunisce la prosa in
+righe singole: restano su più righe gli elenchi delle dosi. Sul libro: 398 chunk su 1143. Gli
+elenchi senza unità (per esempio la ricetta 99) e le ricette scritte in prosa restano con
+`has_doses` falso. L'ingestion scrive anche `chunk_strategy`, `chunk_size` e `chunk_overlap`.
+
+Una collezione costruita prima della modifica A riceve il campo **senza ricalcolare gli
+embedding**: il comando legge il testo salvato in ogni punto, calcola `has_doses` e scrive solo
+quel campo (non contatta LM Studio e non legge il libro; crea l'indice se manca). Vuole le stesse
+variabili degli altri comandi:
+
+```powershell
+.\.venv\Scripts\python.exe -m rag.update_payload
+```
+
+```
+Punti: 1143 · aggiornati: 1143 · con dosi: 398 · senza campo: 0
+```
+
+Rieseguito dà la stessa riga; se un'esecuzione si interrompe, la successiva completa i punti
+mancanti. Se alla fine qualche punto resta senza campo il comando esce con codice 1.
+
 **Ricerca**: k da 1 a 20 (predefinito 5), filtro facoltativo per capitolo (uno dei 23 del libro,
-senza distinguere maiuscole e minuscole). Ogni risultato mostra score, ricetta, titolo, capitolo,
-`chunk_index` e il testo del chunk:
+senza distinguere maiuscole e minuscole) e, con `--doses`, solo tra i chunk con `has_doses` vero
+(combinabile con `--chapter`; i due filtri li applica Qdrant durante la ricerca). Ogni risultato
+mostra score, ricetta, titolo, capitolo, `chunk_index`, `· dosi` se il chunk ha l'elenco, e il
+testo del chunk:
 
 ```powershell
 .\.venv\Scripts\python.exe -m rag.search "Che vino si usa per il pollo alla cacciatora?" --chapter Fritti --k 5
@@ -890,26 +919,52 @@ senza distinguere maiuscole e minuscole). Ogni risultato mostra score, ricetta, 
 5. 0,450 · ricetta 208 «Pollo alla cacciatora» · Fritti · chunk 0
 ```
 
+```powershell
+.\.venv\Scripts\python.exe -m rag.search "Quanta farina serve per 400 grammi di patate negli gnocchi?" --doses --chapter "Minestre asciutte e di magro" --k 3
+```
+
+```
+1. 0,671 · ricetta 89 «Gnocchi di patate» · Minestre asciutte e di magro · chunk 0 · dosi
+  …
+2. 0,533 · ricetta 106 «Spaghetti con la balsamella» · Minestre asciutte e di magro · chunk 0 · dosi
+  …
+3. 0,514 · ricetta 103 «Spaghetti da quaresima» · Minestre asciutte e di magro · chunk 0 · dosi
+  …
+```
+
+`--doses` va usato per le domande sulle dosi: le ricette scritte tutte in prosa (più della metà del
+libro) non hanno chunk con dosi e il filtro le esclude (`docs/retrieval.md`, «Dopo la modifica A»).
+
 **Valutazione**: le domande con fonte attesa in `rag/data/questions.json` (un altro file con
 `--questions`); per ognuna la posizione e lo score della ricetta attesa tra i primi k, in una
-tabella Markdown preceduta da modello, collezione, punti e parametri. A parità di indice e domande
-la tabella è identica a ogni esecuzione. Il modello e i punti vengono dalla collezione; strategia,
-dimensione e overlap invece vengono dalle variabili della sessione che lancia la valutazione:
-vanno impostate come per l'ingestion che ha costruito l'indice, altrimenti l'intestazione descrive
-un altro indice:
+tabella Markdown preceduta da modello, collezione, punti, parametri del chunking, k e `filtro dosi`.
+A parità di indice, domande e opzioni la tabella è identica a ogni esecuzione. Modello, punti,
+strategia, dimensione e overlap vengono dalla collezione; per un indice costruito prima della
+modifica A, i cui punti non hanno i parametri del chunking, questi vengono dalla configurazione
+della sessione e l'intestazione lo dice («paragraph (dalla configurazione)»). Con `--doses` ogni
+domanda cerca solo tra i chunk con le dosi:
 
 ```powershell
 .\.venv\Scripts\python.exe -m rag.evaluate
+.\.venv\Scripts\python.exe -m rag.evaluate --doses
 ```
 
 ```
+- **strategia:** paragraph (dalla configurazione)
+…
+- **filtro dosi:** no
+…
 | Quanta farina serve per 400 grammi di patate negli gnocchi? | 89 | 1 | 0,671 | 0,671 |
 …
 Fonte attesa trovata in 6 casi su 8.
 ```
 
+Con `--doses`, sullo stesso indice: `Fonte attesa trovata in 3 casi su 8.`
+
 **Dashboard** di Qdrant su `http://127.0.0.1:6333/dashboard`: collezione `recipes`, punti con il
-payload (`source`, `recipe_number`, `title`, `chapter`, `chunk_index`, `text`, `embedding_model`).
+payload (`source`, `recipe_number`, `title`, `chapter`, `chunk_index`, `text`, `embedding_model`,
+`has_doses` e, per i punti scritti dall'ingestion dopo la modifica A, `chunk_strategy`,
+`chunk_size`, `chunk_overlap`).
 La collezione sta nel volume `qdrant-data`: dopo `docker compose restart qdrant` conta gli stessi
 punti.
 
@@ -1270,6 +1325,12 @@ docker compose up -d qdrant»: controllare `docker compose ps` (servizio `qdrant
 **Collezione vuota o assente.** «La collezione 'nessuna' non esiste o è vuota: eseguire prima python
 -m rag.ingest». Dopo un riavvio la collezione resta grazie al volume `qdrant-data` di
 `compose.yaml`: se sparisce, il volume non è montato.
+
+**Punti senza has_doses.** «Alcuni punti non hanno has_doses: eseguire python -m
+rag.update_payload» (ricerca e valutazione con `--doses`, verificato il 2026-11-20 su una
+collezione di prova): la collezione è stata costruita prima della modifica A, o un aggiornamento si
+è interrotto. Eseguire `python -m rag.update_payload` e controllare `senza campo: 0`. Senza
+`--doses` la ricerca funziona comunque.
 
 **Risultati duplicati.** Gli ID dei punti sono stabili (ricetta e chunk): rieseguire l'ingestion non
 duplica. Il controllo è la riga di riepilogo, con «punti dopo» uguale al numero di chunk.
