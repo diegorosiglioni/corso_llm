@@ -106,9 +106,19 @@
   l'indirizzo e lo SHA-256 del file usato, senza comando).
 - Revisione finale dell'intero branch e decisioni (`Ruling:`) nel registro
   `.superpowers/sdd/2026-11-17-ingestion-ricette/progress.md` e nel resoconto all'utente.
-- **Prossimo:** modifica A (`has_doses`), poi B (titolo nel testo indicizzato), ciascuna con
-  specifica e piano; il criterio 7 (tre domande dell'utente) è soddisfatto solo in parte. Push solo
-  su richiesta. I punti di `REVIEW.md` restano in sospeso.
+- **Modifica A: specifica approvata** il 2026-11-20 (commit `f647de9`,
+  `docs/superpowers/specs/2026-11-20-modifica-a-dosi-design.md`) e **piano approvato**
+  (`docs/superpowers/plans/2026-11-20-modifica-a-dosi.md`, 8 task), esecuzione nativa scelta
+  dall'utente, da fare in una nuova sessione. Decisioni prese nel brainstorming: regola
+  «paragrafo su più righe con almeno una quantità» (400 chunk su 1143, misurati sul libro);
+  `has_doses` sui punti esistenti con `python -m rag.update_payload` dal testo salvato, senza
+  ricalcolare gli embedding (requisito della traccia, ricordato all'utente che avrebbe accettato il
+  ricalcolo); strategia, dimensione e overlap nel payload (chiude il problema importante della
+  revisione dell'esercizio 1); libro rinominato in `TODO.md`. Le due domande che mancano
+  all'utente le aggiungerà più avanti: la valutazione dopo A usa le 9 di oggi.
+- **Prossimo:** eseguire il piano della modifica A dal Task 1 (skill executing-plans), poi la
+  modifica B con specifica e piano. Push solo su richiesta. I punti di `REVIEW.md` restano in
+  sospeso.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
