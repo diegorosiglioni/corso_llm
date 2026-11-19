@@ -9,13 +9,15 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from qdrant_client import models
 
 from rag.config import load_config
 from rag.corpus import load_corpus
 from rag.embedder import check_embedding_model, create_embedder
 from rag.ingest import run_ingest
 from rag.search import search
-from rag.store import connect, count_points, drop_collection
+from rag.store import connect, count_missing, count_points, drop_collection, point_id
+from rag.update_payload import run_update
 
 pytestmark = pytest.mark.real
 
@@ -65,3 +67,28 @@ def test_recreate_on_the_server_starts_empty(setup):
     run_ingest(config, recipes[:3], client, embedder)
     report = run_ingest(config, recipes[:3], client, embedder, recreate=True)
     assert report.points_before == 0 and report.points_after == report.chunks
+
+
+def test_update_payload_then_search_with_doses(setup):
+    """The collection as exercise 1 left it (no has_doses, no index on it), then rag.update_payload:
+    every point gets the field, vectors unchanged, the index is created on the server."""
+    config, client, recipes = setup
+    embedder = create_embedder(config)
+    run_ingest(config, recipes, client, embedder)
+    client.delete_payload(config.collection, keys=["has_doses"], points=models.Filter(), wait=True)
+    client.delete_payload_index(config.collection, "has_doses", wait=True)
+    assert count_missing(client, config.collection, "has_doses") == count_points(client, config.collection)
+    assert "has_doses" not in client.get_collection(config.collection).payload_schema
+
+    probe = point_id(Path(config.corpus_file).name, 89, 0)
+    before = client.retrieve(config.collection, [probe], with_vectors=True)[0].vector
+    report = run_update(client, config.collection)
+    after = client.retrieve(config.collection, [probe], with_vectors=True)[0].vector
+    assert report.missing == 0 and report.updated == report.points == count_points(client, config.collection)
+    assert after == before
+    assert "has_doses" in client.get_collection(config.collection).payload_schema
+
+    results = search(client, embedder, config.collection, config.embedding_model,
+                     "Quanta farina per gli gnocchi di patate?", k=5, doses=True)
+    assert results and all(r.has_doses for r in results)
+    assert 89 in [r.recipe_number for r in results]

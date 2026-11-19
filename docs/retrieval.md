@@ -122,7 +122,136 @@ passaggi in mano.
 
 ## Dopo la modifica A
 
-Da fare (`has_doses` nel payload e filtro sulle ricette con le dosi).
+Eseguita il 2026-11-20 con lo stesso modello e la stessa collezione dell'esercizio 1 (1143 punti),
+senza ricalcolare gli embedding.
+
+### Regola e chunk con le dosi
+
+`has_doses` è vero se il chunk contiene almeno un paragrafo di due o più righe, che non comincia con
+`[Illustrazione`, con almeno una riga che contiene una quantità (`grammi`, `gr.`, `decilitri`,
+`litro`/`litri`, `chilogrammi`, `N.` seguito da un numero, `quanto basta`, `cucchiaio` e simili,
+`bicchiere`/`bicchieri`, `etto`/`etti`; `rag/doses.py`). Funziona perché la pulizia del corpus
+riunisce la prosa in paragrafi di una sola riga: restano su più righe solo gli elenchi delle dosi,
+alcuni versi e le didascalie.
+
+Sul libro (strategia `paragraph`, 1200/200): **398 chunk su 1143** con `has_doses` vero, in 345
+ricette su 790. Nel brainstorming, con una prima versione dell'espressione regolare, erano 400: la
+regola definitiva differisce di due chunk. Restano fuori, per scelta, gli elenchi senza unità di
+misura (per esempio la ricetta 99) e le ricette scritte tutte in prosa, che sono molte: tra le fonti
+attese della valutazione, 208, 455, 456, 207, 269, 119, 120 e 732 non hanno nessun paragrafo su più
+righe, quindi nessun chunk con dosi.
+
+### Aggiornamento dei punti esistenti
+
+```
+python -m rag.update_payload
+```
+
+```
+Punti: 1143 · aggiornati: 1143 · con dosi: 398 · senza campo: 0
+Punti: 1143 · aggiornati: 1143 · con dosi: 398 · senza campo: 0
+```
+
+Due esecuzioni, stessa riga. Il vettore della ricetta 89, chunk 0 (ID
+`994780fa-2348-5cff-9e9f-34d1df17568d`, 1024 componenti) letto con l'API di Qdrant prima e dopo ha
+lo stesso SHA-256 (`34be37c0…`): il comando scrive solo il campo `has_doses` (`set_payload` per ID) e
+non chiama LM Studio. Punti dopo: ancora 1143. L'indice `has_doses` (booleano), che la collezione
+dell'esercizio 1 non aveva, compare in `payload_schema` dopo la prima esecuzione.
+
+### Ricerca con il filtro
+
+```
+python -m rag.search "Quanta farina serve per 400 grammi di patate negli gnocchi?" --doses --chapter "Minestre asciutte e di magro" --k 3
+```
+
+| Pos. | Score | Ricetta | Capitolo | Chunk |
+|---|---|---|---|---|
+| 1 | 0,671 | 89 «Gnocchi di patate» · dosi | Minestre asciutte e di magro | 0 |
+| 2 | 0,533 | 106 «Spaghetti con la balsamella» · dosi | Minestre asciutte e di magro | 0 |
+| 3 | 0,514 | 103 «Spaghetti da quaresima» · dosi | Minestre asciutte e di magro | 0 |
+
+Tre risultati, tutti con dosi e tutti del capitolo chiesto. Con `--chapter Fritti` e la domanda
+«Quanto olio serve per friggere il pollo?» lo stesso: 177, 202 e 172, tutti `· dosi` e di Fritti.
+
+### Valutazione, senza e con filtro
+
+`python -m rag.evaluate` e `python -m rag.evaluate --doses`, ciascuna due volte: tabelle identiche
+a coppie. L'intestazione dice «(dalla configurazione)» per il chunking perché i punti dell'esercizio
+1 non hanno i campi `chunk_strategy`, `chunk_size` e `chunk_overlap` (li scrive solo l'ingestion
+dopo questa modifica).
+
+Senza filtro (uguale alla valutazione di partenza: i vettori non sono cambiati):
+
+```
+- **modello:** text-embedding-bge-m3
+- **collezione:** recipes
+- **punti:** 1143
+- **strategia:** paragraph (dalla configurazione)
+- **dimensione:** 1200 (dalla configurazione)
+- **overlap:** 200 (dalla configurazione)
+- **k:** 5
+- **filtro dosi:** no
+```
+
+| Domanda | Fonte attesa | Posizione | Score fonte | Score migliore |
+|---|---|---|---|---|
+| Quanta farina serve per 400 grammi di patate negli gnocchi? | 89 | 1 | 0,671 | 0,671 |
+| Quanti cappelletti bastano a un mangiatore moderato? | 7 | 1 | 0,622 | 0,622 |
+| Che vino si usa per il pollo alla cacciatora? | 208 | assente | — | 0,515 |
+| Perché gli gnocchi possono sciogliersi nell'acqua? | 89 | 1 | 0,639 | 0,639 |
+| Come si chiama il cacciucco sulle coste dell'Adriatico? | 455, 456 | 1 | 0,603 | 0,603 |
+| Qual è la ricetta del tiramisù? | — | — | — | 0,531 |
+| Come si cucinano i petti di pollo e quali ricette si possono fare con essi? | 207, 269 | 1 | 0,728 | 0,728 |
+| Che salsa al prezzemolo posso servire con la carne bollita? | 119, 120 | assente | — | 0,627 |
+| Come si conservano i pomodori per averli tutto l'anno? | 732 | 2 | 0,639 | 0,665 |
+
+Fonte attesa trovata in 6 casi su 8.
+
+Con `--doses` (stessa intestazione, `filtro dosi: sì`):
+
+| Domanda | Fonte attesa | Posizione | Score fonte | Score migliore |
+|---|---|---|---|---|
+| Quanta farina serve per 400 grammi di patate negli gnocchi? | 89 | 1 | 0,671 | 0,671 |
+| Quanti cappelletti bastano a un mangiatore moderato? | 7 | 2 | 0,528 | 0,582 |
+| Che vino si usa per il pollo alla cacciatora? | 208 | assente | — | 0,490 |
+| Perché gli gnocchi possono sciogliersi nell'acqua? | 89 | 1 | 0,620 | 0,620 |
+| Come si chiama il cacciucco sulle coste dell'Adriatico? | 455, 456 | assente | — | 0,384 |
+| Qual è la ricetta del tiramisù? | — | — | — | 0,531 |
+| Come si cucinano i petti di pollo e quali ricette si possono fare con essi? | 207, 269 | assente | — | 0,592 |
+| Che salsa al prezzemolo posso servire con la carne bollita? | 119, 120 | assente | — | 0,565 |
+| Come si conservano i pomodori per averli tutto l'anno? | 732 | assente | — | 0,665 |
+
+Fonte attesa trovata in 3 casi su 8.
+
+### Che cosa cambia col filtro, domanda per domanda
+
+- **Farina per gli gnocchi (89):** nessun cambiamento. È la domanda per cui il filtro esiste: il
+  chunk migliore era già quello con l'elenco (chunk 0, «Patate grosse e gialle, grammi 400. / Farina
+  di grano, grammi 150.»), e il filtro toglie solo concorrenti senza dosi.
+- **Cappelletti per un mangiatore moderato (7):** da 1 a 2. Senza filtro vinceva il chunk 2, dove
+  l'Artusi parla di quanti cappelletti mangiano i romagnoli: la risposta è lì, nella prosa. Il filtro
+  lo esclude e resta il chunk 0 con l'elenco del ripieno (0,528), superato dai Tortelli (55, 0,582).
+  La domanda chiede una quantità, ma non una dose della ricetta.
+- **Vino del pollo alla cacciatora (208):** assente prima e dopo. La 208 è tutta in prosa: col filtro
+  non può comparire.
+- **Perché gli gnocchi si sciolgono (89):** posizione 1 in entrambi i casi, ma con un altro chunk:
+  senza filtro il chunk 1 (0,639), dove sta la spiegazione; col filtro il chunk 0 con le dosi
+  (0,620). La valutazione conta la ricetta, quindi la cella non cambia, ma il passaggio utile per
+  rispondere è stato escluso.
+- **Nome del cacciucco sull'Adriatico (455, 456):** da 1 ad assente. È la domanda che non chiede
+  quantità: le due ricette del cacciucco non hanno un elenco di dosi e il filtro le toglie; il
+  migliore rimasto ha 0,384, il valore più basso di tutte le tabelle.
+- **Tiramisù (nessuna fonte):** stesso score migliore (0,531): il primo risultato, la 351, ha un
+  elenco di dosi. Il filtro non aiuta a riconoscere l'assenza.
+- **Petti di pollo (207, 269), salsa verde (119, 120), conserva di pomodoro (732):** da trovate
+  (o già assente, per la salsa) ad assenti: sono ricette in prosa, senza nessun paragrafo su più
+  righe.
+
+In sintesi: il filtro non migliora nessuna di queste domande e ne peggiora quattro (cappelletti,
+cacciucco, petti di pollo, conserva), più una a parità di cella (gnocchi che si sciolgono). Serve solo quando la domanda
+chiede le dosi di una ricetta che ha un elenco; applicato a tutte le domande, come fa
+`rag.evaluate --doses`, toglie le ricette scritte in prosa, che nel libro sono più della metà (345
+ricette su 790 hanno almeno un chunk con dosi). Va scelto domanda per domanda, non sempre.
 
 ## Dopo la modifica B
 
