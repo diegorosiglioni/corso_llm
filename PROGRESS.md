@@ -144,6 +144,12 @@
   Revisione finale dell'intero branch (revisore separato): nessun problema critico o importante;
   cinque minori rimandati, elencati nel registro.
   Non eseguito: prove `real` delle lezioni precedenti, `browser`, Docker completo.
+- **Push fatto** su richiesta dell'utente il 2026-11-20. L'avanzamento rapido di `main` è stato
+  rifiutato: su GitHub `main` aveva la PR #1 «Add MIT license» (`70d27e2`, merge `3cd76c1`, solo il
+  file `LICENSE`), assente in `dev`. Su scelta dell'utente `main` è stato unito in `dev` con un
+  commit di merge (`3cf0717`), poi push di `dev` e avanzamento rapido di `main`: `dev`, `main`,
+  `origin/dev` e `origin/main` a `3cf0717`. Secondo push, sempre su richiesta, con questo
+  aggiornamento del diario.
 - **Prossimo:** modifica B con specifica e piano. Push solo su richiesta. I punti di `REVIEW.md`
   restano in sospeso.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
