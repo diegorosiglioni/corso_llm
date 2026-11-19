@@ -1,4 +1,6 @@
+import hashlib
 import json
+import math
 import os
 import re
 import uuid
@@ -15,6 +17,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from pydantic import Field
+from qdrant_client import QdrantClient
 from sqlalchemy import Engine, event
 from sqlalchemy.exc import OperationalError
 
@@ -312,3 +315,40 @@ def engine_on_schema(url: str, schema: str) -> Engine:
         dbapi_connection.autocommit = autocommit
 
     return engine
+
+
+# Recipe search (lesson 7): deterministic embedder and in-memory Qdrant.
+
+
+class FakeEmbedder:
+    """Bag of words hashed on DIMENSION coordinates, normalised: texts sharing words are close.
+    Records the texts of every call in `calls`."""
+
+    DIMENSION = 64
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def embed(self, texts) -> list[list[float]]:
+        self.calls.append(list(texts))
+        return [self.vector(text) for text in texts]
+
+    @classmethod
+    def vector(cls, text: str) -> list[float]:
+        vector = [0.0] * cls.DIMENSION
+        for word in re.findall(r"\w+", text.lower()):
+            vector[int(hashlib.md5(word.encode("utf-8")).hexdigest(), 16) % cls.DIMENSION] += 1.0
+        norm = math.sqrt(sum(x * x for x in vector))
+        if norm == 0:
+            return [1.0] + [0.0] * (cls.DIMENSION - 1)
+        return [x / norm for x in vector]
+
+
+@pytest.fixture
+def qdrant() -> Iterator[QdrantClient]:
+    """Qdrant in memory: the real client code, no server."""
+    client = QdrantClient(":memory:")
+    try:
+        yield client
+    finally:
+        client.close()
