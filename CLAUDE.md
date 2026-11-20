@@ -46,7 +46,7 @@ Stato corrente e prossimo passo: `PROGRESS.md` (diario di lavoro, ex `docs/super
     (`--recreate` per cambiare modello), `.\.venv\Scripts\python.exe -m rag.update_payload`
     (`has_doses` sui punti esistenti, senza ricalcolare gli embedding),
     `.\.venv\Scripts\python.exe -m rag.search "domanda" --chapter Fritti --k 5 --doses`,
-    `.\.venv\Scripts\python.exe -m rag.evaluate` (anche `--doses`); prova reale (circa 30 s):
+    `.\.venv\Scripts\python.exe -m rag.evaluate` (anche `--doses`); prova reale (circa 50 s):
     `.\.venv\Scripts\python.exe -m pytest tests/test_rag_real.py -m real -v`
   - Docker: `docker compose up -d --build` avvia `frontend`, `backend`, `agent`, `postgres` e
     `qdrant` (solo `127.0.0.1:6333`, dashboard su `/dashboard`)

@@ -170,10 +170,16 @@
     `rag.update_payload` → ancora `con dosi: 398`;
   - `rag.evaluate` **7 su 8** (prima 6: la 208 da assente a 1ª), `rag.evaluate --doses` 3 su 8
     (come prima), tabelle identiche a coppie, confronto in `docs/retrieval.md` («Dopo la modifica
-    B»); query della 208 con `--chapter Fritti`: da 5ª (0,450) a 1ª (0,593); tiramisù da 0,500 a
-    0,520; salsa verde (119, 120) ancora assente (titolo senza le parole della domanda).
-  Non eseguito: suite intera (`pytest`, da chiedere all'utente; serve per i conteggi del README e
-  per CA-123), prove `real` delle lezioni precedenti, `browser`, Docker completo.
+    B»); query della 208 con `--chapter Fritti`: da 5ª (0,450) a 1ª (0,593); tiramisù, score
+    migliore da 0,531 a 0,520 (primi cinque tra 0,500 e 0,520); salsa verde (119, 120) ancora assente (titolo senza le parole della domanda).
+  - suite intera, su richiesta dell'utente dopo la revisione finale: `pytest` → 1263 passed, 97
+    deselected (215 s), senza le variabili di LM Studio; conteggi aggiornati nel README, CA-123
+    soddisfatto.
+  Revisione finale dell'intero lavoro (revisore separato): nessun problema critico o importante nel
+  codice; tre frasi della documentazione non sostenute dalle tabelle (`docs/retrieval.md` «Con
+  --doses», tiramisù qui sopra, commento di `.env.example`) corrette; quattro minori rimandati,
+  elencati nel registro.
+  Non eseguito: prove `real` delle lezioni precedenti, `browser`, Docker completo.
 - **Prossimo:** esercizio 2 della lezione 7 completo (A e B). Restano le due domande dell'utente per
   `rag/data/questions.json` (criterio 7 dell'esercizio 1) e i punti di `REVIEW.md`. Push solo su
   richiesta.

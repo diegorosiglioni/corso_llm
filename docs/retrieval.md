@@ -386,9 +386,12 @@ Senza filtro, prima (A) → dopo (B):
   di tutte le salse. Con k = 20 la 119 è dodicesima (0,526) e la 120 diciottesima (0,515); con
   `--chapter Salse` quinta e sesta. Vincono la 123 «Salsa alla maître d'hôtel» (0,624) e la 128
   «Salsa piccante II» (0,602).
-- **Con `--doses`:** nessun cambio di posizione. Gli score migliori delle domande la cui fonte è in
-  prosa scendono (petti di pollo 0,592 → 0,565, salsa 0,565 → 0,526), quelli della 89 salgono
-  (0,671 → 0,685).
+- **Con `--doses`:** nessun cambio di posizione. Salgono gli score dei chunk con le dosi il cui
+  titolo ha parole della domanda: farina per gli gnocchi (89, 0,671 → 0,685) e il chunk 0 dei
+  cappelletti (7, 0,528 → 0,553; resta secondo dietro i Tortelli, 0,582 → 0,568). Scendono gli
+  altri: gnocchi che si sciolgono (89, chunk 0, 0,620 → 0,597), e lo score migliore di 208 (0,490 →
+  0,470), cacciucco (0,384 → 0,371), tiramisù (0,531 → 0,508), petti di pollo (0,592 → 0,565) e
+  salsa (0,565 → 0,526). La conserva di pomodoro resta quasi uguale (0,665 → 0,667).
 
 ### Le due query commentate, dopo B
 

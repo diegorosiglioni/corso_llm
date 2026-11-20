@@ -77,22 +77,23 @@ da `pytest`; senza Node il test si salta col motivo). I Dockerfile si controllan
 costruire immagini, e `compose.yaml` con `docker compose config` su una copia con un `.env` di
 credenziali finte, senza il demone (`tests/test_docker.py`; senza la CLI di Docker questi test si
 saltano col motivo). La ricerca nelle ricette (`rag/`) si prova con Qdrant in memoria
-(`qdrant-client`) e un embedder finto, senza LM Studio né Qdrant. Esito al 2026-11-20: `1251
-passed, 96 deselected` in circa 4 minuti (le 96 deselezionate sono le 71 prove reali, 28 con LM
-Studio, 40 test dell'archivio ripetuti su PostgreSQL e 3 della ricerca nelle ricette, e i 25 test
+(`qdrant-client`) e un embedder finto, senza LM Studio né Qdrant. Esito al 2026-11-20: `1263
+passed, 97 deselected` in circa 4 minuti (le 97 deselezionate sono le 72 prove reali, 28 con LM
+Studio, 40 test dell'archivio ripetuti su PostgreSQL e 4 della ricerca nelle ricette, e i 25 test
 nel browser).
 
 La prova reale della ricerca nelle ricette (LM Studio con il modello di embedding, Qdrant di
-Compose, libro in `data/`; circa 30 s) indicizza le ricette 85–95 in una collezione di prova,
+Compose, libro in `data/`; circa 50 s) indicizza le ricette 85–95 in una collezione di prova,
 due volte, cerca con e senza filtro per capitolo, prova `--recreate` e, su punti a cui ha tolto
 `has_doses` e il suo indice, `rag.update_payload` (vettori invariati, indice ricreato) seguito dalla
-ricerca con `--doses`; la collezione è cancellata alla fine:
+ricerca con `--doses`, e il passaggio da `CHUNK_HEADER=none` a `title_chapter` (stessi punti, vettore
+cambiato, testo invariato); la collezione è cancellata alla fine:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_rag_real.py -m real -v
 ```
 
-Esito al 2026-11-20 con `text-embedding-bge-m3`: `3 passed` in circa 30 s.
+Esito al 2026-11-20 con `text-embedding-bge-m3`: `4 passed` in circa 50 s.
 
 La pagina vera nel browser installato (Edge; Chrome con `$env:BROWSER_CHANNEL = "chrome"`), pilotato
 da Playwright senza finestra, con il back-end vero su SQLite in memoria, un agente finto (risposta con

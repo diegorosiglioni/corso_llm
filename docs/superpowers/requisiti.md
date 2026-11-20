@@ -802,7 +802,7 @@ Riferimento: traccia della lezione 7 (esercizio 2, «B · Chunking»). Specifica
 `plans/2026-11-20-modifica-b-titolo.md`. Parte dalle §19 e §20, che restano valide dove questa
 sezione non le cambia. Esiti delle verifiche in `PROGRESS.md` e in `docs/retrieval.md` («Dopo la
 modifica B»): CA-119…CA-122 verificati il 2026-11-20 con `text-embedding-bge-m3` e Qdrant v1.20.0 in
-Compose; CA-123 con i test dei moduli `rag` e Docker (la suite intera non ancora eseguita).
+Compose; CA-123 con `pytest` (1263 passed, 97 deselected).
 
 - **RF-100** *Testo indicizzato* — Con `CHUNK_HEADER=title_chapter` (predefinito) l'embedder riceve
   per ogni chunk `«titolo» (capitolo «capitolo»)`, una riga vuota e il testo del chunk; con `none` il
