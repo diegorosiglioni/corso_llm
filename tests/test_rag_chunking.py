@@ -2,7 +2,7 @@
 
 import pytest
 
-from rag.chunking import STRATEGIES, Chunk, split_recipe
+from rag.chunking import STRATEGIES, Chunk, indexed_text, split_recipe
 
 
 def words(prefix: str, start: int, count: int) -> str:
@@ -81,3 +81,17 @@ def test_word_longer_than_the_chunk_is_the_only_cut():
 def test_unknown_strategy():
     with pytest.raises(ValueError, match="sentence"):
         split_recipe(SHORT, "sentence", 1200, 200)
+
+
+def test_indexed_text_with_title_and_chapter():
+    assert indexed_text("Pollo alla cacciatora", "Fritti", "Prendete un pollo.", "title_chapter") == (
+        "Pollo alla cacciatora (capitolo Fritti)\n\nPrendete un pollo.")
+
+
+def test_indexed_text_without_header():
+    assert indexed_text("Pollo alla cacciatora", "Fritti", "Prendete un pollo.", "none") == "Prendete un pollo."
+
+
+def test_indexed_text_unknown_header():
+    with pytest.raises(ValueError, match="altro"):
+        indexed_text("Pollo alla cacciatora", "Fritti", "Prendete un pollo.", "altro")

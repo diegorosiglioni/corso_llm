@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 CHUNK_STRATEGIES = ("paragraph", "window")
+CHUNK_HEADERS = ("title_chapter", "none")  # what precedes each chunk in the embedded text
 MIN_CHUNK_SIZE = 100
 # Libraries whose INFO logs (HTTP requests) are hidden unless LOG_LEVEL=DEBUG.
 QUIET_LIBRARIES = ("httpx", "httpx2", "openai", "qdrant_client")  # openai 3.x uses httpx2
@@ -22,6 +23,7 @@ class RagConfig:
     chunk_strategy: str = "paragraph"  # CHUNK_STRATEGY (paragraph or window)
     chunk_size: int = 1200  # CHUNK_SIZE (characters, >= 100)
     chunk_overlap: int = 200  # CHUNK_OVERLAP (characters, 0 .. CHUNK_SIZE // 2)
+    chunk_header: str = "title_chapter"  # CHUNK_HEADER (title_chapter or none)
     batch_size: int = 32  # EMBEDDING_BATCH_SIZE (>= 1)
     log_level: str = "INFO"  # LOG_LEVEL
 
@@ -78,6 +80,11 @@ def load_config(env: Mapping[str, str]) -> RagConfig:
         )
     size = read_int("CHUNK_SIZE", defaults.chunk_size, MIN_CHUNK_SIZE)
     overlap = read_int("CHUNK_OVERLAP", defaults.chunk_overlap, 0, size // 2)
+    header = read("CHUNK_HEADER").lower() or defaults.chunk_header
+    if header not in CHUNK_HEADERS:
+        problems.append(
+            f"CHUNK_HEADER deve essere uno tra {', '.join(CHUNK_HEADERS)}, ricevuto '{header}'."
+        )
     batch_size = read_int("EMBEDDING_BATCH_SIZE", defaults.batch_size, 1)
 
     log_level = read("LOG_LEVEL").upper() or defaults.log_level
@@ -91,7 +98,8 @@ def load_config(env: Mapping[str, str]) -> RagConfig:
     return RagConfig(
         base_url=base_url, embedding_model=embedding_model, qdrant_url=qdrant_url,
         collection=collection, corpus_file=corpus_file, chunk_strategy=strategy,
-        chunk_size=size, chunk_overlap=overlap, batch_size=batch_size, log_level=log_level,
+        chunk_size=size, chunk_overlap=overlap, chunk_header=header, batch_size=batch_size,
+        log_level=log_level,
     )
 
 

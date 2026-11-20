@@ -4,11 +4,15 @@
 - window: windows of `size` characters, at steps of about `size - overlap`.
 In both, every chunk after the first starts with the tail of the previous one (at most `overlap`
 characters, inside `size`); in `paragraph` the tail shrinks, down to nothing, when it leaves no
-room for the next paragraph. Cuts fall on spaces: a word is cut only if longer than a chunk."""
+room for the next paragraph. Cuts fall on spaces: a word is cut only if longer than a chunk.
+
+The text given to the embedder may be preceded by title and chapter of the recipe (`indexed_text`);
+the header is added after the split and does not count in `size`."""
 
 from dataclasses import dataclass
 
 STRATEGIES = ("paragraph", "window")
+HEADERS = ("title_chapter", "none")
 PARAGRAPH_BREAK = "\n\n"
 
 
@@ -27,6 +31,16 @@ def split_recipe(text: str, strategy: str, size: int, overlap: int) -> list[Chun
     else:
         raise ValueError(f"Strategia di chunking sconosciuta: '{strategy}' (ammesse: {', '.join(STRATEGIES)}).")
     return [Chunk(index, piece) for index, piece in enumerate(pieces)]
+
+
+def indexed_text(title: str, chapter: str, text: str, header: str) -> str:
+    """The text embedded for a chunk: with `title_chapter`, a line «title (capitolo chapter)», an
+    empty line, then the chunk; with `none`, the chunk as it is."""
+    if header == "title_chapter":
+        return f"{title} (capitolo {chapter}){PARAGRAPH_BREAK}{text}"
+    if header == "none":
+        return text
+    raise ValueError(f"Intestazione dei chunk sconosciuta: '{header}' (ammesse: {', '.join(HEADERS)}).")
 
 
 def _windows(text: str, size: int, overlap: int) -> list[str]:

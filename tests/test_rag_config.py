@@ -17,6 +17,7 @@ def test_defaults():
         "http://127.0.0.1:6333", "recipes", "data/Ricettario.txt")
     assert (config.chunk_strategy, config.chunk_size, config.chunk_overlap, config.batch_size) == (
         "paragraph", 1200, 200, 32)
+    assert config.chunk_header == "title_chapter"
     assert config.log_level == "INFO"
 
 
@@ -43,10 +44,22 @@ def test_required_variables_are_all_listed():
     ("CHUNK_STRATEGY", "sentence"), ("CHUNK_SIZE", "99"), ("CHUNK_SIZE", "mille"),
     ("CHUNK_OVERLAP", "-1"), ("CHUNK_OVERLAP", "601"), ("EMBEDDING_BATCH_SIZE", "0"),
     ("QDRANT_URL", "127.0.0.1:6333"), ("LMSTUDIO_BASE_URL", "localhost:1234"), ("LOG_LEVEL", "TRACE"),
+    ("CHUNK_HEADER", "titolo"),
 ])
 def test_invalid_values(name, value):
     with pytest.raises(ConfigError, match=name):
         load_config({**VALID, name: value})
+
+
+def test_chunk_header_values():
+    assert load_config({**VALID, "CHUNK_HEADER": " None "}).chunk_header == "none"
+    assert load_config({**VALID, "CHUNK_HEADER": "TITLE_CHAPTER"}).chunk_header == "title_chapter"
+
+
+def test_chunk_header_error_lists_the_allowed_values():
+    with pytest.raises(ConfigError) as error:
+        load_config({**VALID, "CHUNK_HEADER": "titolo"})
+    assert "CHUNK_HEADER deve essere uno tra title_chapter, none, ricevuto 'titolo'." in str(error.value)
 
 
 def test_overlap_limit_follows_the_size():
