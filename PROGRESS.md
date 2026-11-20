@@ -180,9 +180,16 @@
   --doses», tiramisù qui sopra, commento di `.env.example`) corrette; quattro minori rimandati,
   elencati nel registro.
   Non eseguito: prove `real` delle lezioni precedenti, `browser`, Docker completo.
-- **Prossimo:** esercizio 2 della lezione 7 completo (A e B). Restano le due domande dell'utente per
-  `rag/data/questions.json` (criterio 7 dell'esercizio 1) e i punti di `REVIEW.md`. Push solo su
-  richiesta.
+- **Push della modifica B fatto** su richiesta dell'utente il 2026-11-20, a fine giornata, insieme a
+  questo aggiornamento del diario: `git push origin dev`, poi avanzamento rapido `git push origin
+  dev:main` (`main` remoto era a `2d40bf2`, antenato di `dev`) e `git fetch origin main:main`;
+  `dev`, `main`, `origin/dev` e `origin/main` allo stesso commit, quello di questa voce.
+- **Prossimo:** la lezione 7 è completa (esercizio 1, modifiche A e B, consegna in
+  `docs/retrieval.md`). Restano, da scegliere con l'utente all'inizio della prossima sessione: le due
+  domande dell'utente per `rag/data/questions.json` (criterio 7 dell'esercizio 1; per il «prima»
+  un'ingestion con `CHUNK_HEADER=none` in un'altra collezione), i punti di `REVIEW.md`, i quattro
+  minori rimandati della modifica B (registro del piano) e la lezione 8 (strumento MCP
+  `search_documents`) quando ci sarà la traccia. Push solo su richiesta.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
