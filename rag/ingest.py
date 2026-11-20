@@ -6,7 +6,11 @@ collection first (to change the embedding model).
 
 Every point records, besides source, recipe, chapter, text and model, whether the chunk holds a dose
 list (`has_doses`, rule in rag/doses.py) and the chunking parameters used (`chunk_strategy`,
-`chunk_size`, `chunk_overlap`), which the evaluation reads back from the index."""
+`chunk_size`, `chunk_overlap`, `chunk_header`), which the evaluation reads back from the index.
+
+The vector is computed from the text preceded by title and chapter of the recipe (CHUNK_HEADER,
+rag.chunking.indexed_text); the payload keeps the original text. Changing CHUNK_HEADER and running
+again rewrites every point with the same IDs."""
 
 import argparse
 import logging
@@ -16,7 +20,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from rag.chunking import split_recipe
+from rag.chunking import indexed_text, split_recipe
 from rag.config import ConfigError, RagConfig, configure_logging, load_config
 from rag.corpus import CorpusError, Recipe, load_corpus
 from rag.doses import has_doses
@@ -68,6 +72,7 @@ def run_ingest(
             "chunk_strategy": config.chunk_strategy,
             "chunk_size": config.chunk_size,
             "chunk_overlap": config.chunk_overlap,
+            "chunk_header": config.chunk_header,
         }
         for recipe in recipes
         for chunk in split_recipe(
@@ -78,7 +83,9 @@ def run_ingest(
     batches = range(0, len(payloads), config.batch_size)
     for number, start in enumerate(batches, start=1):
         batch = payloads[start:start + config.batch_size]
-        vectors = embedder.embed([payload["text"] for payload in batch])
+        vectors = embedder.embed([
+            indexed_text(p["title"], p["chapter"], p["text"], p["chunk_header"]) for p in batch
+        ])
         points = [
             ChunkPoint(point_id(source, p["recipe_number"], p["chunk_index"]), vector, p)
             for p, vector in zip(batch, vectors, strict=True)

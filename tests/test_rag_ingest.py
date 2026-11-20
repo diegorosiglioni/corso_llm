@@ -12,6 +12,7 @@ from rag.config import load_config
 from rag.corpus import Recipe
 from rag.embedder import EmbeddingError
 from rag.ingest import IngestReport, format_report, run_ingest
+from rag.search import search
 from rag.store import StoreError, count_points, query
 
 VALID = {"LMSTUDIO_BASE_URL": "http://127.0.0.1:1234/v1", "EMBEDDING_MODEL": "modello-scelto"}
@@ -76,7 +77,59 @@ def test_payload_of_a_point(qdrant):
         "chapter": "Brodi, gelatina e sughi", "chunk_index": 0,
         "text": "Brodo di carne con sedano e carota.", "embedding_model": "modello-scelto",
         "has_doses": False, "chunk_strategy": "paragraph", "chunk_size": 100, "chunk_overlap": 20,
+        "chunk_header": "title_chapter",
     }
+
+
+def embedded_texts(embedder: FakeEmbedder) -> list[str]:
+    """The texts of the chunks given to the embedder, in order (the probe left out)."""
+    return [text for call in embedder.calls[1:] for text in call]
+
+
+def test_embedder_receives_title_and_chapter(qdrant):
+    embedder = FakeEmbedder()
+    run_ingest(config, RECIPES, qdrant, embedder)
+    texts = embedded_texts(embedder)
+    assert len(texts) == 4
+    assert texts[0] == "Brodo (capitolo Brodi, gelatina e sughi)\n\nBrodo di carne con sedano e carota."
+    assert all(t.startswith("Minestra lunga (capitolo Minestre in brodo)\n\n") for t in texts[1:3])
+    assert texts[3] == "Torta (capitolo Torte e dolci al cucchiaio)\n\nTorta di mandorle con zucchero."
+
+
+def test_without_header_the_embedder_receives_the_text(qdrant):
+    embedder = FakeEmbedder()
+    run_ingest(replace(config, chunk_header="none"), RECIPES, qdrant, embedder)
+    points, _ = qdrant.scroll("recipes", limit=10, with_payload=True)
+    payloads = sorted((p.payload for p in points), key=lambda p: (p["recipe_number"], p["chunk_index"]))
+    assert embedded_texts(embedder) == [p["text"] for p in payloads]
+    assert {p["chunk_header"] for p in payloads} == {"none"}
+
+
+def all_points(client) -> dict:
+    points, _ = client.scroll("recipes", limit=10, with_payload=True, with_vectors=True)
+    return {str(p.id): p for p in points}
+
+
+def test_switching_header_rewrites_the_same_points(qdrant):
+    run_ingest(replace(config, chunk_header="none"), RECIPES, qdrant, FakeEmbedder())
+    before = all_points(qdrant)
+    report = run_ingest(config, RECIPES, qdrant, FakeEmbedder())
+    after = all_points(qdrant)
+    assert report.points_before == report.points_after == report.chunks and report.removed == 0
+    assert after.keys() == before.keys()
+    for point_id_, point in after.items():
+        assert point.vector != before[point_id_].vector
+        assert point.payload["text"] == before[point_id_].payload["text"]
+        assert point.payload["has_doses"] == before[point_id_].payload["has_doses"]
+        assert point.payload["chunk_header"] == "title_chapter"
+
+
+def test_search_returns_the_original_text_and_embeds_the_question_as_is(qdrant):
+    embedder = FakeEmbedder()
+    run_ingest(config, RECIPES, qdrant, embedder)
+    results = search(qdrant, embedder, "recipes", "modello-scelto", "brodo di carne", k=1)
+    assert results[0].text == "Brodo di carne con sedano e carota."
+    assert embedder.calls[-1] == ["brodo di carne"]
 
 
 def test_payload_marks_the_dose_list(qdrant):
