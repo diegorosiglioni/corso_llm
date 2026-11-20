@@ -92,3 +92,24 @@ def test_update_payload_then_search_with_doses(setup):
                      "Quanta farina per gli gnocchi di patate?", k=5, doses=True)
     assert results and all(r.has_doses for r in results)
     assert 89 in [r.recipe_number for r in results]
+
+
+def test_switching_header_on_the_server(setup):
+    """Modification B on the server: the same points, rewritten with title and chapter in the
+    vector; the payload text and the search results keep the original text."""
+    config, client, recipes = setup
+    embedder = create_embedder(config)
+    run_ingest(replace(config, chunk_header="none"), recipes, client, embedder)
+    probe = point_id(Path(config.corpus_file).name, 89, 0)
+    before = client.retrieve(config.collection, [probe], with_payload=True, with_vectors=True)[0]
+    report = run_ingest(replace(config, chunk_header="title_chapter"), recipes, client, embedder)
+    after = client.retrieve(config.collection, [probe], with_payload=True, with_vectors=True)[0]
+    assert report.removed == 0 and report.points_after == report.points_before == report.chunks
+    assert after.vector != before.vector
+    assert after.payload["text"] == before.payload["text"]
+    assert after.payload["chunk_header"] == "title_chapter"
+
+    results = search(client, embedder, config.collection, config.embedding_model,
+                     "Quanta farina per gli gnocchi di patate?", k=5)
+    assert 89 in [r.recipe_number for r in results]
+    assert not any(r.text.startswith("Gnocchi di patate (capitolo") for r in results)

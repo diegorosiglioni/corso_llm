@@ -3,8 +3,10 @@
 Risultati della pipeline di partenza della lezione 7 (esercizio 1: ingestion e ricerca, senza
 generazione). Specifica: `docs/superpowers/specs/2026-11-17-ingestion-ricette-design.md`.
 Prove eseguite il 2026-11-19 dal computer, con LM Studio sull'host e Qdrant in Compose; la modifica
-A (`has_doses`, specifica `docs/superpowers/specs/2026-11-20-modifica-a-dosi-design.md`) il
-2026-11-20, sezione «Dopo la modifica A».
+A (`has_doses`, specifica `docs/superpowers/specs/2026-11-20-modifica-a-dosi-design.md`) e la
+modifica B (titolo e capitolo nel testo indicizzato, specifica
+`docs/superpowers/specs/2026-11-20-modifica-b-titolo-design.md`) il 2026-11-20, sezioni «Dopo la
+modifica A» e «Dopo la modifica B».
 
 ## Modello e parametri
 
@@ -19,8 +21,9 @@ A (`has_doses`, specifica `docs/superpowers/specs/2026-11-20-modifica-a-dosi-des
 | Lotto di embedding | 32 testi |
 | k | 5 |
 
-Il testo di ogni chunk è il solo testo della ricetta: titolo e capitolo sono nel payload, non nel
-vettore (la modifica B li aggiungerà).
+Nell'esercizio 1 e dopo la modifica A il testo di ogni chunk è il solo testo della ricetta: titolo
+e capitolo sono nel payload, non nel vettore. Dalla modifica B entrano nel vettore («Dopo la
+modifica B»).
 
 ## Ingestion completa, due volte
 
@@ -98,7 +101,7 @@ della domanda, sta solo nel titolo, che non entra nel vettore: il modello vede �
 che la 208 condivide con le altre quattro, e la mette ultima. Senza il filtro per capitolo la 208
 esce dai primi cinque (riga «assente» della valutazione); con nomic, nella prova del docente, non
 compariva neppure col filtro. È il motivo della modifica B (titolo nel
-testo indicizzato).
+testo indicizzato): dopo B la 208 è prima, con e senza filtro («Dopo la modifica B»).
 
 ### 2. Una ricetta che il libro non ha: il tiramisù
 
@@ -257,4 +260,179 @@ ricette su 790 hanno almeno un chunk con dosi). Va scelto domanda per domanda, n
 
 ## Dopo la modifica B
 
-Da fare (titolo nel testo indicizzato, senza ricreare la collezione).
+Eseguita il 2026-11-20 con lo stesso modello e la stessa collezione (1143 punti), ricalcolando
+tutti i vettori senza ricreare la collezione. Il «prima» è la valutazione senza filtro di «Dopo la
+modifica A» (stessi vettori della partenza).
+
+### Testo indicizzato
+
+Con `CHUNK_HEADER=title_chapter` (il valore predefinito) all'embedder va, per ogni chunk, una riga
+con titolo e capitolo, una riga vuota, poi il testo del chunk:
+
+```
+Gnocchi di patate (capitolo Minestre asciutte e di magro)
+
+La famiglia de' gnocchi è numerosa. …
+```
+
+L'intestazione si aggiunge dopo il chunking e non conta nei 1200 caratteri: chunk, tagli e ID
+restano quelli di prima. Nel payload `text` resta il testo originale, che la ricerca mostra, e
+`has_doses` si calcola su quello; il campo nuovo `chunk_header` dice come è stato calcolato il
+vettore. La domanda va all'embedder com'è. Con `CHUNK_HEADER=none` il testo indicizzato è il solo
+chunk, come prima.
+
+### Ingestion sulla collezione esistente
+
+```
+python -m rag.ingest
+```
+
+```
+Ricette: 790 · chunk: 1143 · punti prima: 1143 · punti dopo: 1143 · rimossi: 0
+```
+
+Senza `--recreate`, 304 secondi, 36 lotti: la stessa riga della seconda ingestion dell'esercizio 1,
+perché gli ID non cambiano e ogni punto viene riscritto. Il punto della ricetta 89, chunk 0 (ID
+`994780fa-2348-5cff-9e9f-34d1df17568d`) letto con l'API di Qdrant prima e dopo:
+
+| | Prima | Dopo |
+|---|---|---|
+| SHA-256 del vettore | `34be37c0…` (come dopo A) | `5a9cd8cb…` |
+| SHA-256 di `text` | `982976ad…` | `982976ad…` |
+| `chunk_header` | assente | `title_chapter` |
+
+Vettore ricalcolato, testo identico. Tutti i 1143 punti hanno `chunk_header = title_chapter`
+(conteggio con filtro sull'API di Qdrant); `python -m rag.update_payload` dà ancora `Punti: 1143 ·
+aggiornati: 1143 · con dosi: 398 · senza campo: 0`.
+
+### Valutazione, senza e con filtro
+
+`python -m rag.evaluate` e `python -m rag.evaluate --doses`, ciascuna due volte: tabelle identiche a
+coppie. L'intestazione ora legge tutto dall'indice (l'ingestion ha scritto anche i campi del
+chunking):
+
+```
+- **modello:** text-embedding-bge-m3
+- **collezione:** recipes
+- **punti:** 1143
+- **strategia:** paragraph
+- **dimensione:** 1200
+- **overlap:** 200
+- **intestazione dei chunk:** title_chapter
+- **k:** 5
+- **filtro dosi:** no
+```
+
+| Domanda | Fonte attesa | Posizione | Score fonte | Score migliore |
+|---|---|---|---|---|
+| Quanta farina serve per 400 grammi di patate negli gnocchi? | 89 | 1 | 0,685 | 0,685 |
+| Quanti cappelletti bastano a un mangiatore moderato? | 7 | 1 | 0,595 | 0,595 |
+| Che vino si usa per il pollo alla cacciatora? | 208 | 1 | 0,593 | 0,593 |
+| Perché gli gnocchi possono sciogliersi nell'acqua? | 89 | 1 | 0,620 | 0,620 |
+| Come si chiama il cacciucco sulle coste dell'Adriatico? | 455, 456 | 1 | 0,597 | 0,597 |
+| Qual è la ricetta del tiramisù? | — | — | — | 0,520 |
+| Come si cucinano i petti di pollo e quali ricette si possono fare con essi? | 207, 269 | 1 | 0,723 | 0,723 |
+| Che salsa al prezzemolo posso servire con la carne bollita? | 119, 120 | assente | — | 0,624 |
+| Come si conservano i pomodori per averli tutto l'anno? | 732 | 2 | 0,659 | 0,667 |
+
+Fonte attesa trovata in 7 casi su 8 (prima 6 su 8).
+
+Con `--doses` (stessa intestazione, `filtro dosi: sì`):
+
+| Domanda | Fonte attesa | Posizione | Score fonte | Score migliore |
+|---|---|---|---|---|
+| Quanta farina serve per 400 grammi di patate negli gnocchi? | 89 | 1 | 0,685 | 0,685 |
+| Quanti cappelletti bastano a un mangiatore moderato? | 7 | 2 | 0,553 | 0,568 |
+| Che vino si usa per il pollo alla cacciatora? | 208 | assente | — | 0,470 |
+| Perché gli gnocchi possono sciogliersi nell'acqua? | 89 | 1 | 0,597 | 0,597 |
+| Come si chiama il cacciucco sulle coste dell'Adriatico? | 455, 456 | assente | — | 0,371 |
+| Qual è la ricetta del tiramisù? | — | — | — | 0,508 |
+| Come si cucinano i petti di pollo e quali ricette si possono fare con essi? | 207, 269 | assente | — | 0,565 |
+| Che salsa al prezzemolo posso servire con la carne bollita? | 119, 120 | assente | — | 0,526 |
+| Come si conservano i pomodori per averli tutto l'anno? | 732 | assente | — | 0,667 |
+
+Fonte attesa trovata in 3 casi su 8 (come dopo A): il filtro toglie ancora le ricette in prosa, e la
+modifica B non cambia quali chunk hanno le dosi.
+
+### Confronto con la modifica A, domanda per domanda
+
+Senza filtro, prima (A) → dopo (B):
+
+| Domanda | Posizione | Score fonte | Score migliore |
+|---|---|---|---|
+| Farina per gli gnocchi (89) | 1 → 1 | 0,671 → 0,685 | 0,671 → 0,685 |
+| Cappelletti (7) | 1 → 1 | 0,622 → 0,595 | 0,622 → 0,595 |
+| Vino del pollo alla cacciatora (208) | assente → **1** | — → 0,593 | 0,515 → 0,593 |
+| Gnocchi che si sciolgono (89) | 1 → 1 | 0,639 → 0,620 | 0,639 → 0,620 |
+| Cacciucco (455, 456) | 1 → 1 | 0,603 → 0,597 | 0,603 → 0,597 |
+| Tiramisù (nessuna fonte) | — | — | 0,531 → 0,520 |
+| Petti di pollo (207, 269) | 1 → 1 | 0,728 → 0,723 | 0,728 → 0,723 |
+| Salsa al prezzemolo (119, 120) | assente → assente | — | 0,627 → 0,624 |
+| Conserva di pomodoro (732) | 2 → 2 | 0,639 → 0,659 | 0,665 → 0,667 |
+
+- **Pollo alla cacciatora (208):** l'unico cambio di posizione, ed è quello per cui la modifica
+  esiste. «Cacciatora» ora è nel vettore della 208: score da 0,450 (quinta, col filtro Fritti) a
+  0,593, primo posto con e senza filtro (query sotto).
+- **Quando la domanda contiene parole del titolo, lo score sale:** gnocchi di patate (0,671 →
+  0,685), conserva di pomodoro (0,639 → 0,659; resta seconda dietro la 733 «Conserva dolce di
+  pomodoro», 0,667, che ha un titolo altrettanto vicino alla domanda).
+- **Quando la risposta sta nella prosa e la domanda non nomina la ricetta, lo score scende di
+  poco:** cappelletti (0,622 → 0,595, sempre il chunk 2, dove l'Artusi parla di quanti ne mangiano i
+  romagnoli; ora i Tortelli, 55, sono a 0,568, più vicini), gnocchi che si sciolgono (0,639 → 0,620,
+  sempre il chunk 1), cacciucco e petti di pollo (meno di 0,01). La riga dell'intestazione aggiunge
+  al vettore parole che la domanda non ha. Nessuna di queste perde la posizione.
+- **Salsa al prezzemolo (119, 120):** ancora assente. Il titolo è «Salsa verde»: la domanda,
+  scritta senza le parole del testo, non contiene «verde», e «salsa» e «Salse» sono nell'intestazione
+  di tutte le salse. Con k = 20 la 119 è dodicesima (0,526) e la 120 diciottesima (0,515); con
+  `--chapter Salse` quinta e sesta. Vincono la 123 «Salsa alla maître d'hôtel» (0,624) e la 128
+  «Salsa piccante II» (0,602).
+- **Con `--doses`:** nessun cambio di posizione. Gli score migliori delle domande la cui fonte è in
+  prosa scendono (petti di pollo 0,592 → 0,565, salsa 0,565 → 0,526), quelli della 89 salgono
+  (0,671 → 0,685).
+
+### Le due query commentate, dopo B
+
+```
+python -m rag.search "Che vino si usa per il pollo alla cacciatora?" --chapter Fritti --k 5
+```
+
+| Pos. | Score | Ricetta | Capitolo | Chunk |
+|---|---|---|---|---|
+| 1 | 0,593 | 208 «Pollo alla cacciatora» | Fritti | 0 |
+| 2 | 0,511 | 211 «Fegato alla cacciatora» | Fritti | 0 |
+| 3 | 0,472 | 205 «Pollo dorato I» | Fritti | 0 |
+| 4 | 0,457 | 209 «Pollo fritto coi pomodori» | Fritti | 0 |
+| 5 | 0,451 | 210 «Fegato col vino bianco» | Fritti | 0 |
+
+Prima la 208 era quinta (0,450), dietro quattro ricette che condividono «pollo» o «vino». Ora è
+prima con un distacco netto (0,593 contro 0,511), e seconda viene l'altra ricetta «alla
+cacciatora», il fegato: la parola del titolo pesa. Senza `--chapter` la 208 resta prima (0,593),
+seguita da 541 «Pollo al diavolo» (0,531), 268 «Pollo alla Marengo» (0,514), 211 (0,511) e 43
+«Riso alla cacciatora» (0,505): tutti titoli con «pollo» o «cacciatora».
+
+```
+python -m rag.search "Qual è la ricetta del tiramisù?" --k 5
+```
+
+| Pos. | Score | Ricetta | Capitolo | Chunk |
+|---|---|---|---|---|
+| 1 | 0,520 | 72 «Risotto colle telline» | Minestre asciutte e di magro | 1 |
+| 2 | 0,508 | 73 «Risotto colle tinche» · dosi | Minestre asciutte e di magro | 1 |
+| 3 | 0,506 | 80 «Risotto alla milanese III» · dosi | Minestre asciutte e di magro | 0 |
+| 4 | 0,505 | 247 «Cacimperio» · dosi | Tramessi | 3 |
+| 5 | 0,500 | 649 «Dolce Torino» | Torte e dolci al cucchiaio | 1 |
+
+Ancora nessun passaggio che risponda, score bassi e vicini (da 0,500 a 0,520, prima da 0,523 a
+0,531); compare un dolce, al quinto posto. Su queste nove domande ora ogni domanda con una fonte ha
+uno score migliore più alto di quello del tiramisù (il più basso è 0,593, la 208), mentre prima la
+208 stava sotto (0,515 contro 0,531). Non basta però per una soglia fissa: la domanda sulla salsa
+ha uno score migliore di 0,624 con una ricetta sbagliata, quindi uno score alto non dice che la
+risposta c'è. Nove domande sono poche per fissare un valore; la conclusione dell'esercizio 1 resta.
+
+### Sintesi
+
+La modifica B porta la valutazione da 6 a 7 casi su 8: recupera la 208, che era il caso per cui
+era stata pensata, e non fa perdere posizioni alle altre. Il costo è un leggero calo degli score
+quando la risposta è nella prosa e la domanda non usa le parole del titolo. Non aiuta quando la
+domanda descrive la ricetta con parole diverse dal titolo (salsa al prezzemolo contro «Salsa
+verde»), e non cambia il filtro `--doses`, che resta da scegliere domanda per domanda.
