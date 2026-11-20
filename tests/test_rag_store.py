@@ -7,7 +7,7 @@ from conftest import FakeEmbedder
 from rag.store import (
     ChunkPoint, StoreError, check_collection, connect, count_missing, count_points, drop_collection,
     ensure_collection, iter_texts, point_id, query, remove_stale, set_field, stored_chunking,
-    upsert_points,
+    stored_header, upsert_points,
 )
 from rag import store
 from qdrant_client import models
@@ -246,3 +246,17 @@ def test_stored_chunking(qdrant):
     ensure_collection(qdrant, "c", fake.DIMENSION, "m")
     upsert_points(qdrant, "c", [point])
     assert stored_chunking(qdrant, "c") == ("paragraph", 1200, 200)
+
+
+def test_stored_header(qdrant):
+    fake = FakeEmbedder()
+    ensure_collection(qdrant, "c", fake.DIMENSION, "m")
+    assert stored_header(qdrant, "c") is None                         # no points
+    upsert_points(qdrant, "c", points(fake, [(1, 0, "Zuppe")]))
+    assert stored_header(qdrant, "c") is None                         # payload before modification B
+    point = points(fake, [(2, 0, "Zuppe")])[0]
+    point.payload.update(chunk_header="none")
+    qdrant.delete_collection("c")
+    ensure_collection(qdrant, "c", fake.DIMENSION, "m")
+    upsert_points(qdrant, "c", [point])
+    assert stored_header(qdrant, "c") == "none"

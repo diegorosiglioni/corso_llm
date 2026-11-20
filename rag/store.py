@@ -235,3 +235,11 @@ def stored_chunking(client: QdrantClient, name: str) -> tuple[str, int, int] | N
     if not all(field in stored for field in fields):
         return None
     return stored["chunk_strategy"], stored["chunk_size"], stored["chunk_overlap"]
+
+
+def stored_header(client: QdrantClient, name: str) -> str | None:
+    """`chunk_header` saved in the payload of a point by the ingestion; None if there are no points
+    or they lack the field (index built before modification B)."""
+    with _qdrant_errors(f"la lettura dell'intestazione dei chunk di '{name}'"):
+        found, _ = client.scroll(name, limit=1, with_payload=["chunk_header"], with_vectors=False)
+    return (found[0].payload or {}).get("chunk_header") if found else None

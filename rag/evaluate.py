@@ -5,7 +5,8 @@ a dose list, for every question.
 
 Strategy, size and overlap in the header are read from the payload of the index (saved by the
 ingestion); for an index built before they were saved, they come from the current configuration,
-marked «(dalla configurazione)»."""
+marked «(dalla configurazione)». The chunk header (title and chapter in the embedded text) is
+read the same way; an index without it predates modification B, so it is «none»."""
 
 import argparse
 import json
@@ -19,11 +20,13 @@ from rag.config import ConfigError, configure_logging, load_config
 from rag.corpus import EXPECTED_RECIPES
 from rag.embedder import EmbeddingError, check_embedding_model, create_embedder
 from rag.search import DEFAULT_TOP_K, SearchError, SearchResult, format_score, search, validate
-from rag.store import StoreError, connect, count_points, stored_chunking
+from rag.store import StoreError, connect, count_points, stored_chunking, stored_header
 
 DEFAULT_QUESTIONS = Path(__file__).parent / "data" / "questions.json"
 DASH = "—"
 FROM_CONFIGURATION = " (dalla configurazione)"
+# Before modification B no vector had the header: a missing field means none, not a guess.
+BEFORE_MODIFICATION_B = "none (indice precedente alla modifica B)"
 
 
 @dataclass(frozen=True)
@@ -145,6 +148,7 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] = os.environ)
             ]
             points = count_points(client, config.collection)
             chunking = stored_chunking(client, config.collection)
+            chunk_header = stored_header(client, config.collection) or BEFORE_MODIFICATION_B
         finally:
             client.close()
     except (ConfigError, SearchError, ValueError, EmbeddingError, StoreError) as error:
@@ -164,6 +168,7 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] = os.environ)
         "strategia": strategy,
         "dimensione": size,
         "overlap": overlap,
+        "intestazione dei chunk": chunk_header,
         "k": str(args.k),
         "filtro dosi": "sì" if args.doses else "no",
     }

@@ -116,10 +116,10 @@ def test_main_prints_a_reproducible_table(tmp_path, capsys, offline):
     first = capsys.readouterr().out
     assert evaluate_module.main(["--questions", str(path), "--k", "2"], VALID) == 0
     assert capsys.readouterr().out == first
-    assert first.splitlines()[:8] == [
+    assert first.splitlines()[:9] == [
         "- **modello:** modello-scelto", "- **collezione:** recipes", "- **punti:** 2",
         "- **strategia:** paragraph", "- **dimensione:** 1200", "- **overlap:** 200",
-        "- **k:** 2", "- **filtro dosi:** no",
+        "- **intestazione dei chunk:** title_chapter", "- **k:** 2", "- **filtro dosi:** no",
     ]
     assert "| pollo fritto | 1 | 1 |" in first and first.rstrip().endswith("Fonte attesa trovata in 1 casi su 1.")
 
@@ -151,7 +151,23 @@ def test_header_falls_back_to_the_configuration(tmp_path, capsys, offline):
     out = capsys.readouterr().out
     assert ("- **strategia:** paragraph (dalla configurazione)\n"
             "- **dimensione:** 1200 (dalla configurazione)\n"
-            "- **overlap:** 200 (dalla configurazione)\n") in out
+            "- **overlap:** 200 (dalla configurazione)\n"
+            "- **intestazione dei chunk:** none (indice precedente alla modifica B)\n") in out
+
+
+def test_header_of_an_index_after_modification_a(tmp_path, capsys, offline):
+    text = "Pollo fritto nell'olio."
+    ensure_collection(offline, "recipes", FakeEmbedder.DIMENSION, "modello-scelto")
+    upsert_points(offline, "recipes", [ChunkPoint(point_id("Ricettario.txt", 1, 0), FakeEmbedder.vector(text), {
+        "source": "Ricettario.txt", "recipe_number": 1, "title": "Pollo fritto", "chapter": "Fritti",
+        "chunk_index": 0, "text": text, "embedding_model": "modello-scelto", "has_doses": False,
+        "chunk_strategy": "window", "chunk_size": 300, "chunk_overlap": 50,
+    })])
+    path = questions_file(tmp_path, '[{"question": "pollo", "expected": [1]}]')
+    assert evaluate_module.main(["--questions", path], VALID) == 0
+    out = capsys.readouterr().out
+    assert ("- **strategia:** window\n- **dimensione:** 300\n- **overlap:** 50\n"
+            "- **intestazione dei chunk:** none (indice precedente alla modifica B)\n") in out
 
 
 def test_main_with_doses(tmp_path, capsys, offline):
