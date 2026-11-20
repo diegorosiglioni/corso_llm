@@ -109,15 +109,15 @@
 - **Modifica A: specifica approvata** il 2026-11-20 (commit `f647de9`,
   `docs/superpowers/specs/2026-11-20-modifica-a-dosi-design.md`) e **piano approvato**
   (`docs/superpowers/plans/2026-11-20-modifica-a-dosi.md`, 8 task), esecuzione nativa scelta
-  dall'utente, da fare in una nuova sessione. Decisioni prese nel brainstorming: regola
+  dall'utente, fatta in una sessione successiva (voce sotto). Decisioni prese nel brainstorming: regola
   «paragrafo su più righe con almeno una quantità» (400 chunk su 1143, misurati sul libro);
   `has_doses` sui punti esistenti con `python -m rag.update_payload` dal testo salvato, senza
   ricalcolare gli embedding (requisito della traccia, ricordato all'utente che avrebbe accettato il
   ricalcolo); strategia, dimensione e overlap nel payload (chiude il problema importante della
   revisione dell'esercizio 1); libro rinominato in `TODO.md`. Le due domande che mancano
   all'utente le aggiungerà più avanti: la valutazione dopo A usa le 9 di oggi.
-- **Modifica A fatta il 2026-11-20** (Task 1–8, esecuzione nativa, commit `64d5b56`…, su `dev`,
-  senza push): `rag/doses.py`, indice e filtro `has_doses` in `rag/store.py`, ingestion con
+- **Modifica A fatta il 2026-11-20** (Task 1–8, esecuzione nativa, commit `64d5b56`…`b311c95` su
+  `dev`, poi push, voce sotto): `rag/doses.py`, indice e filtro `has_doses` in `rag/store.py`, ingestion con
   `has_doses` e parametri del chunking, `python -m rag.update_payload`, `--doses` in ricerca e
   valutazione, intestazione della valutazione dall'indice. Registro (solo locale):
   `.superpowers/sdd/2026-11-20-modifica-a-dosi/progress.md`, con le decisioni (`Ruling:`).
@@ -149,7 +149,7 @@
   file `LICENSE`), assente in `dev`. Su scelta dell'utente `main` è stato unito in `dev` con un
   commit di merge (`3cf0717`), poi push di `dev` e avanzamento rapido di `main`: `dev`, `main`,
   `origin/dev` e `origin/main` a `3cf0717`. Secondo push, sempre su richiesta, con questo
-  aggiornamento del diario.
+  aggiornamento del diario: tutti a `2d40bf2`.
 - **Prossimo:** modifica B con specifica e piano. Push solo su richiesta. I punti di `REVIEW.md`
   restano in sospeso.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono

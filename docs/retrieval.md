@@ -2,7 +2,9 @@
 
 Risultati della pipeline di partenza della lezione 7 (esercizio 1: ingestion e ricerca, senza
 generazione). Specifica: `docs/superpowers/specs/2026-11-17-ingestion-ricette-design.md`.
-Prove eseguite il 2026-11-19 dal computer, con LM Studio sull'host e Qdrant in Compose.
+Prove eseguite il 2026-11-19 dal computer, con LM Studio sull'host e Qdrant in Compose; la modifica
+A (`has_doses`, specifica `docs/superpowers/specs/2026-11-20-modifica-a-dosi-design.md`) il
+2026-11-20, sezione «Dopo la modifica A».
 
 ## Modello e parametri
 
