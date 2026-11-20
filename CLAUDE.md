@@ -85,6 +85,8 @@ Un'applicazione in Python (terminale e pagina web) che conversa con un modello l
   fonte attesa (solo retrieval, senza generazione; Qdrant quinto servizio di Compose);
 - (lezione 7, modifica A) segna con `has_doses` i chunk con l'elenco delle dosi, lo aggiunge ai
   punti esistenti senza ricalcolare gli embedding e permette di cercare solo tra quelli (`--doses`);
+- (lezione 7, modifica B) titolo e capitolo prima di ogni chunk nel testo indicizzato
+  (`CHUNK_HEADER`), testo originale nel payload e nei risultati;
 - usa un modello servito da LM Studio, che resta sul computer host;
 - conserva la cronologia della conversazione per la durata della sessione nella CLI; nel
   back-end le chat sono persistenti;
@@ -99,8 +101,9 @@ Un'applicazione in Python (terminale e pagina web) che conversa con un modello l
   Step 1–9 della lezione 6 (router, revisore, riassunto, resource delle preferenze, prompt MCP,
   servizio HTTP, back-end, front-end, Compose a quattro container) e lo streaming facoltativo sono
   implementati; i debiti noti rimasti sono in `TODO.md`;
-  ingestion e ricerca della lezione 7 e modifica A (`has_doses`, filtro `--doses`) implementate;
-  generazione, strumento MCP della ricerca e modifica B ciascuna col proprio ciclo;
+  ingestion e ricerca della lezione 7, modifica A (`has_doses`, filtro `--doses`) e modifica B
+  (`CHUNK_HEADER`, titolo e capitolo nel vettore) implementate;
+  generazione e strumento MCP della ricerca ciascuno col proprio ciclo;
   altri strumenti, altri server MCP e workflow non vanno anticipati: ognuno avrà il proprio
   ciclo di specifica e piano.
 - Niente interfacce grafiche oltre al front-end web dello Step 8, niente servizi cloud o

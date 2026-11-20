@@ -794,3 +794,33 @@ CA-118 con `pytest` (1251 passed, 96 deselected).
 | CA-116 | `rag.search "…" --doses --chapter … --k 3`: al massimo 3 risultati, tutti `· dosi` e del capitolo; capitolo senza chunk con dosi → «Nessun risultato.». | automatica e reale |
 | CA-117 | `rag.evaluate` e `rag.evaluate --doses`: tabelle identiche a parità di indice, domande e opzioni, in `docs/retrieval.md` con il commento domanda per domanda. | reale e revisione |
 | CA-118 | Intestazione della valutazione dal payload dell'indice, ripiego sulla configurazione segnalato; `pytest` passa senza LM Studio né Qdrant. | automatica |
+
+## 21. Lezione 7, esercizio 2 — modifica B: titolo e capitolo nel testo indicizzato (2026-11-20)
+
+Riferimento: traccia della lezione 7 (esercizio 2, «B · Chunking»). Specifica
+`specs/2026-11-20-modifica-b-titolo-design.md` (formato, approcci scartati), piano
+`plans/2026-11-20-modifica-b-titolo.md`. Parte dalle §19 e §20, che restano valide dove questa
+sezione non le cambia. Esiti delle verifiche in `PROGRESS.md` e in `docs/retrieval.md` («Dopo la
+modifica B»): CA-119…CA-122 verificati il 2026-11-20 con `text-embedding-bge-m3` e Qdrant v1.20.0 in
+Compose; CA-123 con i test dei moduli `rag` e Docker (la suite intera non ancora eseguita).
+
+- **RF-100** *Testo indicizzato* — Con `CHUNK_HEADER=title_chapter` (predefinito) l'embedder riceve
+  per ogni chunk `«titolo» (capitolo «capitolo»)`, una riga vuota e il testo del chunk; con `none` il
+  solo chunk. L'intestazione si aggiunge dopo il chunking e non conta in `CHUNK_SIZE`; un altro valore
+  di `CHUNK_HEADER` è un errore di configurazione con i valori ammessi.
+- **RF-101** *Payload e ricerca* — `text` resta il testo originale, mostrato dalla ricerca;
+  `has_doses` si calcola su `text`; il campo `chunk_header` registra il valore usato. La domanda va
+  all'embedder senza intestazione.
+- **RF-102** *Collezione esistente* — `python -m rag.ingest` senza `--recreate`, con un
+  `CHUNK_HEADER` diverso da quello dei punti, ricalcola tutti i vettori e riscrive gli stessi punti
+  (stessi ID, nessun punto in più né rimosso).
+- **RF-103** *Valutazione* — L'intestazione aggiunge `intestazione dei chunk`, letta da
+  `chunk_header`; se i punti non hanno il campo, `none (indice precedente alla modifica B)`.
+
+| ID | Verifica | Come |
+|----|----------|------|
+| CA-119 | Testo passato all'embedder: titolo e capitolo prima di ogni chunk, anche dei chunk successivi al primo; con `none` il solo testo; `text` e `has_doses` del payload uguali a prima. | automatica |
+| CA-120 | `CHUNK_HEADER` cambiato su una collezione esistente: stessi ID e numero di punti, `rimossi: 0`, vettori cambiati, `text` invariato; sulla collezione `recipes`: `punti prima: 1143 · punti dopo: 1143 · rimossi: 0`, SHA-256 del vettore della 89/0 cambiato e del testo invariato. | automatica e reale |
+| CA-121 | La ricerca restituisce il testo originale e calcola il vettore della domanda senza intestazione. | automatica e reale |
+| CA-122 | `rag.evaluate` e `rag.evaluate --doses` dopo B: tabelle identiche a coppie, con `intestazione dei chunk: title_chapter`, in `docs/retrieval.md` confrontate con «Dopo la modifica A». | reale e revisione |
+| CA-123 | Intestazione della valutazione con ripiego `none (indice precedente alla modifica B)`; `pytest` passa senza LM Studio né Qdrant. | automatica |

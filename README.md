@@ -851,6 +851,7 @@ risultati di `docs/retrieval.md` ha SHA-256
 | `CHUNK_STRATEGY` | no | `paragraph` | `paragraph` (paragrafi interi fino alla dimensione) o `window` (finestra di caratteri) |
 | `CHUNK_SIZE` | no | `1200` | caratteri per chunk (≥ 100) |
 | `CHUNK_OVERLAP` | no | `200` | caratteri ripetuti tra chunk vicini (da 0 a metà di `CHUNK_SIZE`) |
+| `CHUNK_HEADER` | no | `title_chapter` | `title_chapter` (titolo e capitolo prima di ogni chunk nel testo trasformato in vettore) o `none` (solo il chunk) |
 | `EMBEDDING_BATCH_SIZE` | no | `32` | testi per chiamata a `/v1/embeddings` (≥ 1) |
 | `LOG_LEVEL` | no | `INFO` | come per l'assistente |
 
@@ -886,6 +887,17 @@ righe singole: restano su più righe gli elenchi delle dosi. Sul libro: 398 chun
 elenchi senza unità (per esempio la ricetta 99) e le ricette scritte in prosa restano con
 `has_doses` falso. L'ingestion scrive anche `chunk_strategy`, `chunk_size` e `chunk_overlap`.
 
+**Titolo e capitolo nel vettore** (modifica B). Con `CHUNK_HEADER=title_chapter`, il valore
+predefinito, all'embedder va per ogni chunk una riga «titolo (capitolo …)», una riga vuota e poi il
+testo del chunk: così una parola che sta solo nel titolo («cacciatora» per la ricetta 208) entra
+nella ricerca. L'intestazione non conta nella dimensione del chunk (chunk e ID restano gli stessi);
+nel payload `text` resta il testo originale, che la ricerca mostra, e il campo `chunk_header` dice
+come è stato calcolato il vettore. Una collezione costruita prima della modifica B passa
+all'intestazione rieseguendo `python -m rag.ingest` (senza `--recreate`): ricalcola tutti i vettori
+e riscrive gli stessi punti (circa 5 minuti, `punti prima: 1143 · punti dopo: 1143 · rimossi: 0`).
+Allo stesso modo `CHUNK_HEADER=none` torna ai vettori del solo testo, per esempio in un'altra
+collezione (`QDRANT_COLLECTION`) per confrontare le due versioni sulle stesse domande.
+
 Una collezione costruita prima della modifica A riceve il campo **senza ricalcolare gli
 embedding**: il comando legge il testo salvato in ogni punto, calcola `has_doses` e scrive solo
 quel campo (non contatta LM Studio e non legge il libro; crea l'indice se manca). Vuole le stesse
@@ -913,10 +925,10 @@ testo del chunk:
 ```
 
 ```
-1. 0,473 · ricetta 205 «Pollo dorato I» · Fritti · chunk 0
-  Prendete un pollastro giovane, vuotatelo, …
+1. 0,593 · ricetta 208 «Pollo alla cacciatora» · Fritti · chunk 0
+  Trinciate una grossa cipolla e tenetela per più di mezz'ora nell'acqua fresca, …
+2. 0,511 · ricetta 211 «Fegato alla cacciatora» · Fritti · chunk 0
 …
-5. 0,450 · ricetta 208 «Pollo alla cacciatora» · Fritti · chunk 0
 ```
 
 ```powershell
@@ -924,11 +936,11 @@ testo del chunk:
 ```
 
 ```
-1. 0,671 · ricetta 89 «Gnocchi di patate» · Minestre asciutte e di magro · chunk 0 · dosi
+1. 0,685 · ricetta 89 «Gnocchi di patate» · Minestre asciutte e di magro · chunk 0 · dosi
   …
-2. 0,533 · ricetta 106 «Spaghetti con la balsamella» · Minestre asciutte e di magro · chunk 0 · dosi
+2. 0,511 · ricetta 103 «Spaghetti da quaresima» · Minestre asciutte e di magro · chunk 0 · dosi
   …
-3. 0,514 · ricetta 103 «Spaghetti da quaresima» · Minestre asciutte e di magro · chunk 0 · dosi
+3. 0,505 · ricetta 106 «Spaghetti con la balsamella» · Minestre asciutte e di magro · chunk 0 · dosi
   …
 ```
 
@@ -937,12 +949,15 @@ libro) non hanno chunk con dosi e il filtro le esclude (`docs/retrieval.md`, «D
 
 **Valutazione**: le domande con fonte attesa in `rag/data/questions.json` (un altro file con
 `--questions`); per ognuna la posizione e lo score della ricetta attesa tra i primi k, in una
-tabella Markdown preceduta da modello, collezione, punti, parametri del chunking, k e `filtro dosi`.
+tabella Markdown preceduta da modello, collezione, punti, parametri del chunking, intestazione
+dei chunk, k e `filtro dosi`.
 A parità di indice, domande e opzioni la tabella è identica a ogni esecuzione. Modello, punti,
 strategia, dimensione e overlap vengono dalla collezione; per un indice costruito prima della
 modifica A, i cui punti non hanno i parametri del chunking, questi vengono dalla configurazione
-della sessione e l'intestazione lo dice («paragraph (dalla configurazione)»). Con `--doses` ogni
-domanda cerca solo tra i chunk con le dosi:
+della sessione e l'intestazione lo dice («paragraph (dalla configurazione)»). L'intestazione dei
+chunk viene dal campo `chunk_header`; per un indice costruito prima della modifica B, che non ce
+l'ha, è «none (indice precedente alla modifica B)». Con `--doses` ogni domanda cerca solo tra i
+chunk con le dosi:
 
 ```powershell
 .\.venv\Scripts\python.exe -m rag.evaluate
@@ -950,13 +965,15 @@ domanda cerca solo tra i chunk con le dosi:
 ```
 
 ```
-- **strategia:** paragraph (dalla configurazione)
+- **strategia:** paragraph
 …
+- **intestazione dei chunk:** title_chapter
+- **k:** 5
 - **filtro dosi:** no
 …
-| Quanta farina serve per 400 grammi di patate negli gnocchi? | 89 | 1 | 0,671 | 0,671 |
+| Quanta farina serve per 400 grammi di patate negli gnocchi? | 89 | 1 | 0,685 | 0,685 |
 …
-Fonte attesa trovata in 6 casi su 8.
+Fonte attesa trovata in 7 casi su 8.
 ```
 
 Con `--doses`, sullo stesso indice: `Fonte attesa trovata in 3 casi su 8.`
@@ -964,7 +981,7 @@ Con `--doses`, sullo stesso indice: `Fonte attesa trovata in 3 casi su 8.`
 **Dashboard** di Qdrant su `http://127.0.0.1:6333/dashboard`: collezione `recipes`, punti con il
 payload (`source`, `recipe_number`, `title`, `chapter`, `chunk_index`, `text`, `embedding_model`,
 `has_doses` e, per i punti scritti dall'ingestion dopo la modifica A, `chunk_strategy`,
-`chunk_size`, `chunk_overlap`).
+`chunk_size`, `chunk_overlap`; dopo la modifica B anche `chunk_header`).
 La collezione sta nel volume `qdrant-data`: dopo `docker compose restart qdrant` conta gli stessi
 punti.
 

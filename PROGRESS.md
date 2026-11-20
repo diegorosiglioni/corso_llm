@@ -150,8 +150,33 @@
   commit di merge (`3cf0717`), poi push di `dev` e avanzamento rapido di `main`: `dev`, `main`,
   `origin/dev` e `origin/main` a `3cf0717`. Secondo push, sempre su richiesta, con questo
   aggiornamento del diario: tutti a `2d40bf2`.
-- **Prossimo:** modifica B con specifica e piano. Push solo su richiesta. I punti di `REVIEW.md`
-  restano in sospeso.
+- **Modifica B fatta il 2026-11-20** su `dev`, senza push: specifica approvata (commit `064839e`,
+  `docs/superpowers/specs/2026-11-20-modifica-b-titolo-design.md`), piano approvato
+  (`docs/superpowers/plans/2026-11-20-modifica-b-titolo.md`, 5 task, commit `5adf41b`), esecuzione
+  nativa scelta dall'utente (commit `4f11cf1`…). Decisioni nel brainstorming: intestazione
+  configurabile con `CHUNK_HEADER` (`title_chapter` predefinito, `none`), scelta dall'utente
+  pensando al futuro (rifare il «prima» per le due domande che aggiungerà, senza tornare a codice
+  vecchio); formato `«titolo» (capitolo «capitolo»)` su una riga, fuori da `CHUNK_SIZE`; campo
+  `chunk_header` nel payload e nell'intestazione della valutazione. Registro (solo locale):
+  `.superpowers/sdd/2026-11-20-modifica-b-titolo/progress.md`, con le decisioni (`Ruling:`).
+  Eseguito, con esito:
+  - test delle parti toccate: `pytest tests/test_rag_*.py tests/test_docker.py` → 230 passed, 4
+    deselected (le prove reali);
+  - prova reale `pytest tests/test_rag_real.py -m real -v` → 4 passed (52 s; la nuova cambia
+    `CHUNK_HEADER` sul server: stessi punti, vettore cambiato, testo invariato);
+  - collezione `recipes` vera: `rag.ingest` senza `--recreate` → `Ricette: 790 · chunk: 1143 ·
+    punti prima: 1143 · punti dopo: 1143 · rimossi: 0` (304 s); vettore della 89/0 da `34be37c0…`
+    a `5a9cd8cb…`, SHA-256 di `text` invariato; 1143 punti con `chunk_header = title_chapter`;
+    `rag.update_payload` → ancora `con dosi: 398`;
+  - `rag.evaluate` **7 su 8** (prima 6: la 208 da assente a 1ª), `rag.evaluate --doses` 3 su 8
+    (come prima), tabelle identiche a coppie, confronto in `docs/retrieval.md` («Dopo la modifica
+    B»); query della 208 con `--chapter Fritti`: da 5ª (0,450) a 1ª (0,593); tiramisù da 0,500 a
+    0,520; salsa verde (119, 120) ancora assente (titolo senza le parole della domanda).
+  Non eseguito: suite intera (`pytest`, da chiedere all'utente; serve per i conteggi del README e
+  per CA-123), prove `real` delle lezioni precedenti, `browser`, Docker completo.
+- **Prossimo:** esercizio 2 della lezione 7 completo (A e B). Restano le due domande dell'utente per
+  `rag/data/questions.json` (criterio 7 dell'esercizio 1) e i punti di `REVIEW.md`. Push solo su
+  richiesta.
 - I messaggi dei commit del loop (33 su 35) non seguono i Conventional Commits: restano come sono
   (decisione dell'utente del 2026-11-15), perché riscriverli cambierebbe gli hash citati qui.
 
